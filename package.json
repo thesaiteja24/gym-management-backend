@@ -1,0 +1,43 @@
+{
+	"name": "gym-management-backend",
+	"version": "1.0.0",
+	"description": "The backend for gym management application",
+	"homepage": "https://github.com/thesaiteja24/gym-management-backend#readme",
+	"bugs": {
+		"url": "https://github.com/thesaiteja24/gym-management-backend/issues"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/thesaiteja24/gym-management-backend.git"
+	},
+	"license": "ISC",
+	"author": "sai teja",
+	"type": "module",
+	"main": "src/server.js",
+	"scripts": {
+		"test": "echo \"Error: no test specified\" && exit 1",
+		"dev": "nodemon --exec \"node -r dotenv/config\" src/server.js",
+		"start": "node -r dotenv/config src/server.js",
+		"format": "prettier --write \"**/*.{js,json,md}\""
+	},
+	"dependencies": {
+		"@prisma/client": "^6.17.0",
+		"@prisma/extension-accelerate": "^2.0.2",
+		"bcryptjs": "^3.0.2",
+		"cors": "^2.8.5",
+		"dotenv": "^17.2.2",
+		"express": "^5.1.0",
+		"helmet": "^8.1.0",
+		"ioredis": "^5.8.0",
+		"jsonwebtoken": "^9.0.2",
+		"morgan": "^1.10.1",
+		"ms": "^2.1.3",
+		"twilio": "^5.10.2",
+		"winston": "^3.17.0"
+	},
+	"devDependencies": {
+		"nodemon": "^3.1.10",
+		"prettier": "^3.6.2",
+		"prisma": "^6.17.0"
+	}
+}
