@@ -9,185 +9,182 @@ datasource db {
 }
 
 enum UserRole {
-  system_admin
-  gym_admin
+  systemAdmin
+  gymAdmin
   trainer
   member
 }
 
 enum ExerciseType {
-  reps_only
+  repsOnly
   assisted
   weighted
 }
 
 model User {
-  id              String    @id @default(uuid())
-  country_code    String?
-  phone           String    @unique
-  phone_e164      String?   @unique
-  first_name      String?
-  last_name       String?
-  date_of_birth   DateTime?
-  height          Decimal?  @db.Decimal(6, 2)
-  weight          Decimal?  @db.Decimal(6, 2)
-  profile_pic_url String?
-  role            UserRole  @default(member)
-  created_at      DateTime  @default(now())
-  updated_at      DateTime  @updatedAt
+  id            String    @id @default(uuid())
+  countryCode   String?
+  phone         String    @unique
+  phoneE164     String?   @unique
+  firstName     String?
+  lastName      String?
+  dateOfBirth   DateTime?
+  height        Decimal?  @db.Decimal(6, 2)
+  weight        Decimal?  @db.Decimal(6, 2)
+  profilePicUrl String?
+  role          UserRole  @default(member)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   // Relations
-  gyms_owned  Gym[]        @relation("GymOwner")
+  gymsOwned   Gym[]        @relation("GymOwner")
   workoutLogs WorkoutLog[]
   sessions    Session[]
   memberships Membership[]
 
-  @@index([country_code])
+  @@index([countryCode])
   @@index([phone])
-  @@index([phone_e164])
+  @@index([phoneE164])
   @@index([role])
 }
 
 model Gym {
   id          String   @id @default(uuid())
   name        String
-  owner_id    String
-  owner       User     @relation("GymOwner", fields: [owner_id], references: [id])
+  ownerId     String
+  owner       User     @relation("GymOwner", fields: [ownerId], references: [id])
   description String?
-  timings     Json? // JSONB: example { "mon": "06:00-22:00", ... }
-  created_at  DateTime @default(now())
-  updated_at  DateTime @updatedAt
+  timings     Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   memberships Membership[]
 }
 
 model WorkoutLog {
-  id         String    @id @default(uuid())
-  user_id    String
-  user       User      @relation(fields: [user_id], references: [id])
-  title      String?
-  start_time DateTime?
-  end_time   DateTime?
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  title     String?
+  startTime DateTime?
+  endTime   DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   exercises WorkoutLogExercise[]
 }
 
 model WorkoutLogExercise {
-  id             String     @id @default(uuid())
-  workout_id     String
-  workout        WorkoutLog @relation(fields: [workout_id], references: [id])
-  exercise_id    String
-  exercise       Exercise   @relation(fields: [exercise_id], references: [id])
-  exercise_index Int?
-  created_at     DateTime   @default(now())
-  updated_at     DateTime   @updatedAt
+  id            String     @id @default(uuid())
+  workoutId     String
+  workout       WorkoutLog @relation(fields: [workoutId], references: [id])
+  exerciseId    String
+  exercise      Exercise   @relation(fields: [exerciseId], references: [id])
+  exerciseIndex Int?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 
   sets WorkoutLogExerciseSet[]
 
-  @@index([workout_id])
-  @@index([exercise_id])
+  @@index([workoutId])
+  @@index([exerciseId])
 }
 
 model Exercise {
-  id                      String       @id @default(uuid())
-  title                   String
-  instructions            String?
-  thumbnail_url           String?
-  video_url               String?
-  primary_muscle_group_id String? // made optional
-  primary_muscle_group    MuscleGroup? @relation("PrimaryMuscleGroup", fields: [primary_muscle_group_id], references: [id])
-  equipment_id            String?
-  equipment               Equipment?   @relation(fields: [equipment_id], references: [id])
-  exercise_type           ExerciseType @default(reps_only)
-  created_at              DateTime     @default(now())
-  updated_at              DateTime     @updatedAt
+  id                   String       @id @default(uuid())
+  title                String
+  instructions         String?
+  thumbnailUrl         String?
+  videoUrl             String?
+  primaryMuscleGroupId String?
+  primaryMuscleGroup   MuscleGroup? @relation("PrimaryMuscleGroup", fields: [primaryMuscleGroupId], references: [id])
+  equipmentId          String?
+  equipment            Equipment?   @relation(fields: [equipmentId], references: [id])
+  exerciseType         ExerciseType @default(repsOnly)
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
 
-  other_muscle_groups ExerciseMuscleGroup[]
+  otherMuscleGroups   ExerciseMuscleGroup[]
   workoutLogExercises WorkoutLogExercise[]
 }
 
 model WorkoutLogExerciseSet {
-  id                  String             @id @default(uuid())
-  workout_exercise_id String
-  workout_exercise    WorkoutLogExercise @relation(fields: [workout_exercise_id], references: [id])
-  set_index           Int?
-  weight              Decimal?           @db.Decimal(8, 3) // increased precision
-  reps                Int?
-  rpe                 Int?
-  duration_seconds    Int?
-  note                String?
-  created_at          DateTime           @default(now())
-  updated_at          DateTime           @updatedAt
+  id                String             @id @default(uuid())
+  workoutExerciseId String
+  workoutExercise   WorkoutLogExercise @relation(fields: [workoutExerciseId], references: [id])
+  setIndex          Int?
+  weight            Decimal?           @db.Decimal(8, 3)
+  reps              Int?
+  rpe               Int?
+  durationSeconds   Int?
+  note              String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 
-  @@index([workout_exercise_id])
+  @@index([workoutExerciseId])
 }
 
 model Equipment {
-  id            String   @id @default(uuid())
-  title         String
-  thumbnail_url String?
-  created_at    DateTime @default(now())
-  updated_at    DateTime @updatedAt
+  id           String   @id @default(uuid())
+  title        String
+  thumbnailUrl String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  // Relations
-  exercises Exercise[] // all exercises using this equipment
+  exercises Exercise[]
 }
 
 model MuscleGroup {
-  id            String   @id @default(uuid())
-  title         String
-  thumbnail_url String?
-  created_at    DateTime @default(now())
-  updated_at    DateTime @updatedAt
+  id           String   @id @default(uuid())
+  title        String
+  thumbnailUrl String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  // exercise where this is primary muscle group
-  primary_exercises Exercise[] @relation("PrimaryMuscleGroup")
-
-  exercises ExerciseMuscleGroup[]
+  primaryExercises Exercise[]            @relation("PrimaryMuscleGroup")
+  exercises        ExerciseMuscleGroup[]
 }
 
 model ExerciseMuscleGroup {
-  id              String      @id @default(uuid())
-  exercise_id     String
-  exercise        Exercise    @relation(fields: [exercise_id], references: [id])
-  muscle_group_id String
-  muscle_group    MuscleGroup @relation(fields: [muscle_group_id], references: [id])
+  id            String      @id @default(uuid())
+  exerciseId    String
+  exercise      Exercise    @relation(fields: [exerciseId], references: [id])
+  muscleGroupId String
+  muscleGroup   MuscleGroup @relation(fields: [muscleGroupId], references: [id])
 
-  @@unique([exercise_id, muscle_group_id])
-  @@index([muscle_group_id])
+  @@unique([exerciseId, muscleGroupId])
+  @@index([muscleGroupId])
 }
 
 model Membership {
-  id              String   @id @default(uuid())
-  gym_id          String
-  gym             Gym      @relation(fields: [gym_id], references: [id])
-  user_id         String
-  user            User     @relation(fields: [user_id], references: [id])
-  membership_type String?
-  joined_at       DateTime @default(now())
-  status          String   @default("active")
+  id             String   @id @default(uuid())
+  gymId          String
+  gym            Gym      @relation(fields: [gymId], references: [id])
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+  membershipType String?
+  joinedAt       DateTime @default(now())
+  status         String   @default("active")
 
-  @@unique([gym_id, user_id]) // prevent duplicate membership rows
-  @@index([gym_id])
-  @@index([user_id])
+  @@unique([gymId, userId])
+  @@index([gymId])
+  @@index([userId])
 }
 
 model Session {
-  id                 String    @id @default(uuid())
-  user_id            String
-  jwt_id             String?
-  refresh_token_hash String
-  device_id          String?
-  ip_address         String?
-  user_agent         String?
-  expires_at         DateTime
-  last_used          DateTime?
-  created_at         DateTime  @default(now())
+  id               String    @id @default(uuid())
+  userId           String
+  jwtId            String?
+  refreshTokenHash String
+  deviceId         String?
+  ipAddress        String?
+  userAgent        String?
+  expiresAt        DateTime
+  lastUsed         DateTime?
+  createdAt        DateTime  @default(now())
 
-  user User @relation(fields: [user_id], references: [id])
+  user User @relation(fields: [userId], references: [id])
 
-  @@index([user_id])
-  @@index([expires_at])
+  @@index([userId])
+  @@index([expiresAt])
 }

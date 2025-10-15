@@ -16,13 +16,13 @@ export const getUser = asyncHandler(async (req, res) => {
 	const user = await prisma.user.findUnique({
 		select: {
 			id: true,
-			phone_e164: true,
-			first_name: true,
-			last_name: true,
-			date_of_birth: true,
+			phoneE164: true,
+			firstName: true,
+			lastName: true,
+			dateOfBirth: true,
 			height: true,
 			weight: true,
-			profile_pic_url: true,
+			profilePicUrl: true,
 		},
 		where: { id: userId },
 	})

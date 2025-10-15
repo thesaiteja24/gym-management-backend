@@ -146,6 +146,7 @@ export const verifyOTP = asyncHandler(async (req, res) => {
 	// External Interactions
 	let user, accessToken, refreshToken
 	try {
+		// TODO: Need to implement rollback if any of the below steps fail
 		await deleteOTP(phoneE164)
 		logInfo('OTP deleted', { action: 'deleteOTP', phoneE164: maskedPhone }, req)
 
@@ -153,14 +154,16 @@ export const verifyOTP = asyncHandler(async (req, res) => {
 		user = await prisma.user.upsert({
 			select: {
 				id: true,
-				first_name: true,
-				last_name: true,
-				phone_e164: true,
+				firstName: true,
+				lastName: true,
+				phoneE164: true,
 				role: true,
-				profile_pic_url: true,
+				profilePicUrl: true,
+				createdAt: true,
+				updatedAt: true,
 			},
-			where: { phone_e164: phoneE164 },
-			create: { country_code: countryCode, phone, phone_e164: phoneE164 },
+			where: { phoneE164: phoneE164 },
+			create: { countryCode: countryCode, phone, phoneE164: phoneE164 },
 			update: {},
 		})
 		logInfo(
@@ -197,11 +200,11 @@ export const verifyOTP = asyncHandler(async (req, res) => {
 			{
 				user: {
 					userId: user.id,
-					phoneE164: user.phone_e164,
-					firstName: user.first_name,
-					lastName: user.last_name,
+					phoneE164: user.phoneE164,
+					firstName: user.firstName,
+					lastName: user.lastName,
 					role: user.role,
-					profilePicUrl: user.profile_pic_url,
+					profilePicUrl: user.profilePicUrl,
 				},
 				accessToken,
 			},
@@ -240,11 +243,11 @@ export const refreshToken = asyncHandler(async (req, res) => {
 			where: { id: userId },
 			select: {
 				id: true,
-				first_name: true,
-				last_name: true,
-				phone_e164: true,
+				firstName: true,
+				lastName: true,
+				phoneE164: true,
 				role: true,
-				profile_pic_url: true,
+				profilePicUrl: true,
 			},
 		})
 		if (!user) {
@@ -270,14 +273,6 @@ export const refreshToken = asyncHandler(async (req, res) => {
 		new ApiResponse(
 			200,
 			{
-				user: {
-					userId: user.id,
-					phoneE164: user.phone_e164,
-					firstName: user.first_name,
-					lastName: user.last_name,
-					role: user.role,
-					profilePicUrl: user.profile_pic_url,
-				},
 				accessToken: newAccessToken,
 			},
 			'Token refreshed successfully'

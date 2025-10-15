@@ -13,7 +13,7 @@ export const authenticate = async (req, res, next) => {
 	try {
 		const payload = verifyAccessToken(token)
 		logDebug('Token verified', { action: 'verifyAccessToken', payload }, req)
-        req.user = { id: payload.id, phone_e164: payload.phone_e164, role: payload.role }
+        req.user = { id: payload.id, phoneE164: payload.phoneE164, role: payload.role }
         logDebug('User attached to request', { action: 'attachUser', user: req.user }, req)
 		next()
 	} catch (error) {

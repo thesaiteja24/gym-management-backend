@@ -12,7 +12,7 @@ const corsOptions = {
 }
 
 // ---- morgan setup: put BEFORE any routes are declared ----
-morgan.token('user-id', req => req.user?._id || 'anonymous')
+morgan.token('user-id', req => req.user?.id || 'anonymous')
 morgan.token('client-ip', req => req.ip || (req.ips && req.ips[0]) || req.headers['x-forwarded-for'] || 'unknown')
 
 // include tokens in format so the stream only receives the final formatted string

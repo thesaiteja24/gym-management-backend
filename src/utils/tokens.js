@@ -10,12 +10,12 @@ const accessTokenExpiry = process.env.ACCESS_TOKEN_EXPIRY
 
 export const issueRefreshToken = async user => {
 	// Input Validation
-	if (!user?.id || !user?.phone_e164 || !user?.role) {
+	if (!user?.id || !user?.phoneE164 || !user?.role) {
 		throw new ApiError(400, 'Invalid user data', [])
 	}
 
 	// Business Logic
-	const payload = { id: user.id, phone_e164: user.phone_e164, role: user.role }
+	const payload = { id: user.id, phoneE164: user.phoneE164, role: user.role }
 	let refreshToken
 	try {
 		refreshToken = jwt.sign(payload, refreshTokenSecret, { expiresIn: refreshTokenExpiry })
@@ -35,12 +35,12 @@ export const issueRefreshToken = async user => {
 
 export const issueAccessToken = async user => {
 	// Input Validation
-	if (!user?.id || !user?.phone_e164 || !user?.role) {
+	if (!user?.id || !user?.phoneE164 || !user?.role) {
 		throw new ApiError(400, 'Invalid user data', [])
 	}
 
 	// Business Logic
-	const payload = { id: user.id, phone_e164: user.phone_e164, role: user.role }
+	const payload = { id: user.id, phoneE164: user.phoneE164, role: user.role }
 	try {
 		const accessToken = jwt.sign(payload, accessTokenSecret, { expiresIn: accessTokenExpiry })
 		logInfo('Access token issued', { action: 'issueAccessToken', user: user.id }, null)
