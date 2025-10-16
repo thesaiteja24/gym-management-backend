@@ -21,7 +21,7 @@
 		"format": "prettier --write \"**/*.{js,json,md}\""
 	},
 	"dependencies": {
-		"@prisma/client": "^6.17.0",
+		"@prisma/client": "^6.17.1",
 		"@prisma/extension-accelerate": "^2.0.2",
 		"bcryptjs": "^3.0.2",
 		"cors": "^2.8.5",
@@ -38,6 +38,6 @@
 	"devDependencies": {
 		"nodemon": "^3.1.10",
 		"prettier": "^3.6.2",
-		"prisma": "^6.17.0"
+		"prisma": "^6.17.1"
 	}
 }

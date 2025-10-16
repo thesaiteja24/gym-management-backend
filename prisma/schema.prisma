@@ -28,7 +28,7 @@ model User {
   phoneE164     String?   @unique
   firstName     String?
   lastName      String?
-  dateOfBirth   DateTime?
+  dateOfBirth   DateTime? @db.Date
   height        Decimal?  @db.Decimal(6, 2)
   weight        Decimal?  @db.Decimal(6, 2)
   profilePicUrl String?
