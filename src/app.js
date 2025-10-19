@@ -17,7 +17,7 @@ morgan.token('client-ip', req => req.ip || (req.ips && req.ips[0]) || req.header
 
 // include tokens in format so the stream only receives the final formatted string
 app.use(
-	morgan(':method :url :status :res[content-length] - :response-time ms :user-id :client-ip', {
+	morgan(':method :url :status :res[content-length] - :response-time ms :client-ip', {
 		stream: {
 			write: message => morganStream.write(message, app.get('req')),
 		},
