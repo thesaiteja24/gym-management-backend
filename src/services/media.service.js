@@ -85,3 +85,33 @@ export const deleteProfilePicture = async (userId, profilePicUrl) => {
 		throw new Error(`Failed to delete file: ${error.message}`)
 	}
 }
+
+export const uploadMedia = async (filePath, file) => {
+	if (!file) {
+		throw new Error('No file provided')
+	}
+
+	const extension = path.extname(file.originalname) || '.jpg'
+	const key = filePath + extension
+
+	const params = {
+		Body: file.buffer,
+		Bucket: BUCKET_NAME,
+		ContentType: file.mimetype,
+		Key: key,
+	}
+
+	const command = new PutObjectCommand(params)
+
+	try {
+		const response = await s3.send(command)
+		logDebug('Logging s3 reponse of upload', { action: 'uploadMedia', reponse: response })
+		const url = `https://${BUCKET_NAME}.s3.amazonaws.com/${key}`
+
+		logInfo('Media Uploaded', { action: 'uploadMedia', url: url })
+		return url
+	} catch (error) {
+		logError('Failed to upload file to S3', error, { action: 'uploadMedia' }, null)
+		throw new Error(`Failed to upload file: ${error.message}`)
+	}
+}
