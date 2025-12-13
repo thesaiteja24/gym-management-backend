@@ -70,14 +70,13 @@ const transports = [
 // ─────────────────────────────────────────────
 // Add console logging in non-production env
 // ─────────────────────────────────────────────
-if (process.env.NODE_ENV === 'dev') {
-	transports.push(
-		new winston.transports.Console({
-			format: consoleFormat,
-			level: 'debug',
-		})
-	)
-}
+
+transports.push(
+	new winston.transports.Console({
+		format: consoleFormat,
+		level: 'debug',
+	})
+)
 
 // ─────────────────────────────────────────────
 // Create Winston logger instance

@@ -9,7 +9,7 @@ try {
 		lazyConnect: true,
 		maxRetriesPerRequest: 3,
 		enableReadyCheck: true,
-		tls: process.env.NODE_ENV !== 'dev' ? {} : undefined,
+		tls: process.env.REDIS_TLS === 'true' ? {} : undefined,
 	})
 
 	// Eager connect for early failure detection
