@@ -5,6 +5,7 @@ import morgan from 'morgan'
 import { morganStream } from './utils/logger.js'
 import { globalErrorHandler } from './middlewares/globalErrorHandler.js'
 import { indexRoutes } from './routes/index.routes.js'
+import { mountSwagger } from './utils/swagger.js'
 
 const app = express()
 const corsOptions = {
@@ -35,6 +36,9 @@ app.use(cors(corsOptions))
 app.use(express.json({ limit: '16kb' }))
 app.use(express.urlencoded({ extended: true, limit: '16kb' }))
 app.use(express.static('public'))
+
+// mount swagger docs
+mountSwagger(app)
 
 // routes declaration
 app.use('/api/v1', indexRoutes)

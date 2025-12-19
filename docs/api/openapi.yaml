@@ -1,0 +1,311 @@
+openapi: 3.0.3
+info:
+    title: Gym Management API
+    version: 0.1.0
+    description: >
+        Contract-first spec for the Express backend.
+        Use `x-status`, `x-owner`, and `x-todo` to track plan vs reality.
+    x-roadmap:
+        milestones:
+            - key: MVP
+              due: 2025-12-31
+              x-todo:
+                  - '[ ] Auth flows stable: send, verify, refresh'
+                  - '[ ] Basic user profile CRUD'
+                  - '[ ] Equipment creation'
+            - key: v1
+              due: 2026-02-15
+              x-todo:
+                  - '[ ] Profile picture moderation'
+                  - '[ ] Rate limits on OTP'
+                  - '[ ] Audit logs'
+
+tags:
+    - name: Health
+      description: Service health and readiness
+    - name: Auth
+      description: Phone-based login with OTP
+    - name: User
+      description: Basic profile operations
+    - name: Equipment — MVP
+      description: Create & manage gym equipment
+    - name: Planning
+      description: Endpoints we intend to add (spec-first)
+
+paths:
+    /health:
+        get:
+            tags: [Health]
+            summary: Health check
+            x-status: done
+            x-owner: backend
+            responses:
+                '200':
+                    description: Service is healthy
+                    content:
+                        application/json:
+                            schema: { $ref: '#/components/schemas/ApiResponse' }
+                            examples:
+                                ok:
+                                    value:
+                                        statusCode: 200
+                                        data: null
+                                        message: Health check passed
+                                        success: true
+
+    /auth/send-otp:
+        post:
+            tags: [Auth — MVP]
+            summary: Send or resend OTP
+            x-status: done
+            x-owner: backend
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            required: [countryCode, phone, resend]
+                            properties:
+                                countryCode: { type: string, example: '+91' }
+                                phone: { type: string, example: '9494059718' }
+                                resend: { type: boolean, example: false }
+            responses:
+                '200':
+                    description: OTP sent successfully
+                    content:
+                        application/json:
+                            schema: { $ref: '#/components/schemas/ApiResponse' }
+                            examples:
+                                sent:
+                                    value:
+                                        statusCode: 200
+                                        data: null
+                                        message: OTP sent successfully
+                                        success: true
+
+    /auth/verify-otp:
+        post:
+            tags: [Auth — MVP]
+            summary: Verify OTP and issue access token
+            x-status: done
+            x-owner: backend
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            required: [countryCode, phone, otp]
+                            properties:
+                                countryCode: { type: string, example: '+91' }
+                                phone: { type: string, example: '8125831596' }
+                                otp: { type: string, example: '890521' }
+            responses:
+                '200':
+                    description: OTP verified
+                    content:
+                        application/json:
+                            schema: { $ref: '#/components/schemas/ApiResponse' }
+                            examples:
+                                ok:
+                                    value:
+                                        statusCode: 200
+                                        data:
+                                            user:
+                                                userId: '62a59b60-9538-429d-8b25-e0c4072f6f92'
+                                                phoneE164: '+918125831596'
+                                                firstName: null
+                                                lastName: null
+                                                role: 'member'
+                                            accessToken: 'eyJhbGciOiJIUzI1NiIs...'
+                                        message: OTP verified successfully
+                                        success: true
+                '400':
+                    description: Invalid or expired OTP
+                    content:
+                        application/json:
+                            schema: { $ref: '#/components/schemas/ApiError' }
+                            examples:
+                                expired:
+                                    value:
+                                        success: false
+                                        message: Invalid or expired OTP
+                                        errors: []
+                                        data: null
+
+    /auth/refresh-token:
+        post:
+            tags: [Auth — MVP]
+            summary: Refresh access token
+            x-status: in-progress
+            x-owner: backend
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            required: [userId]
+                            properties:
+                                userId: { type: string, format: uuid, example: '62a59b60-9538-429d-8b25-e0c4072f6f92' }
+            responses:
+                '200':
+                    description: Token refreshed
+                    content:
+                        application/json:
+                            schema: { $ref: '#/components/schemas/ApiResponse' }
+
+    /users/{id}:
+        parameters:
+            - in: path
+              name: id
+              required: true
+              schema: { type: string, format: uuid }
+        get:
+            tags: [User — MVP]
+            summary: Get user details
+            security: [{ bearerAuth: [] }]
+            x-status: in-progress
+            x-owner: backend
+            responses:
+                '200':
+                    description: User profile
+                    content:
+                        application/json:
+                            schema: { $ref: '#/components/schemas/ApiResponse' }
+        patch:
+            tags: [User — MVP]
+            summary: Update user details
+            security: [{ bearerAuth: [] }]
+            x-status: in-progress
+            x-owner: backend
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UserUpdate'
+                        examples:
+                            sample:
+                                value:
+                                    firstName: 'Sai Teja'
+                                    lastName: 'Patsa'
+                                    height: 173
+                                    weight: 99.40
+                                    dateOfBirth: '2003-11-24'
+            responses:
+                '200':
+                    description: Updated
+                    content:
+                        application/json:
+                            schema: { $ref: '#/components/schemas/ApiResponse' }
+
+    /users/{id}/profile-picture:
+        patch:
+            tags: [User — MVP]
+            summary: Upload/replace profile picture
+            security: [{ bearerAuth: [] }]
+            x-status: in-progress
+            x-owner: backend
+            requestBody:
+                required: true
+                content:
+                    multipart/form-data:
+                        schema:
+                            type: object
+                            properties:
+                                profilePic:
+                                    type: string
+                                    format: binary
+            responses:
+                '200': { description: Picture updated }
+        delete:
+            tags: [User — MVP]
+            summary: Delete profile picture
+            security: [{ bearerAuth: [] }]
+            x-status: in-progress
+            x-owner: backend
+            responses:
+                '204': { description: Picture deleted }
+
+    /equipment:
+        post:
+            tags: [Equipment — MVP]
+            summary: Create equipment
+            security: [{ bearerAuth: [] }]
+            x-status: in-progress
+            x-owner: backend
+            requestBody:
+                required: true
+                content:
+                    multipart/form-data:
+                        schema:
+                            type: object
+                            required: [title]
+                            properties:
+                                title: { type: string, example: 'smith machine' }
+                                image:
+                                    type: array
+                                    items: { type: string, format: binary }
+            responses:
+                '201': { description: Created }
+
+    # ---------- Example of a PLANNED endpoint (acts as a TODO) ----------
+    /auth/resend-otp:
+        post:
+            tags: [Planning]
+            summary: Resend OTP for an existing request
+            description: Spec-first placeholder to plan client/server work.
+            x-status: planned
+            x-owner: backend
+            x-todo:
+                - '[ ] Decide rate limit (per phone/IP).'
+                - '[ ] Decide whether to invalidate previous OTP.'
+                - '[ ] Add analytics event.'
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            required: [countryCode, phone]
+                            properties:
+                                countryCode: { type: string }
+                                phone: { type: string }
+            responses:
+                '202': { description: Resend scheduled }
+                '429': { description: Too many requests }
+
+components:
+    securitySchemes:
+        bearerAuth:
+            type: http
+            scheme: bearer
+            bearerFormat: JWT
+
+    schemas:
+        ApiResponse:
+            type: object
+            properties:
+                statusCode: { type: integer, example: 200 }
+                data: {}
+                message: { type: string }
+                success: { type: boolean }
+        ApiError:
+            type: object
+            properties:
+                success: { type: boolean, example: false }
+                message: { type: string }
+                errors:
+                    type: array
+                    items: { type: object }
+                data: { nullable: true }
+        UserUpdate:
+            type: object
+            properties:
+                firstName: { type: string, nullable: true }
+                lastName: { type: string, nullable: true }
+                height: { type: number, nullable: true }
+                weight: { type: number, nullable: true }
+                dateOfBirth: { type: string, format: date, nullable: true }
