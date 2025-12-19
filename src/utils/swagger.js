@@ -34,7 +34,7 @@ export function mountSwagger(app) {
 	spec.servers = servers
 
 	app.use(
-		'/docs',
+		'/api/v1/docs',
 		swaggerUi.serve,
 		swaggerUi.setup(spec, {
 			customSiteTitle: 'Gym Management API Docs',

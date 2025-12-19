@@ -55,7 +55,7 @@ paths:
 
     /auth/send-otp:
         post:
-            tags: [Auth — MVP]
+            tags: [Auth]
             summary: Send or resend OTP
             x-status: done
             x-owner: backend
@@ -86,7 +86,7 @@ paths:
 
     /auth/verify-otp:
         post:
-            tags: [Auth — MVP]
+            tags: [Auth]
             summary: Verify OTP and issue access token
             x-status: done
             x-owner: backend
@@ -163,7 +163,7 @@ paths:
               required: true
               schema: { type: string, format: uuid }
         get:
-            tags: [User — MVP]
+            tags: [User]
             summary: Get user details
             security: [{ bearerAuth: [] }]
             x-status: in-progress
