@@ -50,3 +50,43 @@ export const createEquipment = asyncHandler(async (req, res) => {
 		throw new ApiError(500, 'Failed to create Equipment', error.message)
 	}
 })
+
+export const getAllEquipment = asyncHandler(async (req, res) => {
+	const equipmentList = await prisma.equipment.findMany()
+
+	if (equipmentList.length === 0) {
+		logWarn('No Equipment found', { action: 'getAllEquipment' }, req)
+		throw new ApiError(404, 'No Equipment found')
+	}
+
+	return res.json(new ApiResponse(200, equipmentList, 'Equipment list fetched successfully'))
+})
+
+export const updateEquipment = asyncHandler(async (req, res) => {
+	// Implementation for updating equipment will go here
+})
+
+export const deleteEquipment = asyncHandler(async (req, res) => {
+	const { id } = req.params
+
+	if (!id) {
+		logWarn('Equipment ID is required to delete Equipment', { action: 'deleteEquipment' }, req)
+		throw new ApiError(400, 'Equipment ID is required')
+	}
+
+	const existingEquipment = await prisma.equipment.findUnique({
+		where: { id: id },
+	})
+
+	if (!existingEquipment) {
+		logWarn('Equipment not found for deletion', { action: 'deleteEquipment', equipmentId: id }, req)
+		throw new ApiError(404, 'No equipment exists with the provided ID')
+	}
+
+	const deletedEquipment = await prisma.equipment.delete({
+		where: { id: id },
+	})
+	logInfo('Equipment deleted successfully', { action: 'deleteEquipment', equipmentId: deletedEquipment.id }, req)
+
+	return res.json(new ApiResponse(200, deletedEquipment, 'Equipment deleted successfully'))
+})
