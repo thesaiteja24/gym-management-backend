@@ -115,23 +115,26 @@ export const updateProfilePic = asyncHandler(async (req, res) => {
 	}
 
 	const user = await prisma.user.findUnique({
-		select: { id: true },
+		select: { id: true, profilePicUrl: true },
 		where: { id: userId },
 	})
 
 	if (!user) {
-		logWarn('User does not exist', { action: 'updateProfilePic', userId: userId }, req)
+		logWarn('User does not exist', { action: 'updateProfilePic', userId }, req)
 		throw new ApiError(404, 'User does not exist')
 	}
 
-	let profilePicUrl
+	let newProfilePicUrl
+
 	try {
-		profilePicUrl = await uploadProfilePicture(file, userId)
+		// Upload new image first
+		newProfilePicUrl = await uploadProfilePicture(file, userId)
 	} catch (error) {
 		logWarn('Failed to upload profile picture', { action: 'updateProfilePic', error: error.message }, req)
 		throw new ApiError(500, 'Failed to upload profile picture', error.message)
 	}
 
+	// Update DB with new image
 	const updatedUser = await prisma.user.update({
 		select: {
 			id: true,
@@ -144,10 +147,33 @@ export const updateProfilePic = asyncHandler(async (req, res) => {
 			profilePicUrl: true,
 		},
 		where: { id: userId },
-		data: { profilePicUrl: profilePicUrl },
+		data: { profilePicUrl: newProfilePicUrl },
 	})
 
-	logDebug('Profile picture updated successfully', { action: 'updateProfilePic', userId: userId })
+	// Delete old image (best-effort, non-blocking)
+	if (user.profilePicUrl) {
+		try {
+			await deleteProfilePicture(userId, user.profilePicUrl)
+		} catch (error) {
+			// Log but DO NOT fail the request
+			logWarn(
+				'Failed to delete old profile picture',
+				{
+					action: 'updateProfilePic',
+					userId,
+					oldProfilePicUrl: user.profilePicUrl,
+					error: error.message,
+				},
+				req
+			)
+		}
+	}
+
+	logDebug('Profile picture updated successfully', {
+		action: 'updateProfilePic',
+		userId,
+	})
+
 	return res.status(200).json(new ApiResponse(200, updatedUser, 'Profile picture updated successfully'))
 })
 

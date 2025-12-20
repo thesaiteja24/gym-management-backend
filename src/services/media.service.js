@@ -23,33 +23,29 @@ export const uploadProfilePicture = async (file, userId) => {
 		throw new Error('No file provided')
 	}
 
+	const rule = MEDIA_RULES.profile
+
 	try {
-		if (file.size > 5 * 1024 * 1024) {
+		if (file.size > rule.limits.maxInputBytes) {
 			throw new Error('Profile image too large')
 		}
 
-		const optimized = await optimizeImage({
-			buffer: file.buffer,
-			width: MEDIA_RULES.profile.width,
-			height: MEDIA_RULES.profile.height,
-			fit: MEDIA_RULES.profile.fit,
-			quality: MEDIA_RULES.profile.quality,
-		})
+		const optimized = await optimizeImage(file.buffer, rule)
 
-		if (optimized.length > MEDIA_RULES.profile.maxBytes) {
+		if (optimized.length > rule.output.maxBytes) {
 			throw new Error('Profile image exceeds size limit')
 		}
 
 		const key = `gym-sass/user-profile/${randomUUID()}.webp`
 
-		const params = {
-			Bucket: BUCKET_NAME,
-			Key: key,
-			Body: optimized,
-			ContentType: 'image/webp',
-		}
-
-		const response = await s3.send(new PutObjectCommand(params))
+		const response = await s3.send(
+			new PutObjectCommand({
+				Bucket: BUCKET_NAME,
+				Key: key,
+				Body: optimized,
+				ContentType: 'image/webp',
+			})
+		)
 
 		logInfo('Profile image uploaded', {
 			action: 'uploadProfilePicture',
@@ -113,27 +109,21 @@ export const uploadMedia = async ({ file, mediaType, filePath, userId }) => {
 		throw new Error('No file provided')
 	}
 
-	if (!['equipment', 'post'].includes(mediaType)) {
+	const rule = MEDIA_RULES[mediaType]
+
+	if (!rule) {
 		logWarn('Invalid media type', { action: 'uploadMedia', mediaType })
 		throw new Error('Invalid media type')
 	}
 
 	try {
-		if (file.size > 10 * 1024 * 1024) {
+		if (file.size > rule.limits.maxInputBytes) {
 			throw new Error('Image too large')
 		}
 
-		const rules = MEDIA_RULES[mediaType]
+		const optimized = await optimizeImage(file.buffer, rule)
 
-		const optimized = await optimizeImage({
-			buffer: file.buffer,
-			maxWidth: rules.maxWidth,
-			maxHeight: rules.maxHeight,
-			fit: rules.fit,
-			quality: rules.quality,
-		})
-
-		if (optimized.length > rules.maxBytes) {
+		if (optimized.length > rule.output.maxBytes) {
 			throw new Error(`${mediaType} image exceeds size limit`)
 		}
 
