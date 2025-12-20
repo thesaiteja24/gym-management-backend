@@ -1,8 +1,9 @@
 import { S3Client, PutObjectCommand, DeleteObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3'
-import path from 'path'
 import { logDebug, logError, logInfo, logWarn } from '../utils/logger.js'
 import { URL } from 'url'
 import { randomUUID } from 'crypto'
+import { MEDIA_RULES } from '../../constants/mediaRules.js'
+import { optimizeImage } from '../utils/imageOptimizer.js'
 
 const config = {
 	region: process.env.AWS_REGION,
@@ -16,33 +17,52 @@ const s3 = new S3Client(config)
 
 const BUCKET_NAME = process.env.AWS_S3_BUCKET
 
-export const uploadProfilePicture = async file => {
+export const uploadProfilePicture = async (file, userId) => {
 	if (!file) {
+		logWarn('No file provided', { action: 'uploadProfilePicture', userId })
 		throw new Error('No file provided')
 	}
 
-	const extension = path.extname(file.originalname) || '.jpg'
-	const key = `gym-sass/user-profile/${randomUUID()}${extension}`
-
-	const params = {
-		Body: file.buffer,
-		Bucket: BUCKET_NAME,
-		ContentType: file.mimetype,
-		Key: key,
-	}
-
-	const command = new PutObjectCommand(params)
-
 	try {
-		const response = await s3.send(command)
-		logDebug('Logging s3 response of upload', { action: 'updateProfilePic', response: response })
-		const url = `https://${BUCKET_NAME}.s3.amazonaws.com/${key}`
+		if (file.size > 5 * 1024 * 1024) {
+			throw new Error('Profile image too large')
+		}
 
-		logInfo('Profile Image uploaded', { action: 'updateProfilePic', url: url })
-		return url
+		const optimized = await optimizeImage({
+			buffer: file.buffer,
+			width: MEDIA_RULES.profile.width,
+			height: MEDIA_RULES.profile.height,
+			fit: MEDIA_RULES.profile.fit,
+			quality: MEDIA_RULES.profile.quality,
+		})
+
+		if (optimized.length > MEDIA_RULES.profile.maxBytes) {
+			throw new Error('Profile image exceeds size limit')
+		}
+
+		const key = `gym-sass/user-profile/${randomUUID()}.webp`
+
+		const params = {
+			Bucket: BUCKET_NAME,
+			Key: key,
+			Body: optimized,
+			ContentType: 'image/webp',
+		}
+
+		const response = await s3.send(new PutObjectCommand(params))
+
+		logInfo('Profile image uploaded', {
+			action: 'uploadProfilePicture',
+			userId,
+			key,
+			size: optimized.length,
+			etag: response.ETag,
+		})
+
+		return `https://${BUCKET_NAME}.s3.amazonaws.com/${key}`
 	} catch (error) {
-		logError('Failed to upload file to S3', error, { action: 'updateProfilePic', user: userId }, null)
-		throw new Error(`Failed to upload file: ${error.message}`)
+		logError('Failed to upload profile image', error, { action: 'uploadProfilePicture', userId }, null)
+		throw error
 	}
 }
 
@@ -87,32 +107,59 @@ export const deleteProfilePicture = async (userId, profilePicUrl) => {
 	}
 }
 
-export const uploadMedia = async (filePath, file) => {
+export const uploadMedia = async ({ file, mediaType, filePath, userId }) => {
 	if (!file) {
+		logWarn('No file provided', { action: 'uploadMedia', userId, mediaType })
 		throw new Error('No file provided')
 	}
 
-	const extension = path.extname(file.originalname) || '.jpg'
-	const key = filePath + extension
-
-	const params = {
-		Body: file.buffer,
-		Bucket: BUCKET_NAME,
-		ContentType: file.mimetype,
-		Key: key,
+	if (!['equipment', 'post'].includes(mediaType)) {
+		logWarn('Invalid media type', { action: 'uploadMedia', mediaType })
+		throw new Error('Invalid media type')
 	}
 
-	const command = new PutObjectCommand(params)
-
 	try {
-		const response = await s3.send(command)
-		logDebug('Logging s3 reponse of upload', { action: 'uploadMedia', reponse: response })
-		const url = `https://${BUCKET_NAME}.s3.amazonaws.com/${key}`
+		if (file.size > 10 * 1024 * 1024) {
+			throw new Error('Image too large')
+		}
 
-		logInfo('Media Uploaded', { action: 'uploadMedia', url: url })
-		return url
+		const rules = MEDIA_RULES[mediaType]
+
+		const optimized = await optimizeImage({
+			buffer: file.buffer,
+			maxWidth: rules.maxWidth,
+			maxHeight: rules.maxHeight,
+			fit: rules.fit,
+			quality: rules.quality,
+		})
+
+		if (optimized.length > rules.maxBytes) {
+			throw new Error(`${mediaType} image exceeds size limit`)
+		}
+
+		const key = `${filePath}.webp`
+
+		const response = await s3.send(
+			new PutObjectCommand({
+				Bucket: BUCKET_NAME,
+				Key: key,
+				Body: optimized,
+				ContentType: 'image/webp',
+			})
+		)
+
+		logInfo('Media uploaded', {
+			action: 'uploadMedia',
+			userId,
+			mediaType,
+			key,
+			size: optimized.length,
+			etag: response.ETag,
+		})
+
+		return `https://${BUCKET_NAME}.s3.amazonaws.com/${key}`
 	} catch (error) {
-		logError('Failed to upload file to S3', error, { action: 'uploadMedia' }, null)
-		throw new Error(`Failed to upload file: ${error.message}`)
+		logError('Failed to upload media', error, { action: 'uploadMedia', userId, mediaType, filePath }, null)
+		throw error
 	}
 }

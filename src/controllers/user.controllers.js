@@ -126,7 +126,7 @@ export const updateProfilePic = asyncHandler(async (req, res) => {
 
 	let profilePicUrl
 	try {
-		profilePicUrl = await uploadProfilePicture(file)
+		profilePicUrl = await uploadProfilePicture(file, userId)
 	} catch (error) {
 		logWarn('Failed to upload profile picture', { action: 'updateProfilePic', error: error.message }, req)
 		throw new ApiError(500, 'Failed to upload profile picture', error.message)

@@ -27,7 +27,7 @@ export const createEquipment = asyncHandler(async (req, res) => {
 
 	let thumbnailUrl = ''
 	try {
-		thumbnailUrl = await uploadMedia(filePath, image)
+		thumbnailUrl = await uploadMedia({ file: image, mediaType: 'equipment', filePath, userId: req.user.id })
 	} catch (error) {
 		logWarn('Failed to upload Equipment Image', { action: 'createEquipment', error: error.message }, req)
 		throw new ApiError(500, 'Failed to upload Equipment Image', error.message)
