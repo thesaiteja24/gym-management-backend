@@ -74,7 +74,7 @@ const transports = [
 transports.push(
 	new winston.transports.Console({
 		format: consoleFormat,
-		level: 'debug',
+		level: process.env.NODE_ENV !== 'dev' ? 'http' : 'debug',
 	})
 )
 

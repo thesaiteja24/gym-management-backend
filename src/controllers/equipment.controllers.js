@@ -6,13 +6,14 @@ import { ApiResponse } from '../utils/ApiResponse.js'
 import { uploadMedia } from '../services/media.service.js'
 import { logInfo, logWarn } from '../utils/logger.js'
 import { titleizeString } from '../utils/helpers.js'
+import { randomUUID } from 'crypto'
 
 const prisma = new PrismaClient().$extends(withAccelerate())
 
 export const createEquipment = asyncHandler(async (req, res) => {
 	const { title } = req.body
 	const image = req.file
-	const filePath = `gym-sass/equipment/${title.toLowerCase()}`
+	const filePath = `gym-sass/equipment/${randomUUID()}`
 
 	if (!title) {
 		logWarn('Title is required to create Equipment', { action: 'createEquipment' }, req)

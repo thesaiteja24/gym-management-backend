@@ -2,6 +2,7 @@ import { S3Client, PutObjectCommand, DeleteObjectCommand, HeadObjectCommand } fr
 import path from 'path'
 import { logDebug, logError, logInfo, logWarn } from '../utils/logger.js'
 import { URL } from 'url'
+import { randomUUID } from 'crypto'
 
 const config = {
 	region: process.env.AWS_REGION,
@@ -15,13 +16,13 @@ const s3 = new S3Client(config)
 
 const BUCKET_NAME = process.env.AWS_S3_BUCKET
 
-export const uploadProfilePicture = async (userId, file) => {
+export const uploadProfilePicture = async file => {
 	if (!file) {
 		throw new Error('No file provided')
 	}
 
 	const extension = path.extname(file.originalname) || '.jpg'
-	const key = `gym-sass/user-profile/${userId}${extension}`
+	const key = `gym-sass/user-profile/${randomUUID()}${extension}`
 
 	const params = {
 		Body: file.buffer,
