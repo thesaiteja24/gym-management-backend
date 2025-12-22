@@ -1,10 +1,14 @@
 import { Router } from 'express'
-import { createMuscleGroup, getAllMuscleGroups } from '../controllers/muscleGroup.controllers.js'
+import { createMuscleGroup, getAllMuscleGroups, updateMuscleGroup } from '../controllers/muscleGroup.controllers.js'
 import { upload } from '../middlewares/upload.middleware.js'
+import { authorize } from '../middlewares/authorize.middleware.js'
+import { ROLES as roles } from '../constants/roles.js'
 
 const router = Router()
 
-router.route('/').post(upload.single('image'), createMuscleGroup)
 router.route('/').get(getAllMuscleGroups)
+router.route('/').post(upload.single('image'), authorize(roles.systemAdmin), createMuscleGroup)
+router.route('/:id').put(upload.single('image'), authorize(roles.systemAdmin), updateMuscleGroup)
+router.route('/:id').delete(authorize(roles.systemAdmin))
 
 export const muscleGroupRoutes = router
