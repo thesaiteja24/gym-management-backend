@@ -17,6 +17,11 @@ const s3 = new S3Client(config)
 
 const BUCKET_NAME = process.env.AWS_S3_BUCKET
 
+export const extractS3KeyFromUrl = url => {
+	if (!url) return null
+	return new URL(url).pathname.substring(1)
+}
+
 export const uploadProfilePicture = async (file, userId) => {
 	if (!file) {
 		logWarn('No file provided', { action: 'uploadProfilePicture', userId })
@@ -151,5 +156,26 @@ export const uploadMedia = async ({ file, mediaType, filePath, userId }) => {
 	} catch (error) {
 		logError('Failed to upload media', error, { action: 'uploadMedia', userId, mediaType, filePath }, null)
 		throw error
+	}
+}
+
+export const deleteMediaByKey = async ({ key, userId, reason }) => {
+	try {
+		await s3.send(
+			new DeleteObjectCommand({
+				Bucket: BUCKET_NAME,
+				Key: key,
+			})
+		)
+
+		logInfo('Rolled back media upload', {
+			action: 'deleteMediaByKey',
+			userId,
+			key,
+			reason,
+		})
+	} catch (error) {
+		// Rollback failure should NEVER crash the request
+		logError('Failed to rollback media upload', error, { action: 'deleteMediaByKey', userId, key, reason }, null)
 	}
 }
