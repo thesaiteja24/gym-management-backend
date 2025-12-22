@@ -30,10 +30,10 @@ export const authorizeSelfOrAdmin = () => {
 	return (req, res, next) => {
 		if (!req.user) return next(new ApiError(401, 'Unauthorized'))
 
-		if (req.user.role === 'systemAdmin' || req.user.id === req.params.userId) {
+		if (req.user.role === 'systemAdmin' || req.user.id === req.params.id) {
 			return next()
 		}
 
-		return next(new ApiError(403, 'Forbidden'))
+		return next(new ApiError(403, 'You do not have permission to perform this action'))
 	}
 }

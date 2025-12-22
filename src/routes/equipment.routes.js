@@ -6,7 +6,7 @@ import {
 	updateEquipment,
 } from '../controllers/equipment.controllers.js'
 import { upload } from '../middlewares/upload.middleware.js'
-import { authorize } from '../middlewares/authorize.js'
+import { authorize } from '../middlewares/authorize.middleware.js'
 import { ROLES as roles } from '../constants/roles.js'
 
 const router = Router()
