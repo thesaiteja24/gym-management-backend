@@ -82,6 +82,26 @@ export const getAllMuscleGroups = asyncHandler(async (req, res) => {
 	return res.json(new ApiResponse(200, muscleGroupList, 'MuscleGroup list fetched'))
 })
 
+export const getMuscleGroupById = asyncHandler(async (req, res) => {
+	const { id } = req.params
+
+	if (!id) {
+		logWarn('MuscleGroup ID not provided', { action: 'getMuscleGroupById' }, req)
+		throw new ApiError(400, 'MuscleGroup ID is required')
+	}
+
+	const muscleGroup = await prisma.muscleGroup.findUnique({
+		where: { id },
+	})
+
+	if (!muscleGroup) {
+		logWarn('MuscleGroup not found', { action: 'getMuscleGroupById', muscleGroupId: id }, req)
+		throw new ApiError(404, 'No MuscleGroup exists with the provided ID')
+	}
+
+	return res.json(new ApiResponse(200, muscleGroup, 'MuscleGroup fetched successfully'))
+})
+
 export const updateMuscleGroup = asyncHandler(async (req, res) => {
 	const { id } = req.params
 	const { title } = req.body
