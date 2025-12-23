@@ -59,6 +59,10 @@ model Gym {
   updatedAt   DateTime @updatedAt
 
   memberships Membership[]
+
+  @@index([id])
+  @@index([ownerId])
+  @@index([name])
 }
 
 model WorkoutLog {
@@ -72,6 +76,10 @@ model WorkoutLog {
   updatedAt DateTime  @updatedAt
 
   exercises WorkoutLogExercise[]
+
+  @@index([id])
+  @@index([userId])
+  @@index([createdAt])
 }
 
 model WorkoutLogExercise {
@@ -86,6 +94,7 @@ model WorkoutLogExercise {
 
   sets WorkoutLogExerciseSet[]
 
+  @@index([id])
   @@index([workoutId])
   @@index([exerciseId])
 }
@@ -106,6 +115,11 @@ model Exercise {
 
   otherMuscleGroups   ExerciseMuscleGroup[]
   workoutLogExercises WorkoutLogExercise[]
+
+  @@index([id])
+  @@index([title])
+  @@index([primaryMuscleGroupId])
+  @@index([equipmentId])
 }
 
 model WorkoutLogExerciseSet {
@@ -132,17 +146,24 @@ model Equipment {
   updatedAt    DateTime @updatedAt
 
   exercises Exercise[]
+
+  @@index([id])
+  @@index([title])
 }
 
 model MuscleGroup {
   id           String   @id @default(uuid())
-  title        String
+  title        String   @unique
   thumbnailUrl String?
+  tags         String[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   primaryExercises Exercise[]            @relation("PrimaryMuscleGroup")
   exercises        ExerciseMuscleGroup[]
+
+  @@index([id])
+  @@index([title])
 }
 
 model ExerciseMuscleGroup {
