@@ -85,6 +85,24 @@ export const getAllEquipment = asyncHandler(async (req, res) => {
 	return res.json(new ApiResponse(200, equipmentList, 'Equipment list fetched successfully'))
 })
 
+export const getEquipmentById = asyncHandler(async (req, res) => {
+	const { id } = req.params
+
+	if (!id) {
+		logWarn('Equipment ID is required to fetch Equipment', { action: 'getEquipmentById' }, req)
+		throw new ApiError(400, 'Equipment ID is required')
+	}
+
+	const equipment = await prisma.equipment.findUnique({ where: { id } })
+
+	if (!equipment) {
+		logWarn('Equipment not found', { action: 'getEquipmentById', equipmentId: id }, req)
+		throw new ApiError(404, 'No equipment exists with the provided ID')
+	}
+
+	return res.json(new ApiResponse(200, equipment, 'Equipment fetched successfully'))
+})
+
 export const updateEquipment = asyncHandler(async (req, res) => {
 	const { id } = req.params
 	const { title } = req.body
