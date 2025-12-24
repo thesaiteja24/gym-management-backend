@@ -13,7 +13,7 @@ router.use('/health', healthCheckRoutes)
 router.use('/auth', authRoutes)
 router.use('/users', authenticate, userRoutes)
 router.use('/equipment', authenticate, equipmentRoutes)
-router.use('/muscle-group', authenticate, muscleGroupRoutes)
-router.use('/exercise', authenticate, exerciseRoutes)
+router.use('/muscle-groups', authenticate, muscleGroupRoutes)
+router.use('/exercises', authenticate, exerciseRoutes)
 
 export const indexRoutes = router
