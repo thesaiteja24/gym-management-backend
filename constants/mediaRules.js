@@ -1,3 +1,5 @@
+import { format } from 'morgan'
+
 export const MEDIA_RULES = {
 	profile: {
 		resize: {
@@ -44,6 +46,34 @@ export const MEDIA_RULES = {
 		},
 		limits: {
 			maxInputBytes: 10 * 1024 * 1024, // 10 MB
+		},
+	},
+
+	exerciseThumbnail: {
+		resize: {
+			maxWidth: 1350,
+			maxHeight: 1080,
+			fit: 'inside',
+		},
+		output: {
+			format: 'webp',
+			quality: 90,
+			maxBytes: 250 * 1024, // ~250 KB
+		},
+		limits: {
+			maxInputBytes: 2 * 1024 * 1024, // extracted frame only
+		},
+	},
+
+	exerciseVideo: {
+		kind: 'video',
+		limits: {
+			maxInputBytes: 1 * 1024 * 1024, // 1 MB
+		},
+		output: {
+			format: 'mp4',
+			stripMetadata: true,
+			thumbnailAtSeconds: 0.5,
 		},
 	},
 }
