@@ -82,6 +82,7 @@ export const getAllEquipment = asyncHandler(async (req, res) => {
 		throw new ApiError(404, 'No Equipment found')
 	}
 
+	logInfo('Equipment list fetched', { action: 'getAllEquipment', count: equipmentList.length }, req)
 	return res.json(new ApiResponse(200, equipmentList, 'Equipment list fetched successfully'))
 })
 
@@ -100,6 +101,7 @@ export const getEquipmentById = asyncHandler(async (req, res) => {
 		throw new ApiError(404, 'No equipment exists with the provided ID')
 	}
 
+	logInfo('Equipment fetched', { action: 'getEquipmentById', equipmentId: id }, req)
 	return res.json(new ApiResponse(200, equipment, 'Equipment fetched successfully'))
 })
 
@@ -135,12 +137,11 @@ export const updateEquipment = asyncHandler(async (req, res) => {
 			newMediaKey = `${filePath}.webp`
 		} catch (error) {
 			logError(
-				'Failed to upload new equipment image',
+				'Failed to upload new Equipment image',
 				{ action: 'updateEquipment', equipmentId: id, error: error.message },
 				req
 			)
-			logError('Failed to upload Equipment Image', { action: 'updateEquipment', error: error.message }, req)
-			throw new ApiError(500, 'Failed to upload equipment image')
+			throw new ApiError(500, 'Failed to upload Equipment image', error.message)
 		}
 	}
 
@@ -166,8 +167,7 @@ export const updateEquipment = asyncHandler(async (req, res) => {
 			{ action: 'updateEquipment', equipmentId: id, error: error.message },
 			req
 		)
-		logError('Failed to update Equipment', { action: 'updateEquipment', error: error.message }, req)
-		throw new ApiError(500, 'Failed to update Equipment')
+		throw new ApiError(500, 'Failed to update Equipment', error.message)
 	}
 
 	// Delete old image AFTER successful update
@@ -201,20 +201,28 @@ export const deleteEquipment = asyncHandler(async (req, res) => {
 		throw new ApiError(404, 'No equipment exists with the provided ID')
 	}
 
-	const deletedEquipment = await prisma.equipment.delete({ where: { id } })
+	try {
+		const deletedEquipment = await prisma.equipment.delete({ where: { id } })
 
-	// Cleanup media (best effort)
-	if (existingEquipment.thumbnailUrl) {
-		const key = extractS3KeyFromUrl(existingEquipment.thumbnailUrl)
-		if (key) {
+		const thumbnailKey = extractS3KeyFromUrl(existingEquipment.thumbnailUrl)
+
+		// Cleanup media (best effort)
+		if (thumbnailKey) {
 			await deleteMediaByKey({
-				key,
+				key: thumbnailKey,
 				userId: req.user.id,
 				reason: 'equipment deleted',
 			})
 		}
-	}
 
-	logInfo('Equipment deleted', { action: 'deleteEquipment', equipmentId: id }, req)
-	return res.json(new ApiResponse(200, deletedEquipment, 'Equipment deleted successfully'))
+		logInfo('Equipment deleted', { action: 'deleteEquipment', equipmentId: id }, req)
+		return res.json(new ApiResponse(200, deletedEquipment, 'Equipment deleted successfully'))
+	} catch (error) {
+		logError(
+			'Failed to delete Equipment',
+			{ action: 'deleteEquipment', equipmentId: id, error: error.message },
+			req
+		)
+		throw new ApiError(500, 'Failed to delete Equipment', error.message)
+	}
 })

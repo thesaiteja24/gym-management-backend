@@ -7,6 +7,7 @@ import { uploadMedia, deleteMediaByKey, extractS3KeyFromUrl } from '../services/
 import { titleizeString } from '../utils/helpers.js'
 import { ApiError } from '../utils/ApiError.js'
 import { ApiResponse } from '../utils/ApiResponse.js'
+import { error } from 'console'
 
 const prisma = new PrismaClient().$extends(withAccelerate())
 
@@ -36,9 +37,9 @@ export const createMuscleGroup = asyncHandler(async (req, res) => {
 			userId: req.user.id,
 		})
 		mediaKey = `${filePath}.webp`
-	} catch {
-		logError('Failed to upload MuscleGroup image', { action: 'createMuscleGroup' }, req)
-		throw new ApiError(500, 'Failed to upload MuscleGroup image')
+	} catch (error) {
+		logError('Failed to upload MuscleGroup image', { action: 'createMuscleGroup', error: error.message }, req)
+		throw new ApiError(500, 'Failed to upload MuscleGroup image', error.message)
 	}
 
 	try {
@@ -65,7 +66,7 @@ export const createMuscleGroup = asyncHandler(async (req, res) => {
 			throw new ApiError(400, 'MuscleGroup with this title already exists')
 		}
 		logError('Failed to create MuscleGroup in DB', { action: 'createMuscleGroup' }, req)
-		throw new ApiError(500, 'Failed to create MuscleGroup')
+		throw new ApiError(500, 'Failed to create MuscleGroup', error.message)
 	}
 })
 
@@ -79,7 +80,8 @@ export const getAllMuscleGroups = asyncHandler(async (req, res) => {
 		throw new ApiError(404, 'No MuscleGroups found')
 	}
 
-	return res.json(new ApiResponse(200, muscleGroupList, 'MuscleGroup list fetched'))
+	logInfo('MuscleGroup list fetched', { action: 'getAllMuscleGroups', count: muscleGroupList.length }, req)
+	return res.json(new ApiResponse(200, muscleGroupList, 'MuscleGroups list fetched successfully'))
 })
 
 export const getMuscleGroupById = asyncHandler(async (req, res) => {
@@ -99,6 +101,7 @@ export const getMuscleGroupById = asyncHandler(async (req, res) => {
 		throw new ApiError(404, 'No MuscleGroup exists with the provided ID')
 	}
 
+	logInfo('MuscleGroup fetched', { action: 'getMuscleGroupById', muscleGroupId: id }, req)
 	return res.json(new ApiResponse(200, muscleGroup, 'MuscleGroup fetched successfully'))
 })
 
@@ -134,9 +137,13 @@ export const updateMuscleGroup = asyncHandler(async (req, res) => {
 				userId: req.user.id,
 			})
 			newMediaKey = `${filePath}.webp`
-		} catch {
-			logError('Failed to upload new MuscleGroup image', { action: 'updateMuscleGroup', muscleGroupId: id }, req)
-			throw new ApiError(500, 'Failed to upload MuscleGroup image')
+		} catch (error) {
+			logError(
+				'Failed to upload new MuscleGroup image',
+				{ action: 'updateMuscleGroup', muscleGroupId: id, error: error.message },
+				req
+			)
+			throw new ApiError(500, 'Failed to upload MuscleGroup image', error.message)
 		}
 	}
 
@@ -149,7 +156,7 @@ export const updateMuscleGroup = asyncHandler(async (req, res) => {
 				...(newThumbnailUrl && { thumbnailUrl: newThumbnailUrl }),
 			},
 		})
-	} catch {
+	} catch (error) {
 		if (newMediaKey) {
 			await deleteMediaByKey({
 				key: newMediaKey,
@@ -157,8 +164,12 @@ export const updateMuscleGroup = asyncHandler(async (req, res) => {
 				reason: 'muscleGroup update db failure',
 			})
 		}
-		logError('Failed to update MuscleGroup in DB', { action: 'updateMuscleGroup', muscleGroupId: id }, req)
-		throw new ApiError(500, 'Failed to update MuscleGroup')
+		logError(
+			'Failed to update MuscleGroup in DB',
+			{ action: 'updateMuscleGroup', muscleGroupId: id, error: error.message },
+			req
+		)
+		throw new ApiError(500, 'Failed to update MuscleGroup', error.message)
 	}
 
 	// delete old image after success
@@ -174,7 +185,6 @@ export const updateMuscleGroup = asyncHandler(async (req, res) => {
 	}
 
 	logInfo('MuscleGroup updated', { action: 'updateMuscleGroup', muscleGroupId: id }, req)
-
 	return res.json(new ApiResponse(200, updatedMuscleGroup, 'MuscleGroup updated successfully'))
 })
 
@@ -195,23 +205,30 @@ export const deleteMuscleGroup = asyncHandler(async (req, res) => {
 		throw new ApiError(404, 'No MuscleGroup exists with the provided ID')
 	}
 
-	const deletedMuscleGroup = await prisma.muscleGroup.delete({
-		where: { id },
-	})
+	try {
+		const deletedMuscleGroup = await prisma.muscleGroup.delete({
+			where: { id },
+		})
 
-	// cleanup media (best effort)
-	if (existingMuscleGroup.thumbnailUrl) {
-		const key = extractS3KeyFromUrl(existingMuscleGroup.thumbnailUrl)
-		if (key) {
+		const thumbnailKey = extractS3KeyFromUrl(existingMuscleGroup.thumbnailUrl)
+
+		// cleanup media (best effort)
+		if (thumbnailKey) {
 			await deleteMediaByKey({
-				key,
+				key: thumbnailKey,
 				userId: req.user.id,
 				reason: 'muscleGroup deleted',
 			})
 		}
+
+		logInfo('MuscleGroup deleted', { action: 'deleteMuscleGroup', muscleGroupId: id }, req)
+		return res.json(new ApiResponse(200, deletedMuscleGroup, 'MuscleGroup deleted successfully'))
+	} catch (error) {
+		logError(
+			'Failed to delete MuscleGroup',
+			{ action: 'deleteMuscleGroup', muscleGroupId: id, error: error.message },
+			req
+		)
+		throw new ApiError(500, 'Failed to delete MuscleGroup', error.message)
 	}
-
-	logInfo('MuscleGroup deleted', { action: 'deleteMuscleGroup', muscleGroupId: id }, req)
-
-	return res.json(new ApiResponse(200, deletedMuscleGroup, 'MuscleGroup deleted successfully'))
 })
