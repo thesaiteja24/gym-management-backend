@@ -7,8 +7,12 @@ import { deleteMediaByKey, extractS3KeyFromUrl, uploadExerciseVideo } from '../s
 import { logError, logInfo, logWarn } from '../utils/logger.js'
 import { titleizeString } from '../utils/helpers.js'
 import { randomUUID } from 'crypto'
+import { deleteCache, getCache, setCache } from '../services/caching.service.js'
 
 const prisma = new PrismaClient().$extends(withAccelerate())
+
+const GET_ALL_EXERCISES_CACHE_KEY = 'exercises:all'
+const EXERCISES_CACHE_TTL = '24hr'
 
 export const createExercise = asyncHandler(async (req, res) => {
 	const { title, instructions, primaryMuscleGroupId, equipmentId, exerciseType } = req.body
@@ -56,6 +60,9 @@ export const createExercise = asyncHandler(async (req, res) => {
 			},
 		})
 
+		// invalidate cache
+		await deleteCache(GET_ALL_EXERCISES_CACHE_KEY)
+
 		logInfo('Exercise created', { action: 'createExercise', exerciseId: exercise.id }, req)
 		return res.json(new ApiResponse(200, exercise, 'Exercise created successfully'))
 	} catch (error) {
@@ -77,6 +84,13 @@ export const createExercise = asyncHandler(async (req, res) => {
 })
 
 export const getAllExercises = asyncHandler(async (req, res) => {
+	const cachedExerciseList = await getCache(GET_ALL_EXERCISES_CACHE_KEY)
+
+	if (cachedExerciseList) {
+		logInfo('Exercises fetched from cache', { action: 'getAllExercises', count: cachedExerciseList.length }, req)
+		return res.json(new ApiResponse(200, cachedExerciseList, 'Exercises list fetched successfully '))
+	}
+
 	const exerciseList = await prisma.exercise.findMany({
 		orderBy: { title: 'asc' },
 		include: {
@@ -89,6 +103,12 @@ export const getAllExercises = asyncHandler(async (req, res) => {
 	if (exerciseList.length === 0) {
 		logWarn('No exercises found', { action: 'getAllExercises' }, req)
 		throw new ApiError(404, 'No exercises found')
+	}
+
+	try {
+		await setCache(GET_ALL_EXERCISES_CACHE_KEY, exerciseList, EXERCISES_CACHE_TTL)
+	} catch (error) {
+		logError('Failed to cache exercises list', error, { action: 'getAllExercises', error: error.message }, req)
 	}
 
 	logInfo('Exercises fetched', { action: 'getAllExercises', count: exerciseList.length }, req)
@@ -228,6 +248,9 @@ export const updateExercise = asyncHandler(async (req, res) => {
 		}
 	}
 
+	// invalidate cache
+	await deleteCache(GET_ALL_EXERCISES_CACHE_KEY)
+
 	logInfo('Exercise updated', { action: 'updateExercise', exerciseId: id }, req)
 	return res.json(new ApiResponse(200, updatedExercise, 'Exercise updated successfully'))
 })
@@ -268,6 +291,9 @@ export const deleteExercise = asyncHandler(async (req, res) => {
 				reason: 'exercise deleted',
 			})
 		}
+
+		// invalidate cache
+		await deleteCache(GET_ALL_EXERCISES_CACHE_KEY)
 
 		logInfo('Exercise deleted', { action: 'deleteExercise', exerciseId: id }, req)
 		return res.json(new ApiResponse(200, deletedExercise, 'Exercise deleted successfully'))
