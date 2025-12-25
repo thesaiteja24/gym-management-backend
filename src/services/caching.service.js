@@ -135,4 +135,25 @@ export const deleteRefreshToken = async userId => {
 	return deleted > 0
 }
 
+export const setCache = async (key, value, providedTTL) => {
+	const ttl = ttlHandler(providedTTL)
+	const args = [key, JSON.stringify(value), 'EX', ttl.seconds]
+
+	const result = await redisClient.set(...args)
+	if (result !== 'OK') {
+		throw new Error('Failed to set cache')
+	}
+
+	return true
+}
+
+export const getCache = async key => {
+	const cachedValue = await redisClient.get(key)
+	return cachedValue ? JSON.parse(cachedValue) : null
+}
+
+export const deleteCache = async key => {
+	const deleted = await redisClient.del(key)
+	return deleted > 0
+}
 export { redisClient }
