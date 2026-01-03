@@ -19,6 +19,7 @@ enum ExerciseType {
   repsOnly
   assisted
   weighted
+  durationOnly
 }
 
 model User {
@@ -109,7 +110,7 @@ model Exercise {
   primaryMuscleGroup   MuscleGroup? @relation("PrimaryMuscleGroup", fields: [primaryMuscleGroupId], references: [id])
   equipmentId          String?
   equipment            Equipment?   @relation(fields: [equipmentId], references: [id])
-  exerciseType         ExerciseType @default(repsOnly)
+  exerciseType         ExerciseType @default(weighted)
   createdAt            DateTime     @default(now())
   updatedAt            DateTime     @updatedAt
 
@@ -132,6 +133,7 @@ model WorkoutLogExerciseSet {
   rpe               Int?
   durationSeconds   Int?
   note              String?
+  restSeconds       Int?
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
