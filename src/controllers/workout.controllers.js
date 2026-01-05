@@ -4,6 +4,7 @@ import { asyncHandler } from '../utils/asyncHandler.js'
 import { ApiError } from '../utils/ApiError.js'
 import { ApiResponse } from '../utils/ApiResponse.js'
 import { logError, logInfo, logWarn } from '../utils/logger.js'
+import { isValidCompletedSet } from '../utils/workoutValidation.js'
 
 const prisma = new PrismaClient().$extends(withAccelerate())
 
@@ -43,19 +44,33 @@ export const createWorkout = asyncHandler(async (req, res) => {
 			/* ───── Create WorkoutLogExercise + Sets ───── */
 
 			for (const exercise of exercises) {
-				const workoutExercise = await tx.workoutLogExercise.create({
-					data: {
-						workoutId: workout.id,
-						exerciseId: exercise.exerciseId,
-						exerciseIndex: exercise.exerciseIndex,
-					},
+				// fetch exercise metadata
+				const exerciseMeta = await tx.exercise.findUnique({
+					where: { id: exercise.exerciseId },
+					select: { exerciseType: true },
 				})
 
-				workoutExercises.push(workoutExercise)
-
-				if (!Array.isArray(exercise.sets) || exercise.sets.length === 0) {
+				if (!exerciseMeta) {
 					logWarn(
-						'No sets found for workout exercise, skipping set creation',
+						'Exercise not found, skipping',
+						{
+							action: 'createWorkout',
+							exerciseId: exercise.exerciseId,
+						},
+						req
+					)
+					continue
+				}
+
+				// validate sets
+				const validSets = Array.isArray(exercise.sets)
+					? exercise.sets.filter(set => isValidCompletedSet(set, exerciseMeta.exerciseType))
+					: []
+
+				// drop exercise if no valid sets
+				if (validSets.length === 0) {
+					logWarn(
+						'No valid sets for exercise, skipping exercise',
 						{
 							action: 'createWorkout',
 							workoutId: workout.id,
@@ -66,7 +81,19 @@ export const createWorkout = asyncHandler(async (req, res) => {
 					continue
 				}
 
-				const setsData = exercise.sets.map(set => ({
+				// create workout exercise
+				const workoutExercise = await tx.workoutLogExercise.create({
+					data: {
+						workoutId: workout.id,
+						exerciseId: exercise.exerciseId,
+						exerciseIndex: exercise.exerciseIndex,
+					},
+				})
+
+				workoutExercises.push(workoutExercise)
+
+				// persist only valid sets
+				const setsData = validSets.map(set => ({
 					workoutExerciseId: workoutExercise.id,
 					setIndex: set.setIndex,
 					weight: set.weight ?? null,
