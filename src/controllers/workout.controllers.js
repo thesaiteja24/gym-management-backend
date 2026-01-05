@@ -196,3 +196,77 @@ export const getAllWorkouts = asyncHandler(async (req, res) => {
 
 	return res.json(new ApiResponse(200, workouts, 'Workouts fetched successfully'))
 })
+
+export const deleteWorkout = asyncHandler(async (req, res) => {
+	const workoutId = req.params.id
+	const userId = req.user?.id
+
+	/* ───── Validation ───── */
+
+	if (!userId) {
+		logWarn('User not authenticated while deleting workout', { action: 'deleteWorkout' }, req)
+		throw new ApiError(401, 'Unauthorized')
+	}
+
+	if (!workoutId) {
+		logWarn('Workout ID is required to delete workout', { action: 'deleteWorkout' }, req)
+		throw new ApiError(400, 'Workout ID is required')
+	}
+
+	let workout
+
+	/* ───── Transaction ───── */
+
+	try {
+		workout = await prisma.workoutLog.findUnique({
+			// TODO: Fix composite key deletion once Prisma supports it
+			// where: {
+			// 	id_userId: {
+			// 		id: workoutId,
+			// 		userId,
+			// 	},
+			// },
+			where: {
+				id: workoutId,
+			},
+		})
+
+		if (!workout || workout.userId !== userId) {
+			logWarn(
+				'Workout not found or does not belong to user',
+				{
+					action: 'deleteWorkout',
+					workoutId,
+					userId,
+				},
+				req
+			)
+			throw new ApiError(404, 'Workout not found')
+		}
+
+		await prisma.workoutLog.delete({
+			where: {
+				id: workoutId,
+			},
+		})
+	} catch (error) {
+		logError('Failed to delete workout', error, { action: 'deleteWorkout', error: error.message, workoutId }, req)
+		throw new ApiError(500, 'Failed to delete workout', error.message)
+	}
+
+	/* ───── Success Log ───── */
+
+	logInfo(
+		'Workout deleted',
+		{
+			action: 'deleteWorkout',
+			workoutId,
+			userId,
+		},
+		req
+	)
+
+	/* ───── Response ───── */
+
+	return res.json(new ApiResponse(200, null, 'Workout deleted successfully'))
+})

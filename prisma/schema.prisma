@@ -98,7 +98,7 @@ model WorkoutLog {
 model WorkoutLogExercise {
   id            String     @id @default(uuid())
   workoutId     String
-  workout       WorkoutLog @relation(fields: [workoutId], references: [id])
+  workout       WorkoutLog @relation(fields: [workoutId], references: [id], onDelete: Cascade)
   exerciseId    String
   exercise      Exercise   @relation(fields: [exerciseId], references: [id])
   exerciseIndex Int?
@@ -138,7 +138,7 @@ model Exercise {
 model WorkoutLogExerciseSet {
   id                String             @id @default(uuid())
   workoutExerciseId String
-  workoutExercise   WorkoutLogExercise @relation(fields: [workoutExerciseId], references: [id])
+  workoutExercise   WorkoutLogExercise @relation(fields: [workoutExerciseId], references: [id], onDelete: Cascade)
   setIndex          Int?
   weight            Decimal?           @db.Decimal(8, 3)
   reps              Int?
