@@ -22,20 +22,32 @@ enum ExerciseType {
   durationOnly
 }
 
+enum WeightUnits {
+  kg
+  lbs
+}
+
+enum LengthUnits {
+  cm
+  inches
+}
+
 model User {
-  id            String    @id @default(uuid())
-  countryCode   String?
-  phone         String    @unique
-  phoneE164     String?   @unique
-  firstName     String?
-  lastName      String?
-  dateOfBirth   DateTime? @db.Date
-  height        Decimal?  @db.Decimal(6, 2)
-  weight        Decimal?  @db.Decimal(6, 2)
-  profilePicUrl String?
-  role          UserRole  @default(member)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id                  String      @id @default(uuid())
+  countryCode         String?
+  phone               String      @unique
+  phoneE164           String?     @unique
+  firstName           String?
+  lastName            String?
+  dateOfBirth         DateTime?   @db.Date
+  preferredWeightUnit WeightUnits @default(kg)
+  preferredLengthUnit LengthUnits @default(cm)
+  height              Decimal?    @db.Decimal(6, 2)
+  weight              Decimal?    @db.Decimal(6, 2)
+  profilePicUrl       String?
+  role                UserRole    @default(member)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
 
   // Relations
   gymsOwned   Gym[]        @relation("GymOwner")

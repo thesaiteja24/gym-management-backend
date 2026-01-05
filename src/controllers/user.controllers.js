@@ -15,19 +15,7 @@ export const getUser = asyncHandler(async (req, res) => {
 		throw new ApiError(400, 'User ID is required')
 	}
 
-	const user = await prisma.user.findUnique({
-		select: {
-			id: true,
-			phoneE164: true,
-			firstName: true,
-			lastName: true,
-			dateOfBirth: true,
-			height: true,
-			weight: true,
-			profilePicUrl: true,
-		},
-		where: { id: userId },
-	})
+	const user = await prisma.user.findUnique({ where: { id: userId } })
 
 	if (!user) {
 		throw new ApiError(404, 'User not found')
@@ -48,21 +36,19 @@ export const updateUser = asyncHandler(async (req, res) => {
 
 	logDebug('updates logged', updates)
 
-	const allowedFields = ['firstName', 'lastName', 'dateOfBirth', 'height', 'weight']
+	const allowedFields = [
+		'firstName',
+		'lastName',
+		'dateOfBirth',
+		'preferredWeightUnit',
+		'preferredLengthUnit',
+		'height',
+		'weight',
+	]
 	const fieldsToUpdate = {}
 
 	// Check if user exists
-	const existingUser = await prisma.user.findUnique({
-		select: {
-			id: true,
-			firstName: true,
-			lastName: true,
-			dateOfBirth: true,
-			height: true,
-			weight: true,
-		},
-		where: { id: userId },
-	})
+	const existingUser = await prisma.user.findUnique({ where: { id: userId } })
 
 	if (!existingUser) {
 		logWarn('User does not exist', { action: 'findUser', userId })
@@ -82,6 +68,16 @@ export const updateUser = asyncHandler(async (req, res) => {
 	}
 
 	const updatedUser = await prisma.user.update({
+		select: {
+			firstName: true,
+			lastName: true,
+			dateOfBirth: true,
+			preferredLengthUnit: true,
+			preferredWeightUnit: true,
+			height: true,
+			weight: true,
+			updatedAt: true,
+		},
 		where: { id: userId },
 		data: {
 			...fieldsToUpdate,
@@ -136,16 +132,7 @@ export const updateProfilePic = asyncHandler(async (req, res) => {
 
 	// Update DB with new image
 	const updatedUser = await prisma.user.update({
-		select: {
-			id: true,
-			phoneE164: true,
-			firstName: true,
-			lastName: true,
-			dateOfBirth: true,
-			height: true,
-			weight: true,
-			profilePicUrl: true,
-		},
+		select: { profilePicUrl: true, updatedAt: true },
 		where: { id: userId },
 		data: { profilePicUrl: newProfilePicUrl },
 	})
