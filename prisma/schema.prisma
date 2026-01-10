@@ -22,6 +22,15 @@ enum ExerciseType {
   durationOnly
 }
 
+enum SetType {
+  warmup
+  working
+  dropSet
+  superSet
+  giantSet
+  failureSet
+}
+
 enum WeightUnits {
   kg
   lbs
@@ -146,6 +155,7 @@ model WorkoutLogExerciseSet {
   durationSeconds   Int?
   note              String?
   restSeconds       Int?
+  setType           SetType            @default(working)
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
