@@ -8,6 +8,8 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+/* ───────────────── ENUMS ───────────────── */
+
 enum UserRole {
   systemAdmin
   gymAdmin
@@ -41,8 +43,10 @@ enum LengthUnits {
   inches
 }
 
+/* ───────────────── USER ───────────────── */
+
 model User {
-  id                  String      @id @default(uuid())
+  id                  String      @id @default(uuid(7))
   countryCode         String?
   phone               String      @unique
   phoneE164           String?     @unique
@@ -58,20 +62,19 @@ model User {
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
 
-  // Relations
   gymsOwned   Gym[]        @relation("GymOwner")
   workoutLogs WorkoutLog[]
   sessions    Session[]
   memberships Membership[]
 
   @@index([countryCode])
-  @@index([phone])
-  @@index([phoneE164])
   @@index([role])
 }
 
+/* ───────────────── GYM ───────────────── */
+
 model Gym {
-  id          String   @id @default(uuid())
+  id          String   @id @default(uuid(7))
   name        String
   ownerId     String
   owner       User     @relation("GymOwner", fields: [ownerId], references: [id])
@@ -82,13 +85,14 @@ model Gym {
 
   memberships Membership[]
 
-  @@index([id])
   @@index([ownerId])
   @@index([name])
 }
 
+/* ───────────────── WORKOUT LOG ───────────────── */
+
 model WorkoutLog {
-  id        String    @id @default(uuid())
+  id        String    @id @default(uuid(7))
   userId    String
   user      User      @relation(fields: [userId], references: [id])
   title     String?
@@ -99,30 +103,31 @@ model WorkoutLog {
 
   exercises WorkoutLogExercise[]
 
-  @@index([id])
-  @@index([userId])
-  @@index([createdAt])
+  @@index([userId, createdAt])
 }
 
+/* ───────────────── WORKOUT EXERCISE ───────────────── */
+
 model WorkoutLogExercise {
-  id            String     @id @default(uuid())
+  id            String     @id @default(uuid(7))
   workoutId     String
   workout       WorkoutLog @relation(fields: [workoutId], references: [id], onDelete: Cascade)
   exerciseId    String
   exercise      Exercise   @relation(fields: [exerciseId], references: [id])
-  exerciseIndex Int?
+  exerciseIndex Int
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
   sets WorkoutLogExerciseSet[]
 
-  @@index([id])
-  @@index([workoutId])
+  @@index([workoutId, exerciseIndex])
   @@index([exerciseId])
 }
 
+/* ───────────────── EXERCISE MASTER ───────────────── */
+
 model Exercise {
-  id                   String       @id @default(uuid())
+  id                   String       @id @default(uuid(7))
   title                String
   instructions         String?
   thumbnailUrl         String?
@@ -138,17 +143,18 @@ model Exercise {
   otherMuscleGroups   ExerciseMuscleGroup[]
   workoutLogExercises WorkoutLogExercise[]
 
-  @@index([id])
   @@index([title])
   @@index([primaryMuscleGroupId])
   @@index([equipmentId])
 }
 
+/* ───────────────── WORKOUT SET ───────────────── */
+
 model WorkoutLogExerciseSet {
-  id                String             @id @default(uuid())
+  id                String             @id @default(uuid(7))
   workoutExerciseId String
   workoutExercise   WorkoutLogExercise @relation(fields: [workoutExerciseId], references: [id], onDelete: Cascade)
-  setIndex          Int?
+  setIndex          Int
   weight            Decimal?           @db.Decimal(8, 3)
   reps              Int?
   rpe               Int?
@@ -159,24 +165,25 @@ model WorkoutLogExerciseSet {
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
-  @@index([workoutExerciseId])
+  @@index([workoutExerciseId, setIndex])
 }
 
+/* ───────────────── EQUIPMENT ───────────────── */
+
 model Equipment {
-  id           String   @id @default(uuid())
+  id           String   @id @default(uuid(7))
   title        String   @unique
   thumbnailUrl String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   exercises Exercise[]
-
-  @@index([id])
-  @@index([title])
 }
 
+/* ───────────────── MUSCLE GROUP ───────────────── */
+
 model MuscleGroup {
-  id           String   @id @default(uuid())
+  id           String   @id @default(uuid(7))
   title        String   @unique
   thumbnailUrl String?
   tags         String[]
@@ -185,13 +192,12 @@ model MuscleGroup {
 
   primaryExercises Exercise[]            @relation("PrimaryMuscleGroup")
   exercises        ExerciseMuscleGroup[]
-
-  @@index([id])
-  @@index([title])
 }
 
+/* ───────────────── EXERCISE ↔ MUSCLE GROUP ───────────────── */
+
 model ExerciseMuscleGroup {
-  id            String      @id @default(uuid())
+  id            String      @id @default(uuid(7))
   exerciseId    String
   exercise      Exercise    @relation(fields: [exerciseId], references: [id])
   muscleGroupId String
@@ -201,8 +207,10 @@ model ExerciseMuscleGroup {
   @@index([muscleGroupId])
 }
 
+/* ───────────────── MEMBERSHIP ───────────────── */
+
 model Membership {
-  id             String   @id @default(uuid())
+  id             String   @id @default(uuid(7))
   gymId          String
   gym            Gym      @relation(fields: [gymId], references: [id])
   userId         String
@@ -212,12 +220,13 @@ model Membership {
   status         String   @default("active")
 
   @@unique([gymId, userId])
-  @@index([gymId])
   @@index([userId])
 }
 
+/* ───────────────── SESSION ───────────────── */
+
 model Session {
-  id               String    @id @default(uuid())
+  id               String    @id @default(uuid(7))
   userId           String
   jwtId            String?
   refreshTokenHash String
