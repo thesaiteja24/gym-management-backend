@@ -68,7 +68,7 @@ export const createWorkout = asyncHandler(async (req, res) => {
 					const createdGroup = await tx.workoutLogExerciseGroup.create({
 						data: {
 							workoutId: workout.id,
-							type: group.groupType,
+							groupType: group.groupType,
 							groupIndex: group.groupIndex,
 							restSeconds: group.restSeconds ?? null,
 						},
@@ -194,23 +194,18 @@ export const getAllWorkouts = asyncHandler(async (req, res) => {
 
 	try {
 		workouts = await prisma.workoutLog.findMany({
-			where: {
-				userId,
-			},
-			orderBy: {
-				createdAt: 'desc',
-			},
+			where: { userId },
+			orderBy: { createdAt: 'desc' },
 			include: {
+				exerciseGroups: {
+					orderBy: { groupIndex: 'asc' },
+				},
 				exercises: {
-					orderBy: {
-						exerciseIndex: 'asc',
-					},
+					orderBy: { exerciseIndex: 'asc' },
 					include: {
-						exercise: true, // exercise metadata
+						exercise: true,
 						sets: {
-							orderBy: {
-								setIndex: 'asc',
-							},
+							orderBy: { setIndex: 'asc' },
 						},
 					},
 				},

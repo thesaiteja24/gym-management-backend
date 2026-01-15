@@ -125,7 +125,7 @@ model WorkoutLogExerciseGroup {
   id                  String               @id @default(uuid(7))
   workoutId           String
   workout             WorkoutLog           @relation(fields: [workoutId], references: [id], onDelete: Cascade)
-  type                ExerciseGroupType
+  groupType           ExerciseGroupType
   groupIndex          Int
   restSeconds         Int?
   note                String?
