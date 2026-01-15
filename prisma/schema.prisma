@@ -8,7 +8,9 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/* ───────────────── ENUMS ───────────────── */
+/**
+ * ───────────────── ENUMS ─────────────────
+ */
 
 enum UserRole {
   systemAdmin
@@ -28,9 +30,12 @@ enum SetType {
   warmup
   working
   dropSet
+  failureSet
+}
+
+enum ExerciseGroupType {
   superSet
   giantSet
-  failureSet
 }
 
 enum WeightUnits {
@@ -43,7 +48,9 @@ enum LengthUnits {
   inches
 }
 
-/* ───────────────── USER ───────────────── */
+/**
+ * ───────────────── USER ─────────────────
+ */
 
 model User {
   id                  String      @id @default(uuid(7))
@@ -71,7 +78,9 @@ model User {
   @@index([role])
 }
 
-/* ───────────────── GYM ───────────────── */
+/**
+ * ───────────────── GYM ─────────────────
+ */
 
 model Gym {
   id          String   @id @default(uuid(7))
@@ -89,7 +98,9 @@ model Gym {
   @@index([name])
 }
 
-/* ───────────────── WORKOUT LOG ───────────────── */
+/**
+ * ───────────────── WORKOUT LOG ─────────────────
+ */
 
 model WorkoutLog {
   id        String    @id @default(uuid(7))
@@ -101,22 +112,45 @@ model WorkoutLog {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  exercises WorkoutLogExercise[]
+  exercises      WorkoutLogExercise[]
+  exerciseGroups WorkoutLogExerciseGroup[]
 
   @@index([userId, createdAt])
 }
 
-/* ───────────────── WORKOUT EXERCISE ───────────────── */
+/**
+ * ───────────────── WORKOUT EXERCISE GROUP ─────────────────
+ */
+model WorkoutLogExerciseGroup {
+  id                  String               @id @default(uuid(7))
+  workoutId           String
+  workout             WorkoutLog           @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  type                ExerciseGroupType
+  groupIndex          Int
+  restSeconds         Int?
+  note                String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  workoutLogExercises WorkoutLogExercise[]
+
+  @@index([workoutId, groupIndex])
+}
+
+/**
+ * ───────────────── WORKOUT EXERCISE ─────────────────
+ */
 
 model WorkoutLogExercise {
-  id            String     @id @default(uuid(7))
-  workoutId     String
-  workout       WorkoutLog @relation(fields: [workoutId], references: [id], onDelete: Cascade)
-  exerciseId    String
-  exercise      Exercise   @relation(fields: [exerciseId], references: [id])
-  exerciseIndex Int
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  id              String                   @id @default(uuid(7))
+  workoutId       String
+  workout         WorkoutLog               @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  exerciseId      String
+  exercise        Exercise                 @relation(fields: [exerciseId], references: [id])
+  exerciseGroupId String?
+  exerciseGroup   WorkoutLogExerciseGroup? @relation(fields: [exerciseGroupId], references: [id], onDelete: SetNull)
+  exerciseIndex   Int
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
 
   sets WorkoutLogExerciseSet[]
 
@@ -124,7 +158,31 @@ model WorkoutLogExercise {
   @@index([exerciseId])
 }
 
-/* ───────────────── EXERCISE MASTER ───────────────── */
+/**
+ * ───────────────── WORKOUT SET ─────────────────
+ */
+
+model WorkoutLogExerciseSet {
+  id                String             @id @default(uuid(7))
+  workoutExerciseId String
+  workoutExercise   WorkoutLogExercise @relation(fields: [workoutExerciseId], references: [id], onDelete: Cascade)
+  setIndex          Int
+  weight            Decimal?           @db.Decimal(8, 3)
+  reps              Int?
+  rpe               Int?
+  durationSeconds   Int?
+  note              String?
+  restSeconds       Int?
+  setType           SetType            @default(working)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  @@index([workoutExerciseId, setIndex])
+}
+
+/**
+ * ───────────────── EXERCISE MASTER ─────────────────
+ */
 
 model Exercise {
   id                   String       @id @default(uuid(7))
@@ -148,27 +206,9 @@ model Exercise {
   @@index([equipmentId])
 }
 
-/* ───────────────── WORKOUT SET ───────────────── */
-
-model WorkoutLogExerciseSet {
-  id                String             @id @default(uuid(7))
-  workoutExerciseId String
-  workoutExercise   WorkoutLogExercise @relation(fields: [workoutExerciseId], references: [id], onDelete: Cascade)
-  setIndex          Int
-  weight            Decimal?           @db.Decimal(8, 3)
-  reps              Int?
-  rpe               Int?
-  durationSeconds   Int?
-  note              String?
-  restSeconds       Int?
-  setType           SetType            @default(working)
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-
-  @@index([workoutExerciseId, setIndex])
-}
-
-/* ───────────────── EQUIPMENT ───────────────── */
+/**
+ * ───────────────── EQUIPMENT ─────────────────
+ */
 
 model Equipment {
   id           String   @id @default(uuid(7))
@@ -180,7 +220,9 @@ model Equipment {
   exercises Exercise[]
 }
 
-/* ───────────────── MUSCLE GROUP ───────────────── */
+/**
+ * ───────────────── MUSCLE GROUP ─────────────────
+ */
 
 model MuscleGroup {
   id           String   @id @default(uuid(7))
@@ -194,7 +236,9 @@ model MuscleGroup {
   exercises        ExerciseMuscleGroup[]
 }
 
-/* ───────────────── EXERCISE ↔ MUSCLE GROUP ───────────────── */
+/**
+ * ───────────────── EXERCISE ↔ MUSCLE GROUP ─────────────────
+ */
 
 model ExerciseMuscleGroup {
   id            String      @id @default(uuid(7))
@@ -207,7 +251,9 @@ model ExerciseMuscleGroup {
   @@index([muscleGroupId])
 }
 
-/* ───────────────── MEMBERSHIP ───────────────── */
+/**
+ * ───────────────── MEMBERSHIP ─────────────────
+ */
 
 model Membership {
   id             String   @id @default(uuid(7))
@@ -223,7 +269,9 @@ model Membership {
   @@index([userId])
 }
 
-/* ───────────────── SESSION ───────────────── */
+/**
+ * ───────────────── SESSION ─────────────────
+ */
 
 model Session {
   id               String    @id @default(uuid(7))

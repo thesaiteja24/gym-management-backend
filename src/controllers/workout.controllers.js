@@ -9,7 +9,7 @@ import { isValidCompletedSet } from '../utils/workoutValidation.js'
 const prisma = new PrismaClient().$extends(withAccelerate())
 
 export const createWorkout = asyncHandler(async (req, res) => {
-	const { title, startTime, endTime, exercises } = req.body
+	const { title, startTime, endTime, exercises, exerciseGroups } = req.body
 
 	/* ───── Validation ───── */
 
@@ -21,6 +21,24 @@ export const createWorkout = asyncHandler(async (req, res) => {
 	if (!Array.isArray(exercises) || exercises.length === 0) {
 		logWarn('Exercises are required to create workout', { action: 'createWorkout' }, req)
 		throw new ApiError(400, 'At least one exercise is required')
+	}
+
+	// ───── Structural validation for grouping (NO business rules) ─────
+	if (exerciseGroups !== undefined && !Array.isArray(exerciseGroups)) {
+		throw new ApiError(400, 'exerciseGroups must be an array')
+	}
+
+	if (Array.isArray(exerciseGroups)) {
+		for (const group of exerciseGroups) {
+			if (
+				!group ||
+				typeof group.id !== 'string' ||
+				typeof group.groupType !== 'string' ||
+				typeof group.groupIndex !== 'number'
+			) {
+				throw new ApiError(400, 'Invalid exercise group payload')
+			}
+		}
 	}
 
 	let workout
@@ -40,6 +58,26 @@ export const createWorkout = asyncHandler(async (req, res) => {
 					endTime: new Date(endTime),
 				},
 			})
+
+			/* ───── Create Exercise Groups ───── */
+
+			const groupIdMap = new Map()
+
+			if (Array.isArray(exerciseGroups) && exerciseGroups.length > 0) {
+				for (const group of exerciseGroups) {
+					const createdGroup = await tx.workoutLogExerciseGroup.create({
+						data: {
+							workoutId: workout.id,
+							type: group.groupType,
+							groupIndex: group.groupIndex,
+							restSeconds: group.restSeconds ?? null,
+						},
+					})
+
+					// Map client temporary ID → DB ID
+					groupIdMap.set(group.id, createdGroup.id)
+				}
+			}
 
 			/* ───── Create WorkoutLogExercise + Sets ───── */
 
@@ -87,6 +125,9 @@ export const createWorkout = asyncHandler(async (req, res) => {
 						workoutId: workout.id,
 						exerciseId: exercise.exerciseId,
 						exerciseIndex: exercise.exerciseIndex,
+						exerciseGroupId: exercise.exerciseGroupId
+							? (groupIdMap.get(exercise.exerciseGroupId) ?? null)
+							: null,
 					},
 				})
 
@@ -96,6 +137,7 @@ export const createWorkout = asyncHandler(async (req, res) => {
 				const setsData = validSets.map(set => ({
 					workoutExerciseId: workoutExercise.id,
 					setIndex: set.setIndex,
+					setType: set.setType,
 					weight: set.weight ?? null,
 					reps: set.reps ?? null,
 					rpe: set.rpe ?? null,
