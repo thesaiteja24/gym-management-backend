@@ -11,19 +11,18 @@ const prisma = new PrismaClient().$extends(withAccelerate())
 export const createWorkout = asyncHandler(async (req, res) => {
 	const { title, startTime, endTime, exercises, exerciseGroups } = req.body
 
-	/* ───── Validation ───── */
+	/* ───────────────── Validation ───────────────── */
 
 	if (!startTime || !endTime) {
-		logWarn('Start time and end time are required to create workout', { action: 'createWorkout' }, req)
+		logWarn('Start time and end time are required', { action: 'createWorkout' }, req)
 		throw new ApiError(400, 'Start time and end time are required')
 	}
 
 	if (!Array.isArray(exercises) || exercises.length === 0) {
-		logWarn('Exercises are required to create workout', { action: 'createWorkout' }, req)
+		logWarn('Exercises are required', { action: 'createWorkout' }, req)
 		throw new ApiError(400, 'At least one exercise is required')
 	}
 
-	// ───── Structural validation for grouping (NO business rules) ─────
 	if (exerciseGroups !== undefined && !Array.isArray(exerciseGroups)) {
 		throw new ApiError(400, 'exerciseGroups must be an array')
 	}
@@ -35,13 +34,13 @@ export const createWorkout = asyncHandler(async (req, res) => {
 	let droppedGroups = 0
 
 	let workout
-	const workoutExercises = []
+	const persistedExercises = []
 
-	/* ───── Transaction ───── */
+	/* ───────────────── Transaction ───────────────── */
 
 	try {
 		await prisma.$transaction(async tx => {
-			/* ───── Create WorkoutLog ───── */
+			/* ───── Create Workout ───── */
 
 			workout = await tx.workoutLog.create({
 				data: {
@@ -57,14 +56,11 @@ export const createWorkout = asyncHandler(async (req, res) => {
 			const groupIdMap = new Map()
 
 			if (Array.isArray(exerciseGroups) && exerciseGroups.length > 0) {
-				const normalizedGroups = [...exerciseGroups]
+				const normalized = [...exerciseGroups]
 					.sort((a, b) => a.groupIndex - b.groupIndex)
-					.map((group, index) => ({
-						...group,
-						normalizedIndex: index,
-					}))
+					.map((g, i) => ({ ...g, normalizedIndex: i }))
 
-				for (const group of normalizedGroups) {
+				for (const group of normalized) {
 					const created = await tx.workoutLogExerciseGroup.create({
 						data: {
 							workoutId: workout.id,
@@ -74,55 +70,38 @@ export const createWorkout = asyncHandler(async (req, res) => {
 						},
 					})
 
-					// Map client temporary ID → DB ID
-					groupIdMap.set(group.id, createdGroup.id)
+					groupIdMap.set(group.id, created.id)
 				}
 			}
 
-			/* ───────────────── Create Exercises + Sets ───────────────── */
+			/* ───────────────── Create Exercises & Sets ───────────────── */
 
 			for (const exercise of exercises) {
-				// fetch exercise metadata
 				const exerciseMeta = await tx.exercise.findUnique({
 					where: { id: exercise.exerciseId },
 					select: { exerciseType: true },
 				})
 
 				if (!exerciseMeta) {
-					logWarn(
-						'Exercise not found, skipping',
-						{
-							action: 'createWorkout',
-							exerciseId: exercise.exerciseId,
-						},
-						req
-					)
 					droppedExercises++
+					logWarn('Exercise not found, skipping', { exerciseId: exercise.exerciseId }, req)
 					continue
 				}
 
-				// validate sets
+				const totalSets = Array.isArray(exercise.sets) ? exercise.sets.length : 0
+
 				const validSets = Array.isArray(exercise.sets)
 					? exercise.sets.filter(set => isValidCompletedSet(set, exerciseMeta.exerciseType))
 					: []
 
-				droppedSets += (exercise.sets?.length ?? 0) - validSets.length
+				droppedSets += totalSets - validSets.length
 
 				if (validSets.length === 0) {
 					droppedExercises++
-					logWarn(
-						'No valid sets for exercise, skipping exercise',
-						{
-							action: 'createWorkout',
-							workoutId: workout.id,
-							exerciseId: exercise.exerciseId,
-						},
-						req
-					)
+					logWarn('No valid sets, dropping exercise', { exerciseId: exercise.exerciseId }, req)
 					continue
 				}
 
-				// create workout exercise
 				const workoutExercise = await tx.workoutLogExercise.create({
 					data: {
 						workoutId: workout.id,
@@ -151,6 +130,12 @@ export const createWorkout = asyncHandler(async (req, res) => {
 				})
 			}
 
+			/* ───── Final Guard ───── */
+
+			if (persistedExercises.length === 0) {
+				throw new ApiError(400, 'No valid exercises to save')
+			}
+
 			/* ───────────────── Group Pruning (Authoritative) ───────────────── */
 
 			const groupUsage = new Map()
@@ -161,24 +146,42 @@ export const createWorkout = asyncHandler(async (req, res) => {
 				}
 			}
 
-			for (const [groupId, count] of groupUsage.entries()) {
+			for (const [, dbGroupId] of groupIdMap.entries()) {
+				const count = groupUsage.get(dbGroupId) ?? 0
+
 				if (count < 2) {
 					droppedGroups++
 
 					await tx.workoutLogExerciseGroup.delete({
-						where: { id: groupId },
+						where: { id: dbGroupId },
 					})
 
 					await tx.workoutLogExercise.updateMany({
-						where: { exerciseGroupId: groupId },
+						where: { exerciseGroupId: dbGroupId },
 						data: { exerciseGroupId: null },
+					})
+				}
+			}
+
+			/* ───────────────── Reindex Remaining Groups ───────────────── */
+
+			const remainingGroups = await tx.workoutLogExerciseGroup.findMany({
+				where: { workoutId: workout.id },
+				orderBy: { groupIndex: 'asc' },
+			})
+
+			for (let i = 0; i < remainingGroups.length; i++) {
+				if (remainingGroups[i].groupIndex !== i) {
+					await tx.workoutLogExerciseGroup.update({
+						where: { id: remainingGroups[i].id },
+						data: { groupIndex: i },
 					})
 				}
 			}
 		})
 	} catch (error) {
 		logError('Failed to create workout', error, { action: 'createWorkout' }, req)
-		throw new ApiError(500, 'Failed to create workout')
+		throw error instanceof ApiError ? error : new ApiError(500, 'Failed to create workout')
 	}
 
 	/* ───────────────── Response ───────────────── */
