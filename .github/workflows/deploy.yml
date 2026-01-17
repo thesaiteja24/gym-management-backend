@@ -37,11 +37,12 @@ jobs:
 
                     # ---- Deploy ----
                     cd /var/www/gym-management-api
-                    git pull origin main
+                    git fetch --all
+                    git reset --hard origin/main
                     npm install
+                    npx prisma generate
                     npm run build
                     npx prisma migrate deploy
-                    npx prisma generate
 
                     pm2 restart pump-api
                   EOF

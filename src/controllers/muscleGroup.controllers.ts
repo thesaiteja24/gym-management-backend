@@ -1,6 +1,6 @@
 import { Request, Response } from 'express'
 import { withAccelerate } from '@prisma/extension-accelerate'
-import { PrismaClient } from '../generated/prisma/client.js'
+import { PrismaClient } from '@prisma/client'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { randomUUID } from 'crypto'
 import { logError, logInfo, logWarn } from '../utils/logger.js'
