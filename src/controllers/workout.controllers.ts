@@ -36,22 +36,6 @@ interface UpdateWorkoutBody extends CreateWorkoutBody {}
 export const createWorkout = asyncHandler(async (req: Request<object, object, CreateWorkoutBody>, res: Response) => {
 	const { title, startTime, endTime, exercises, exerciseGroups } = req.body
 
-	/* ───────────────── Validation ───────────────── */
-
-	if (!startTime || !endTime) {
-		logWarn('Start time and end time are required', { action: 'createWorkout' }, req)
-		throw new ApiError(400, 'Start time and end time are required')
-	}
-
-	if (!Array.isArray(exercises) || exercises.length === 0) {
-		logWarn('Exercises are required', { action: 'createWorkout' }, req)
-		throw new ApiError(400, 'At least one exercise is required')
-	}
-
-	if (exerciseGroups !== undefined && !Array.isArray(exerciseGroups)) {
-		throw new ApiError(400, 'exerciseGroups must be an array')
-	}
-
 	/* ───────────────── Prune Counters ───────────────── */
 
 	let droppedSets = 0
@@ -228,14 +212,7 @@ export const createWorkout = asyncHandler(async (req: Request<object, object, Cr
 })
 
 export const getAllWorkouts = asyncHandler(async (req: Request, res: Response) => {
-	const userId = req.user?.id
-
-	/* ───── Validation ───── */
-
-	if (!userId) {
-		logWarn('User not authenticated while fetching workouts', { action: 'getWorkouts' }, req)
-		throw new ApiError(401, 'Unauthorized')
-	}
+	const userId = req.user!.id
 
 	/* ───── Query ───── */
 
@@ -311,19 +288,7 @@ export const getAllWorkouts = asyncHandler(async (req: Request, res: Response) =
 
 export const deleteWorkout = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
 	const workoutId = req.params.id
-	const userId = req.user?.id
-
-	/* ───── Validation ───── */
-
-	if (!userId) {
-		logWarn('User not authenticated while deleting workout', { action: 'deleteWorkout' }, req)
-		throw new ApiError(401, 'Unauthorized')
-	}
-
-	if (!workoutId) {
-		logWarn('Workout ID is required to delete workout', { action: 'deleteWorkout' }, req)
-		throw new ApiError(400, 'Workout ID is required')
-	}
+	const userId = req.user!.id
 
 	let workout
 
@@ -380,34 +345,8 @@ export const deleteWorkout = asyncHandler(async (req: Request<{ id: string }>, r
 export const updateWorkout = asyncHandler(
 	async (req: Request<{ id: string }, object, UpdateWorkoutBody>, res: Response) => {
 		const workoutId = req.params.id
-		const userId = req.user?.id
+		const userId = req.user!.id
 		const { title, startTime, endTime, exercises, exerciseGroups } = req.body
-
-		/* ───────────────── Validation ───────────────── */
-
-		if (!userId) {
-			logWarn('User not authenticated while updating workout', { action: 'updateWorkout' }, req)
-			throw new ApiError(401, 'Unauthorized')
-		}
-
-		if (!workoutId) {
-			logWarn('Workout ID is required', { action: 'updateWorkout' }, req)
-			throw new ApiError(400, 'Workout ID is required')
-		}
-
-		if (!startTime || !endTime) {
-			logWarn('Start time and end time are required', { action: 'updateWorkout' }, req)
-			throw new ApiError(400, 'Start time and end time are required')
-		}
-
-		if (!Array.isArray(exercises) || exercises.length === 0) {
-			logWarn('Exercises are required', { action: 'updateWorkout' }, req)
-			throw new ApiError(400, 'At least one exercise is required')
-		}
-
-		if (exerciseGroups !== undefined && !Array.isArray(exerciseGroups)) {
-			throw new ApiError(400, 'exerciseGroups must be an array')
-		}
 
 		/* ───────────────── Prune Counters ───────────────── */
 

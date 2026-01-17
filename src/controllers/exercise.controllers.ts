@@ -27,16 +27,6 @@ export const createExercise = asyncHandler(async (req: Request<object, object, C
 	const { title, instructions, primaryMuscleGroupId, equipmentId, exerciseType } = req.body
 	const video = req.file as UploadedFile | undefined
 
-	if (!title) {
-		logWarn('Title is required to create Exercise', { action: 'createExercise' }, req)
-		throw new ApiError(400, 'Title is required')
-	}
-
-	if (!exerciseType) {
-		logWarn('Exercise type is required', { action: 'createExercise' }, req)
-		throw new ApiError(400, 'Exercise type is required')
-	}
-
 	if (!video) {
 		logWarn('Video is required to create Exercise', { action: 'createExercise' }, req)
 		throw new ApiError(400, 'Exercise video is required')
@@ -130,11 +120,6 @@ export const getAllExercises = asyncHandler(async (req: Request, res: Response) 
 export const getExerciseById = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
 	const { id } = req.params
 
-	if (!id) {
-		logWarn('Exercise ID is required', { action: 'getExerciseById' }, req)
-		throw new ApiError(400, 'Exercise ID is required')
-	}
-
 	const exercise = await prisma.exercise.findUnique({
 		where: { id },
 		include: {
@@ -166,11 +151,6 @@ export const updateExercise = asyncHandler(
 		const { id } = req.params
 		const { title, instructions, primaryMuscleGroupId, equipmentId, exerciseType } = req.body
 		const video = req.file as UploadedFile | undefined
-
-		if (!id) {
-			logWarn('Exercise ID is required to update Exercise', { action: 'updateExercise' }, req)
-			throw new ApiError(400, 'Exercise ID is required')
-		}
 
 		const existingExercise = await prisma.exercise.findUnique({ where: { id } })
 
@@ -283,11 +263,6 @@ export const updateExercise = asyncHandler(
 
 export const deleteExercise = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
 	const { id } = req.params
-
-	if (!id) {
-		logWarn('Exercise ID is required for deletion', { action: 'deleteExercise' }, req)
-		throw new ApiError(400, 'Exercise ID is required')
-	}
 
 	const existingExercise = await prisma.exercise.findUnique({ where: { id } })
 

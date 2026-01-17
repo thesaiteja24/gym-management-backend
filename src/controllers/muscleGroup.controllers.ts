@@ -20,11 +20,6 @@ export const createMuscleGroup = asyncHandler(
 		const { title } = req.body
 		const image = req.file as UploadedFile | undefined
 
-		if (!title) {
-			logWarn('MuscleGroup title not provided', { action: 'createMuscleGroup' }, req)
-			throw new ApiError(400, 'Title is required')
-		}
-
 		if (!image) {
 			logWarn('MuscleGroup image not provided', { action: 'createMuscleGroup' }, req)
 			throw new ApiError(400, 'Image file is required')
@@ -99,11 +94,6 @@ export const getAllMuscleGroups = asyncHandler(async (req: Request, res: Respons
 export const getMuscleGroupById = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
 	const { id } = req.params
 
-	if (!id) {
-		logWarn('MuscleGroup ID not provided', { action: 'getMuscleGroupById' }, req)
-		throw new ApiError(400, 'MuscleGroup ID is required')
-	}
-
 	const muscleGroup = await prisma.muscleGroup.findUnique({
 		where: { id },
 	})
@@ -126,11 +116,6 @@ export const updateMuscleGroup = asyncHandler(
 		const { id } = req.params
 		const { title } = req.body
 		const image = req.file as UploadedFile | undefined
-
-		if (!id) {
-			logWarn('MuscleGroup ID not provided', { action: 'updateMuscleGroup' }, req)
-			throw new ApiError(400, 'MuscleGroup ID is required')
-		}
 
 		const existingMuscleGroup = await prisma.muscleGroup.findUnique({
 			where: { id },
@@ -212,11 +197,6 @@ export const updateMuscleGroup = asyncHandler(
 
 export const deleteMuscleGroup = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
 	const { id } = req.params
-
-	if (!id) {
-		logWarn('MuscleGroup ID not provided for deletion', { action: 'deleteMuscleGroup' }, req)
-		throw new ApiError(400, 'MuscleGroup ID is required')
-	}
 
 	const existingMuscleGroup = await prisma.muscleGroup.findUnique({
 		where: { id },

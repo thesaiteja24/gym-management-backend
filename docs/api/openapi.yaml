@@ -4,21 +4,10 @@ info:
     version: 0.1.0
     description: >
         Contract-first spec for the Express backend.
-        Use `x-status`, `x-owner`, and `x-todo` to track plan vs reality.
     x-roadmap:
         milestones:
             - key: MVP
-              due: 2025-12-31
-              x-todo:
-                  - '[ ] Auth flows stable: send, verify, refresh'
-                  - '[ ] Basic user profile CRUD'
-                  - '[ ] Equipment creation'
-            - key: v1
-              due: 2026-02-15
-              x-todo:
-                  - '[ ] Profile picture moderation'
-                  - '[ ] Rate limits on OTP'
-                  - '[ ] Audit logs'
+              due: 2026-02-28
 
 tags:
     - name: Health
@@ -26,70 +15,64 @@ tags:
     - name: Auth
       description: Phone-based login with OTP
     - name: User
-      description: Basic profile operations
-    - name: Equipment — MVP
-      description: Create & manage gym equipment
-    - name: Planning
-      description: Endpoints we intend to add (spec-first)
+      description: User profile operations
+    - name: Equipment
+      description: Manage gym equipment (Admin only for mutations)
+    - name: Muscle Groups
+      description: Manage muscle groups (Admin only for mutations)
+    - name: Exercises
+      description: Manage exercises (Admin only for mutations)
+    - name: Workouts
+      description: Workout logging and history
+
+# Global Security
+security:
+    - bearerAuth: []
 
 paths:
     /health:
         get:
             tags: [Health]
             summary: Health check
-            x-status: done
-            x-owner: backend
+            security: [] # Public
             responses:
                 '200':
                     description: Service is healthy
                     content:
                         application/json:
                             schema: { $ref: '#/components/schemas/ApiResponse' }
-                            examples:
-                                ok:
-                                    value:
-                                        statusCode: 200
-                                        data: null
-                                        message: Health check passed
-                                        success: true
+                '500': { $ref: '#/components/responses/InternalServerError' }
 
     /auth/send-otp:
         post:
             tags: [Auth]
             summary: Send or resend OTP
-            x-status: done
-            x-owner: backend
+            security: [] # Public
             requestBody:
                 required: true
                 content:
                     application/json:
                         schema:
                             type: object
-                            required: [countryCode, phone, resend]
+                            required: [countryCode, phone]
                             properties:
                                 countryCode: { type: string, example: '+91' }
-                                phone: { type: string, example: '9494059718' }
+                                phone: { type: string, example: '9999999999' }
                                 resend: { type: boolean, example: false }
             responses:
                 '200':
-                    description: OTP sent successfully
+                    description: OTP sent
                     content:
                         application/json:
                             schema: { $ref: '#/components/schemas/ApiResponse' }
-                            examples:
-                                sent:
-                                    value:
-                                        statusCode: 200
-                                        data: null
-                                        message: OTP sent successfully
-                                        success: true
+                '400': { $ref: '#/components/responses/BadRequest' }
+                '500': { $ref: '#/components/responses/InternalServerError' }
 
     /auth/verify-otp:
         post:
             tags: [Auth]
-            summary: Verify OTP and issue access token
-            x-status: done
-            x-owner: backend
+            summary: Verify OTP and issue tokens
+            security: [] # Public
             requestBody:
                 required: true
                 content:
@@ -99,47 +82,23 @@ paths:
                             required: [countryCode, phone, otp]
                             properties:
                                 countryCode: { type: string, example: '+91' }
-                                phone: { type: string, example: '8125831596' }
-                                otp: { type: string, example: '890521' }
+                                phone: { type: string, example: '9999999999' }
+                                otp: { type: string, example: '123456' }
             responses:
                 '200':
-                    description: OTP verified
+                    description: Verified & logged in
                     content:
                         application/json:
-                            schema: { $ref: '#/components/schemas/ApiResponse' }
-                            examples:
-                                ok:
-                                    value:
-                                        statusCode: 200
-                                        data:
-                                            user:
-                                                userId: '62a59b60-9538-429d-8b25-e0c4072f6f92'
-                                                phoneE164: '+918125831596'
-                                                firstName: null
-                                                lastName: null
-                                                role: 'member'
-                                            accessToken: 'eyJhbGciOiJIUzI1NiIs...'
-                                        message: OTP verified successfully
-                                        success: true
-                '400':
-                    description: Invalid or expired OTP
-                    content:
-                        application/json:
-                            schema: { $ref: '#/components/schemas/ApiError' }
-                            examples:
-                                expired:
-                                    value:
-                                        success: false
-                                        message: Invalid or expired OTP
-                                        errors: []
-                                        data: null
+                            schema: { $ref: '#/components/schemas/AuthResponse' }
+                '400': { $ref: '#/components/responses/BadRequest' }
+                '409': { $ref: '#/components/responses/Conflict' }
+                '500': { $ref: '#/components/responses/InternalServerError' }
 
     /auth/refresh-token:
         post:
-            tags: [Auth — MVP]
+            tags: [Auth]
             summary: Refresh access token
-            x-status: in-progress
-            x-owner: backend
+            security: [] # Implicit
             requestBody:
                 required: true
                 content:
@@ -148,13 +107,24 @@ paths:
                             type: object
                             required: [userId]
                             properties:
-                                userId: { type: string, format: uuid, example: '62a59b60-9538-429d-8b25-e0c4072f6f92' }
+                                userId: { type: string, format: uuid }
             responses:
                 '200':
                     description: Token refreshed
                     content:
                         application/json:
-                            schema: { $ref: '#/components/schemas/ApiResponse' }
+                            schema:
+                                allOf:
+                                    - $ref: '#/components/schemas/ApiResponse'
+                                    - type: object
+                                      properties:
+                                          data:
+                                              type: object
+                                              properties:
+                                                  accessToken: { type: string }
+                '400': { $ref: '#/components/responses/BadRequest' }
+                '401': { $ref: '#/components/responses/Unauthorized' }
+                '500': { $ref: '#/components/responses/InternalServerError' }
 
     /users/{id}:
         parameters:
@@ -165,49 +135,45 @@ paths:
         get:
             tags: [User]
             summary: Get user details
-            security: [{ bearerAuth: [] }]
-            x-status: in-progress
-            x-owner: backend
             responses:
                 '200':
                     description: User profile
                     content:
                         application/json:
-                            schema: { $ref: '#/components/schemas/ApiResponse' }
+                            schema: { $ref: '#/components/schemas/UserResponse' }
+                '401': { $ref: '#/components/responses/Unauthorized' }
+                '403': { $ref: '#/components/responses/Forbidden' }
+                '404': { $ref: '#/components/responses/NotFound' }
+                '500': { $ref: '#/components/responses/InternalServerError' }
         patch:
-            tags: [User — MVP]
+            tags: [User]
             summary: Update user details
-            security: [{ bearerAuth: [] }]
-            x-status: in-progress
-            x-owner: backend
             requestBody:
                 required: true
                 content:
                     application/json:
-                        schema:
-                            $ref: '#/components/schemas/UserUpdate'
-                        examples:
-                            sample:
-                                value:
-                                    firstName: 'Sai Teja'
-                                    lastName: 'Patsa'
-                                    height: 173
-                                    weight: 99.40
-                                    dateOfBirth: '2003-11-24'
+                        schema: { $ref: '#/components/schemas/UserUpdate' }
             responses:
                 '200':
                     description: Updated
                     content:
                         application/json:
-                            schema: { $ref: '#/components/schemas/ApiResponse' }
+                            schema: { $ref: '#/components/schemas/UserResponse' }
+                '400': { $ref: '#/components/responses/BadRequest' }
+                '401': { $ref: '#/components/responses/Unauthorized' }
+                '403': { $ref: '#/components/responses/Forbidden' }
+                '404': { $ref: '#/components/responses/NotFound' }
+                '500': { $ref: '#/components/responses/InternalServerError' }
 
     /users/{id}/profile-picture:
+        parameters:
+            - in: path
+              name: id
+              required: true
+              schema: { type: string, format: uuid }
         patch:
-            tags: [User — MVP]
+            tags: [User]
             summary: Upload/replace profile picture
-            security: [{ bearerAuth: [] }]
-            x-status: in-progress
-            x-owner: backend
             requestBody:
                 required: true
                 content:
@@ -219,23 +185,43 @@ paths:
                                     type: string
                                     format: binary
             responses:
-                '200': { description: Picture updated }
+                '200':
+                    description: Picture updated
+                    content:
+                        application/json:
+                            schema: { $ref: '#/components/schemas/UserResponse' }
+                '400': { $ref: '#/components/responses/BadRequest' }
+                '401': { $ref: '#/components/responses/Unauthorized' }
+                '403': { $ref: '#/components/responses/Forbidden' }
+                '500': { $ref: '#/components/responses/InternalServerError' }
         delete:
-            tags: [User — MVP]
+            tags: [User]
             summary: Delete profile picture
-            security: [{ bearerAuth: [] }]
-            x-status: in-progress
-            x-owner: backend
             responses:
-                '204': { description: Picture deleted }
+                '200':
+                    description: Picture deleted
+                    content:
+                        application/json:
+                            schema: { $ref: '#/components/schemas/UserResponse' }
+                '401': { $ref: '#/components/responses/Unauthorized' }
+                '403': { $ref: '#/components/responses/Forbidden' }
+                '500': { $ref: '#/components/responses/InternalServerError' }
 
     /equipment:
+        get:
+            tags: [Equipment]
+            summary: Get all equipment
+            responses:
+                '200':
+                    description: List of equipment
+                    content:
+                        application/json:
+                            schema: { $ref: '#/components/schemas/EquipmentListResponse' }
+                '401': { $ref: '#/components/responses/Unauthorized' }
+                '500': { $ref: '#/components/responses/InternalServerError' }
         post:
-            tags: [Equipment — MVP]
-            summary: Create equipment
-            security: [{ bearerAuth: [] }]
-            x-status: in-progress
-            x-owner: backend
+            tags: [Equipment]
+            summary: Create equipment (Admin)
             requestBody:
                 required: true
                 content:
@@ -244,38 +230,330 @@ paths:
                             type: object
                             required: [title]
                             properties:
-                                title: { type: string, example: 'smith machine' }
-                                image:
-                                    type: array
-                                    items: { type: string, format: binary }
+                                title: { type: string }
+                                image: { type: string, format: binary }
             responses:
-                '201': { description: Created }
+                '201':
+                    description: Created
+                    content:
+                        application/json:
+                            schema: { $ref: '#/components/schemas/EquipmentResponse' }
+                '400': { $ref: '#/components/responses/BadRequest' }
+                '401': { $ref: '#/components/responses/Unauthorized' }
+                '403': { $ref: '#/components/responses/Forbidden' }
+                '500': { $ref: '#/components/responses/InternalServerError' }
 
-    # ---------- Example of a PLANNED endpoint (acts as a TODO) ----------
-    /auth/resend-otp:
+    /equipment/{id}:
+        parameters:
+            - in: path
+              name: id
+              required: true
+              schema: { type: string, format: uuid }
+        get:
+            tags: [Equipment]
+            summary: Get equipment by ID
+            responses:
+                '200':
+                    description: Equipment details
+                    content:
+                        application/json:
+                            schema: { $ref: '#/components/schemas/EquipmentResponse' }
+                '401': { $ref: '#/components/responses/Unauthorized' }
+                '404': { $ref: '#/components/responses/NotFound' }
+                '500': { $ref: '#/components/responses/InternalServerError' }
+        put:
+            tags: [Equipment]
+            summary: Update equipment (Admin)
+            requestBody:
+                required: true
+                content:
+                    multipart/form-data:
+                        schema:
+                            type: object
+                            properties:
+                                title: { type: string }
+                                image: { type: string, format: binary }
+            responses:
+                '200':
+                    description: Updated
+                    content:
+                        application/json:
+                            schema: { $ref: '#/components/schemas/EquipmentResponse' }
+                '400': { $ref: '#/components/responses/BadRequest' }
+                '401': { $ref: '#/components/responses/Unauthorized' }
+                '403': { $ref: '#/components/responses/Forbidden' }
+                '404': { $ref: '#/components/responses/NotFound' }
+                '500': { $ref: '#/components/responses/InternalServerError' }
+        delete:
+            tags: [Equipment]
+            summary: Delete equipment (Admin)
+            responses:
+                '200':
+                    description: Deleted
+                    content:
+                        application/json:
+                            schema: { $ref: '#/components/schemas/ApiResponse' }
+                '401': { $ref: '#/components/responses/Unauthorized' }
+                '403': { $ref: '#/components/responses/Forbidden' }
+                '404': { $ref: '#/components/responses/NotFound' }
+                '500': { $ref: '#/components/responses/InternalServerError' }
+
+    /muscle-groups:
+        get:
+            tags: [Muscle Groups]
+            summary: Get all muscle groups
+            responses:
+                '200':
+                    description: List of muscle groups
+                    content:
+                        application/json:
+                            schema: { $ref: '#/components/schemas/MuscleGroupListResponse' }
+                '401': { $ref: '#/components/responses/Unauthorized' }
+                '500': { $ref: '#/components/responses/InternalServerError' }
         post:
-            tags: [Planning]
-            summary: Resend OTP for an existing request
-            description: Spec-first placeholder to plan client/server work.
-            x-status: planned
-            x-owner: backend
-            x-todo:
-                - '[ ] Decide rate limit (per phone/IP).'
-                - '[ ] Decide whether to invalidate previous OTP.'
-                - '[ ] Add analytics event.'
+            tags: [Muscle Groups]
+            summary: Create muscle group (Admin)
+            requestBody:
+                required: true
+                content:
+                    multipart/form-data:
+                        schema:
+                            type: object
+                            required: [name]
+                            properties:
+                                name: { type: string }
+                                image: { type: string, format: binary }
+            responses:
+                '201':
+                    description: Created
+                    content:
+                        application/json:
+                            schema: { $ref: '#/components/schemas/MuscleGroupResponse' }
+                '400': { $ref: '#/components/responses/BadRequest' }
+                '401': { $ref: '#/components/responses/Unauthorized' }
+                '403': { $ref: '#/components/responses/Forbidden' }
+                '500': { $ref: '#/components/responses/InternalServerError' }
+
+    /muscle-groups/{id}:
+        parameters:
+            - in: path
+              name: id
+              required: true
+              schema: { type: string, format: uuid }
+        get:
+            tags: [Muscle Groups]
+            summary: Get muscle group by ID
+            responses:
+                '200':
+                    description: Details
+                    content:
+                        application/json:
+                            schema: { $ref: '#/components/schemas/MuscleGroupResponse' }
+                '401': { $ref: '#/components/responses/Unauthorized' }
+                '404': { $ref: '#/components/responses/NotFound' }
+                '500': { $ref: '#/components/responses/InternalServerError' }
+        put:
+            tags: [Muscle Groups]
+            summary: Update muscle group (Admin)
+            requestBody:
+                required: true
+                content:
+                    multipart/form-data:
+                        schema:
+                            type: object
+                            properties:
+                                name: { type: string }
+                                image: { type: string, format: binary }
+            responses:
+                '200':
+                    description: Updated
+                    content:
+                        application/json:
+                            schema: { $ref: '#/components/schemas/MuscleGroupResponse' }
+                '400': { $ref: '#/components/responses/BadRequest' }
+                '401': { $ref: '#/components/responses/Unauthorized' }
+                '403': { $ref: '#/components/responses/Forbidden' }
+                '404': { $ref: '#/components/responses/NotFound' }
+                '500': { $ref: '#/components/responses/InternalServerError' }
+        delete:
+            tags: [Muscle Groups]
+            summary: Delete muscle group (Admin)
+            responses:
+                '200':
+                    description: Deleted
+                    content:
+                        application/json:
+                            schema: { $ref: '#/components/schemas/ApiResponse' }
+                '401': { $ref: '#/components/responses/Unauthorized' }
+                '403': { $ref: '#/components/responses/Forbidden' }
+                '404': { $ref: '#/components/responses/NotFound' }
+                '500': { $ref: '#/components/responses/InternalServerError' }
+
+    /exercises:
+        get:
+            tags: [Exercises]
+            summary: Get all exercises
+            responses:
+                '200':
+                    description: List of exercises
+                    content:
+                        application/json:
+                            schema: { $ref: '#/components/schemas/ExerciseListResponse' }
+                '401': { $ref: '#/components/responses/Unauthorized' }
+                '500': { $ref: '#/components/responses/InternalServerError' }
+        post:
+            tags: [Exercises]
+            summary: Create exercise (Admin)
+            requestBody:
+                required: true
+                content:
+                    multipart/form-data:
+                        schema:
+                            type: object
+                            required: [title, exerciseType, muscleGroups]
+                            properties:
+                                title: { type: string }
+                                instructions: { type: string }
+                                exerciseType: { $ref: '#/components/schemas/ExerciseType' }
+                                muscleGroups: { type: string }
+                                equipment: { type: string }
+                                video: { type: string, format: binary }
+            responses:
+                '201':
+                    description: Created
+                    content:
+                        application/json:
+                            schema: { $ref: '#/components/schemas/ExerciseResponse' }
+                '400': { $ref: '#/components/responses/BadRequest' }
+                '401': { $ref: '#/components/responses/Unauthorized' }
+                '403': { $ref: '#/components/responses/Forbidden' }
+                '500': { $ref: '#/components/responses/InternalServerError' }
+
+    /exercises/{id}:
+        parameters:
+            - in: path
+              name: id
+              required: true
+              schema: { type: string, format: uuid }
+        get:
+            tags: [Exercises]
+            summary: Get exercise by ID
+            responses:
+                '200':
+                    description: Details
+                    content:
+                        application/json:
+                            schema: { $ref: '#/components/schemas/ExerciseResponse' }
+                '401': { $ref: '#/components/responses/Unauthorized' }
+                '404': { $ref: '#/components/responses/NotFound' }
+                '500': { $ref: '#/components/responses/InternalServerError' }
+        put:
+            tags: [Exercises]
+            summary: Update exercise (Admin)
+            requestBody:
+                required: true
+                content:
+                    multipart/form-data:
+                        schema:
+                            type: object
+                            properties:
+                                title: { type: string }
+                                instructions: { type: string }
+                                exerciseType: { $ref: '#/components/schemas/ExerciseType' }
+                                muscleGroups: { type: string }
+                                equipment: { type: string }
+                                video: { type: string, format: binary }
+            responses:
+                '200':
+                    description: Updated
+                    content:
+                        application/json:
+                            schema: { $ref: '#/components/schemas/ExerciseResponse' }
+                '400': { $ref: '#/components/responses/BadRequest' }
+                '401': { $ref: '#/components/responses/Unauthorized' }
+                '403': { $ref: '#/components/responses/Forbidden' }
+                '404': { $ref: '#/components/responses/NotFound' }
+                '500': { $ref: '#/components/responses/InternalServerError' }
+        delete:
+            tags: [Exercises]
+            summary: Delete exercise (Admin)
+            responses:
+                '200':
+                    description: Deleted
+                    content:
+                        application/json:
+                            schema: { $ref: '#/components/schemas/ApiResponse' }
+                '401': { $ref: '#/components/responses/Unauthorized' }
+                '403': { $ref: '#/components/responses/Forbidden' }
+                '404': { $ref: '#/components/responses/NotFound' }
+                '500': { $ref: '#/components/responses/InternalServerError' }
+
+    /workouts:
+        get:
+            tags: [Workouts]
+            summary: Get user workouts
+            responses:
+                '200':
+                    description: History
+                    content:
+                        application/json:
+                            schema: { $ref: '#/components/schemas/WorkoutListResponse' }
+                '401': { $ref: '#/components/responses/Unauthorized' }
+                '500': { $ref: '#/components/responses/InternalServerError' }
+        post:
+            tags: [Workouts]
+            summary: Log a workout
             requestBody:
                 required: true
                 content:
                     application/json:
-                        schema:
-                            type: object
-                            required: [countryCode, phone]
-                            properties:
-                                countryCode: { type: string }
-                                phone: { type: string }
+                        schema: { $ref: '#/components/schemas/CreateWorkoutRequest' }
             responses:
-                '202': { description: Resend scheduled }
-                '429': { description: Too many requests }
+                '201':
+                    description: Saved
+                    content:
+                        application/json:
+                            schema: { $ref: '#/components/schemas/WorkoutResponse' }
+                '400': { $ref: '#/components/responses/BadRequest' }
+                '401': { $ref: '#/components/responses/Unauthorized' }
+                '500': { $ref: '#/components/responses/InternalServerError' }
+
+    /workouts/{id}:
+        parameters:
+            - in: path
+              name: id
+              required: true
+              schema: { type: string, format: uuid }
+        put:
+            tags: [Workouts]
+            summary: Update a workout
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema: { $ref: '#/components/schemas/CreateWorkoutRequest' }
+            responses:
+                '200':
+                    description: Updated
+                    content:
+                        application/json:
+                            schema: { $ref: '#/components/schemas/WorkoutResponse' }
+                '400': { $ref: '#/components/responses/BadRequest' }
+                '401': { $ref: '#/components/responses/Unauthorized' }
+                '404': { $ref: '#/components/responses/NotFound' }
+                '500': { $ref: '#/components/responses/InternalServerError' }
+        delete:
+            tags: [Workouts]
+            summary: Delete a workout
+            responses:
+                '200':
+                    description: Deleted
+                    content:
+                        application/json:
+                            schema: { $ref: '#/components/schemas/ApiResponse' }
+                '401': { $ref: '#/components/responses/Unauthorized' }
+                '404': { $ref: '#/components/responses/NotFound' }
+                '500': { $ref: '#/components/responses/InternalServerError' }
 
 components:
     securitySchemes:
@@ -283,6 +561,38 @@ components:
             type: http
             scheme: bearer
             bearerFormat: JWT
+
+    responses:
+        BadRequest:
+            description: Bad Request (Validation or missing fields)
+            content:
+                application/json:
+                    schema: { $ref: '#/components/schemas/ApiError' }
+        Unauthorized:
+            description: Unauthorized (Invalid or missing token)
+            content:
+                application/json:
+                    schema: { $ref: '#/components/schemas/ApiError' }
+        Forbidden:
+            description: Forbidden (Admin access required)
+            content:
+                application/json:
+                    schema: { $ref: '#/components/schemas/ApiError' }
+        NotFound:
+            description: Resource Not Found
+            content:
+                application/json:
+                    schema: { $ref: '#/components/schemas/ApiError' }
+        Conflict:
+            description: Conflict (e.g. Unique constraint violation)
+            content:
+                application/json:
+                    schema: { $ref: '#/components/schemas/ApiError' }
+        InternalServerError:
+            description: Internal Server Error
+            content:
+                application/json:
+                    schema: { $ref: '#/components/schemas/ApiError' }
 
     schemas:
         ApiResponse:
@@ -292,20 +602,239 @@ components:
                 data: {}
                 message: { type: string }
                 success: { type: boolean }
+
         ApiError:
             type: object
             properties:
-                success: { type: boolean, example: false }
+                statusCode: { type: integer, example: 400 }
+                data: { nullable: true }
                 message: { type: string }
+                success: { type: boolean, example: false }
                 errors:
                     type: array
-                    items: { type: object }
-                data: { nullable: true }
+                    items: { type: string }
+
+        # --- Enums ---
+        UserRole:
+            type: string
+            enum: [systemAdmin, gymAdmin, trainer, member]
+
+        ExerciseType:
+            type: string
+            enum: [repsOnly, assisted, weighted, durationOnly]
+
+        SetType:
+            type: string
+            enum: [warmup, working, dropSet, failureSet]
+
+        ExerciseGroupType:
+            type: string
+            enum: [superSet, giantSet]
+
+        # --- Auth ---
+        AuthResponse:
+            allOf:
+                - $ref: '#/components/schemas/ApiResponse'
+                - type: object
+                  properties:
+                      data:
+                          type: object
+                          properties:
+                              user: { $ref: '#/components/schemas/User' }
+                              accessToken: { type: string }
+
+        # --- User ---
+        User:
+            type: object
+            properties:
+                id: { type: string, format: uuid }
+                phone: { type: string }
+                firstName: { type: string, nullable: true }
+                lastName: { type: string, nullable: true }
+                role: { $ref: '#/components/schemas/UserRole' }
+                profilePicUrl: { type: string, nullable: true }
+
         UserUpdate:
             type: object
             properties:
-                firstName: { type: string, nullable: true }
-                lastName: { type: string, nullable: true }
-                height: { type: number, nullable: true }
+                firstName: { type: string }
+                lastName: { type: string }
+                height: { type: number }
+                weight: { type: number }
+                dateOfBirth: { type: string, format: date }
+
+        UserResponse:
+            allOf:
+                - $ref: '#/components/schemas/ApiResponse'
+                - type: object
+                  properties:
+                      data: { $ref: '#/components/schemas/User' }
+
+        # --- Equipment ---
+        Equipment:
+            type: object
+            properties:
+                id: { type: string, format: uuid }
+                title: { type: string }
+                imageUrl: { type: string }
+
+        EquipmentResponse:
+            allOf:
+                - $ref: '#/components/schemas/ApiResponse'
+                - type: object
+                  properties:
+                      data: { $ref: '#/components/schemas/Equipment' }
+
+        EquipmentListResponse:
+            allOf:
+                - $ref: '#/components/schemas/ApiResponse'
+                - type: object
+                  properties:
+                      data:
+                          type: array
+                          items: { $ref: '#/components/schemas/Equipment' }
+
+        # --- Muscle Groups ---
+        MuscleGroup:
+            type: object
+            properties:
+                id: { type: string, format: uuid }
+                name: { type: string }
+                imageUrl: { type: string }
+
+        MuscleGroupResponse:
+            allOf:
+                - $ref: '#/components/schemas/ApiResponse'
+                - type: object
+                  properties:
+                      data: { $ref: '#/components/schemas/MuscleGroup' }
+
+        MuscleGroupListResponse:
+            allOf:
+                - $ref: '#/components/schemas/ApiResponse'
+                - type: object
+                  properties:
+                      data:
+                          type: array
+                          items: { $ref: '#/components/schemas/MuscleGroup' }
+
+        # --- Exercises ---
+        Exercise:
+            type: object
+            properties:
+                id: { type: string, format: uuid }
+                title: { type: string }
+                instructions: { type: string }
+                exerciseType: { $ref: '#/components/schemas/ExerciseType' }
+                videoUrl: { type: string, nullable: true }
+                thumbnailUrl: { type: string, nullable: true }
+                muscleGroups:
+                    type: array
+                    items: { $ref: '#/components/schemas/MuscleGroup' }
+                equipment:
+                    type: array
+                    items: { $ref: '#/components/schemas/Equipment' }
+
+        ExerciseResponse:
+            allOf:
+                - $ref: '#/components/schemas/ApiResponse'
+                - type: object
+                  properties:
+                      data: { $ref: '#/components/schemas/Exercise' }
+
+        ExerciseListResponse:
+            allOf:
+                - $ref: '#/components/schemas/ApiResponse'
+                - type: object
+                  properties:
+                      data:
+                          type: array
+                          items: { $ref: '#/components/schemas/Exercise' }
+
+        # --- Workouts ---
+        WorkoutSet:
+            type: object
+            properties:
+                setIndex: { type: integer }
+                setType: { $ref: '#/components/schemas/SetType' }
                 weight: { type: number, nullable: true }
-                dateOfBirth: { type: string, format: date, nullable: true }
+                reps: { type: integer, nullable: true }
+                rpe: { type: number, nullable: true }
+                durationSeconds: { type: number, nullable: true }
+                restSeconds: { type: integer, nullable: true }
+                note: { type: string, nullable: true }
+
+        ExerciseInput:
+            type: object
+            required: [exerciseId, exerciseIndex, sets]
+            properties:
+                exerciseId: { type: string, format: uuid }
+                exerciseIndex: { type: integer }
+                exerciseGroupId: { type: string, nullable: true }
+                sets:
+                    type: array
+                    items: { $ref: '#/components/schemas/WorkoutSet' }
+
+        ExerciseGroupInput:
+            type: object
+            required: [id, groupType, groupIndex]
+            properties:
+                id: { type: string }
+                groupType: { $ref: '#/components/schemas/ExerciseGroupType' }
+                groupIndex: { type: integer }
+                restSeconds: { type: integer }
+
+        CreateWorkoutRequest:
+            type: object
+            required: [startTime, endTime, exercises]
+            properties:
+                title: { type: string, nullable: true }
+                startTime: { type: string, format: date-time }
+                endTime: { type: string, format: date-time }
+                exercises:
+                    type: array
+                    items: { $ref: '#/components/schemas/ExerciseInput' }
+                exerciseGroups:
+                    type: array
+                    items: { $ref: '#/components/schemas/ExerciseGroupInput' }
+
+        WorkoutExercise:
+            type: object
+            properties:
+                id: { type: string }
+                exercise: { $ref: '#/components/schemas/Exercise' }
+                sets:
+                    type: array
+                    items: { $ref: '#/components/schemas/WorkoutSet' }
+
+        Workout:
+            type: object
+            properties:
+                id: { type: string, format: uuid }
+                title: { type: string, nullable: true }
+                startTime: { type: string, format: date-time }
+                endTime: { type: string, format: date-time }
+                isEdited: { type: boolean }
+                editedAt: { type: string, format: date-time, nullable: true }
+                exercises:
+                    type: array
+                    items: { $ref: '#/components/schemas/WorkoutExercise' }
+
+        WorkoutResponse:
+            allOf:
+                - $ref: '#/components/schemas/ApiResponse'
+                - type: object
+                  properties:
+                      data:
+                          type: object
+                          properties:
+                              workout: { $ref: '#/components/schemas/Workout' }
+
+        WorkoutListResponse:
+            allOf:
+                - $ref: '#/components/schemas/ApiResponse'
+                - type: object
+                  properties:
+                      data:
+                          type: array
+                          items: { $ref: '#/components/schemas/Workout' }

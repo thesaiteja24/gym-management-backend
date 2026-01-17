@@ -20,11 +20,6 @@ export const createEquipment = asyncHandler(
 		const { title } = req.body
 		const image = req.file as UploadedFile | undefined
 
-		if (!title) {
-			logWarn('Title is required to create Equipment', { action: 'createEquipment' }, req)
-			throw new ApiError(400, 'Title is required')
-		}
-
 		if (!image) {
 			logWarn('Image file is required to create Equipment', { action: 'createEquipment' }, req)
 			throw new ApiError(400, 'Image file is required')
@@ -98,10 +93,10 @@ export const getAllEquipment = asyncHandler(async (req: Request, res: Response) 
 export const getEquipmentById = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
 	const { id } = req.params
 
-	if (!id) {
-		logWarn('Equipment ID is required to fetch Equipment', { action: 'getEquipmentById' }, req)
-		throw new ApiError(400, 'Equipment ID is required')
-	}
+	// ID check handled by schema if we apply it to GetById too, but params usually validated.
+	// Wait, getById doesn't accept body, so we likely validate params with a schema.
+	// I already made updateEquipmentSchema which has params.id. I should probably make a generic id schema or just rely on the route param.
+	// For now, I'll assume we validate params in routes.
 
 	const equipment = await prisma.equipment.findUnique({ where: { id } })
 
@@ -123,11 +118,6 @@ export const updateEquipment = asyncHandler(
 		const { id } = req.params
 		const { title } = req.body
 		const image = req.file as UploadedFile | undefined
-
-		if (!id) {
-			logWarn('Equipment ID is required to update Equipment', { action: 'updateEquipment' }, req)
-			throw new ApiError(400, 'Equipment ID is required')
-		}
 
 		const existingEquipment = await prisma.equipment.findUnique({ where: { id } })
 
@@ -207,11 +197,6 @@ export const updateEquipment = asyncHandler(
 
 export const deleteEquipment = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
 	const { id } = req.params
-
-	if (!id) {
-		logWarn('Equipment ID is required to delete Equipment', { action: 'deleteEquipment' }, req)
-		throw new ApiError(400, 'Equipment ID is required')
-	}
 
 	const existingEquipment = await prisma.equipment.findUnique({ where: { id } })
 

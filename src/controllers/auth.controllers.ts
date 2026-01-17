@@ -36,17 +36,7 @@ interface SendOTPBody {
 }
 
 export const sendOTP = asyncHandler(async (req: Request<object, object, SendOTPBody>, res: Response) => {
-	// Input Validation
 	const { countryCode, phone, resend = false } = req.body
-	if (!countryCode || !phone) {
-		logError(
-			`Failed sendOTP: Missing country code or phone`,
-			null,
-			{ action: 'sendOTP', phoneE164: 'unknown' },
-			req
-		)
-		throw new ApiError(400, 'Missing country code or phone', [])
-	}
 	const phoneE164 = countryCode.startsWith('+') ? `${countryCode}${phone}` : `+${countryCode}${phone}`
 	const maskedPhone = phoneE164.replace(/(\d+)\d{4}$/, '$1XXXX')
 
@@ -117,17 +107,7 @@ interface VerifyOTPBody {
 }
 
 export const verifyOTP = asyncHandler(async (req: Request<object, object, VerifyOTPBody>, res: Response) => {
-	// Input Validation
 	const { countryCode, phone, otp } = req.body
-	if (!countryCode || !phone || !otp) {
-		logError(
-			`Failed verifyOTP: Missing country code, phone, or OTP`,
-			null,
-			{ action: 'verifyOTP', phoneE164: 'unknown' },
-			req
-		)
-		throw new ApiError(400, 'Missing country code, phone, or OTP', [])
-	}
 	const phoneE164 = countryCode.startsWith('+') ? `${countryCode}${phone}` : `+${countryCode}${phone}`
 	const maskedPhone = phoneE164.replace(/(\d+)\d{4}$/, '$1XXXX')
 
@@ -239,12 +219,7 @@ interface RefreshTokenBody {
 }
 
 export const refreshToken = asyncHandler(async (req: Request<object, object, RefreshTokenBody>, res: Response) => {
-	// Input Validation
 	const { userId } = req.body
-	if (!userId) {
-		logError(`Failed refreshToken: Missing user ID`, null, { action: 'refreshToken', userId: 'unknown' }, req)
-		throw new ApiError(400, 'Missing user ID', [])
-	}
 
 	// Business Logic
 	let storedToken: string | null

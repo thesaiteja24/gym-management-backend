@@ -16,7 +16,7 @@
 	"main": "dist/server.js",
 	"scripts": {
 		"test": "echo \"Error: no test specified\" && exit 1",
-		"dev": "tsx watch --env-file=.env src/server.ts",
+		"dev": "nodemon --ext ts,yaml,json --exec 'tsx --env-file=.env src/server.ts'",
 		"build": "tsc",
 		"start": "node --env-file=.env dist/server.js",
 		"typecheck": "tsc --noEmit",
@@ -40,7 +40,8 @@
 		"sharp": "^0.34.5",
 		"swagger-ui-express": "^5.0.1",
 		"twilio": "^5.10.2",
-		"winston": "^3.17.0"
+		"winston": "^3.17.0",
+		"zod": "^4.3.5"
 	},
 	"devDependencies": {
 		"@types/bcryptjs": "^2.4.6",
