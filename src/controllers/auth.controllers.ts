@@ -14,7 +14,7 @@ import {
 	deleteRefreshToken,
 } from '../services/caching.service.js'
 import bcrypt from 'bcryptjs'
-import { PrismaClient } from '../generated/prisma/client.js'
+import { PrismaClient } from '@prisma/client'
 import { withAccelerate } from '@prisma/extension-accelerate'
 import { issueAccessToken, issueRefreshToken, verifyRefreshToken } from '../utils/tokens.js'
 

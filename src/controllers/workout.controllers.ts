@@ -1,6 +1,6 @@
 import { Request, Response } from 'express'
 import { withAccelerate } from '@prisma/extension-accelerate'
-import { PrismaClient, SetType, ExerciseGroupType } from '../generated/prisma/client.js'
+import { PrismaClient, SetType, ExerciseGroupType } from '@prisma/client'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { ApiError } from '../utils/ApiError.js'
 import { ApiResponse } from '../utils/ApiResponse.js'

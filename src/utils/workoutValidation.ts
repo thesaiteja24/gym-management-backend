@@ -1,4 +1,4 @@
-import { ExerciseType, SetType } from '../generated/prisma/client.js'
+import { ExerciseType, SetType } from '@prisma/client'
 
 export interface WorkoutSet {
 	setIndex: number
