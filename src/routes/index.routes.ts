@@ -7,6 +7,7 @@ import { equipmentRoutes } from './equipment.routes.js'
 import { muscleGroupRoutes } from './muscleGroup.routes.js'
 import { exerciseRoutes } from './exercise.routes.js'
 import { workoutRoutes } from './workout.routes.js'
+import { templateRoutes } from './template.routes.js'
 
 const router = Router()
 
@@ -17,5 +18,6 @@ router.use('/equipment', authenticate, equipmentRoutes)
 router.use('/muscle-groups', authenticate, muscleGroupRoutes)
 router.use('/exercises', authenticate, exerciseRoutes)
 router.use('/workouts', authenticate, workoutRoutes)
+router.use('/templates', authenticate, templateRoutes)
 
 export const indexRoutes = router

@@ -68,10 +68,11 @@ model User {
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
 
-  gymsOwned   Gym[]        @relation("GymOwner")
-  workoutLogs WorkoutLog[]
-  sessions    Session[]
-  memberships Membership[]
+  gymsOwned        Gym[]             @relation("GymOwner")
+  workoutLogs      WorkoutLog[]
+  workoutTemplates WorkoutTemplate[]
+  sessions         Session[]
+  memberships      Membership[]
 
   @@index([countryCode])
   @@index([role])
@@ -102,6 +103,7 @@ model Gym {
  */
 
 model WorkoutLog {
+  clientId  String?   @unique
   id        String    @id @default(uuid(7))
   userId    String
   user      User      @relation(fields: [userId], references: [id])
@@ -112,6 +114,7 @@ model WorkoutLog {
   updatedAt DateTime  @updatedAt
   isEdited  Boolean   @default(false)
   editedAt  DateTime?
+  deletedAt DateTime?
 
   exercises      WorkoutLogExercise[]
   exerciseGroups WorkoutLogExerciseGroup[]
@@ -201,6 +204,7 @@ model Exercise {
 
   otherMuscleGroups   ExerciseMuscleGroup[]
   workoutLogExercises WorkoutLogExercise[]
+  templateExercises   WorkoutTemplateExercise[]
 
   @@index([title])
   @@index([primaryMuscleGroupId])
@@ -290,4 +294,71 @@ model Session {
 
   @@index([userId])
   @@index([expiresAt])
+}
+
+/**
+ * ───────────────── MEMBER'S WORKOUT TEMPLATES ─────────────────
+ */
+
+model WorkoutTemplate {
+  id        String    @id @default(uuid(7))
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  title     String
+  notes     String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  exercises      WorkoutTemplateExercise[]
+  exerciseGroups WorkoutTemplateExerciseGroup[]
+
+  @@index([userId])
+}
+
+model WorkoutTemplateExerciseGroup {
+  id          String            @id @default(uuid(7))
+  templateId  String
+  template    WorkoutTemplate   @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  groupType   ExerciseGroupType
+  groupIndex  Int
+  restSeconds Int?
+
+  exercises WorkoutTemplateExercise[]
+
+  @@index([templateId, groupIndex])
+}
+
+model WorkoutTemplateExercise {
+  id            String          @id @default(uuid(7))
+  templateId    String
+  template      WorkoutTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  exerciseId    String
+  exercise      Exercise        @relation(fields: [exerciseId], references: [id])
+  exerciseIndex Int
+
+  exerciseGroupId String?
+  exerciseGroup   WorkoutTemplateExerciseGroup? @relation(fields: [exerciseGroupId], references: [id], onDelete: SetNull)
+
+  sets WorkoutTemplateSet[]
+
+  @@index([templateId, exerciseIndex])
+}
+
+model WorkoutTemplateSet {
+  id                 String                  @id @default(uuid(7))
+  templateExerciseId String
+  templateExercise   WorkoutTemplateExercise @relation(fields: [templateExerciseId], references: [id], onDelete: Cascade)
+  setIndex           Int
+  setType            SetType                 @default(working)
+
+  // Targets (Optional)
+  weight          Decimal? @db.Decimal(8, 3)
+  reps            Int?
+  rpe             Int?
+  durationSeconds Int?
+  restSeconds     Int?
+  note            String?
+
+  @@index([templateExerciseId, setIndex])
 }

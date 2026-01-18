@@ -11,6 +11,7 @@ export interface WorkoutSet {
 	note?: string | null
 }
 
+// NOTE: Keep this logic in sync with frontend `utils/workout.ts`
 export function isValidCompletedSet(set: WorkoutSet, exerciseType: ExerciseType): boolean {
 	const reps = set.reps ?? 0
 	const weight = set.weight ?? 0
