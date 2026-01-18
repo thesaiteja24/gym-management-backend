@@ -1,9 +1,9 @@
-import { Request, Response } from 'express'
+import { ExerciseGroupType, PrismaClient } from '@prisma/client'
 import { withAccelerate } from '@prisma/extension-accelerate'
-import { PrismaClient, SetType, ExerciseGroupType } from '@prisma/client'
-import { asyncHandler } from '../utils/asyncHandler.js'
+import { Request, Response } from 'express'
 import { ApiError } from '../utils/ApiError.js'
 import { ApiResponse } from '../utils/ApiResponse.js'
+import { asyncHandler } from '../utils/asyncHandler.js'
 import { logError, logInfo, logWarn } from '../utils/logger.js'
 import { isValidCompletedSet, WorkoutSet } from '../utils/workoutValidation.js'
 
@@ -24,6 +24,7 @@ interface ExerciseGroupInput {
 }
 
 interface CreateWorkoutBody {
+	clientId?: string
 	title?: string
 	startTime: string
 	endTime: string
@@ -34,7 +35,19 @@ interface CreateWorkoutBody {
 interface UpdateWorkoutBody extends CreateWorkoutBody {}
 
 export const createWorkout = asyncHandler(async (req: Request<object, object, CreateWorkoutBody>, res: Response) => {
-	const { title, startTime, endTime, exercises, exerciseGroups } = req.body
+	const { clientId, title, startTime, endTime, exercises, exerciseGroups } = req.body
+
+	/* ───── Idempotency Check ───── */
+	if (clientId) {
+		const existing = await prisma.workoutLog.findUnique({
+			where: { clientId },
+		})
+
+		if (existing) {
+			logInfo('Workout creation idempotent hit', { clientId, workoutId: existing.id }, req)
+			return res.json(new ApiResponse(200, { workout: existing }, 'Workout already created (Idempotent)'))
+		}
+	}
 
 	/* ───────────────── Prune Counters ───────────────── */
 
@@ -54,6 +67,7 @@ export const createWorkout = asyncHandler(async (req: Request<object, object, Cr
 			workout = await tx.workoutLog.create({
 				data: {
 					userId: req.user!.id,
+					clientId,
 					title,
 					startTime: new Date(startTime),
 					endTime: new Date(endTime),
@@ -220,7 +234,10 @@ export const getAllWorkouts = asyncHandler(async (req: Request, res: Response) =
 
 	try {
 		workouts = await prisma.workoutLog.findMany({
-			where: { userId },
+			where: {
+				userId,
+				deletedAt: null,
+			},
 			orderBy: { createdAt: 'desc' },
 			select: {
 				id: true,
@@ -314,9 +331,12 @@ export const deleteWorkout = asyncHandler(async (req: Request<{ id: string }>, r
 			throw new ApiError(404, 'Workout not found')
 		}
 
-		await prisma.workoutLog.delete({
+		await prisma.workoutLog.update({
 			where: {
 				id: workoutId,
+			},
+			data: {
+				deletedAt: new Date(),
 			},
 		})
 	} catch (error) {
@@ -365,6 +385,19 @@ export const updateWorkout = asyncHandler(
 				const existingWorkout = await tx.workoutLog.findUnique({
 					where: { id: workoutId },
 				})
+
+				if (existingWorkout?.deletedAt) {
+					logWarn(
+						'Attempt to update deleted workout',
+						{
+							action: 'updateWorkout',
+							workoutId,
+							userId,
+						},
+						req
+					)
+					throw new ApiError(404, 'Workout not found (deleted)')
+				}
 
 				if (!existingWorkout || existingWorkout.userId !== userId) {
 					logWarn(
