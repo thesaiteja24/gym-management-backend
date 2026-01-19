@@ -241,6 +241,7 @@ export const getAllWorkouts = asyncHandler(async (req: Request, res: Response) =
 			orderBy: { createdAt: 'desc' },
 			select: {
 				id: true,
+				clientId: true,
 				title: true,
 				startTime: true,
 				endTime: true,
