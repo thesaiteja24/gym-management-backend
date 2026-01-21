@@ -37,3 +37,24 @@ export const titleizeString = (str: string | null | undefined): string => {
 
 	return result
 }
+
+import { randomBytes } from 'crypto'
+
+/**
+ * Generates a cryptographically secure, URL-safe opaque token.
+ *
+ * This token is designed to be used as a public capability identifier
+ * (e.g. share links, invite links, magic links, or one-time actions).
+ * It is:
+ * - Random and unguessable (128 bits of entropy)
+ * - URL-safe (base64url encoded)
+ * - Opaque (contains no embedded metadata or meaning)
+ *
+ * Each invocation returns a new, independent value and does not rely
+ * on any external state.
+ *
+ * @returns {string} A URL-safe secure token (~22 characters).
+ */
+export const generateSecureToken = (): string => {
+	return randomBytes(16).toString('base64url')
+}

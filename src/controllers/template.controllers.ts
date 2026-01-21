@@ -4,6 +4,7 @@ import { Request, Response } from 'express'
 import { ApiError } from '../utils/ApiError.js'
 import { ApiResponse } from '../utils/ApiResponse.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
+import { generateSecureToken } from '../utils/helpers.js'
 import { logError, logWarn } from '../utils/logger.js'
 
 const prisma = new PrismaClient().$extends(withAccelerate())
@@ -38,21 +39,33 @@ interface CreateTemplateBody {
 	notes?: string
 	exercises: TemplateExerciseInput[]
 	exerciseGroups?: TemplateExerciseGroupInput[]
+	sourceShareId?: string
 }
 
 export const createTemplate = asyncHandler(async (req: Request<object, object, CreateTemplateBody>, res: Response) => {
-	const { title, notes, exercises, exerciseGroups } = req.body
+	const { title, notes, exercises, exerciseGroups, sourceShareId } = req.body
 
 	let template: { id: string }
 
 	try {
 		await prisma.$transaction(async tx => {
+			// Get user details for authorName
+			const user = await tx.user.findUnique({
+				where: { id: req.user!.id },
+				select: { firstName: true, lastName: true },
+			})
+
+			const authorName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Unknown' : 'Unknown'
+
 			/* ───── Create Template Header ───── */
 			template = await tx.workoutTemplate.create({
 				data: {
 					userId: req.user!.id,
 					title,
 					notes,
+					shareId: generateSecureToken(),
+					sourceShareId: sourceShareId ?? null,
+					authorName,
 				},
 			})
 
@@ -192,32 +205,56 @@ export const getTemplateById = asyncHandler(async (req: Request<{ id: string }>,
 	return res.json(new ApiResponse(200, template, 'Template fetched successfully'))
 })
 
-export const deleteTemplate = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
-	const userId = req.user!.id
-	const templateId = req.params.id
+export const getTemplateByShareId = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
+	const templateShareId = req.params.id
 
-	const template = await prisma.workoutTemplate.findUnique({ where: { id: templateId } })
-
-	if (!template || template.userId !== userId) {
-		throw new ApiError(404, 'Template not found')
-	}
-
-	await prisma.workoutTemplate.update({
-		where: { id: templateId },
-		data: { deletedAt: new Date() },
+	const template = await prisma.workoutTemplate.findUnique({
+		where: { shareId: templateShareId },
+		include: {
+			exerciseGroups: {
+				orderBy: { groupIndex: 'asc' },
+			},
+			exercises: {
+				orderBy: { exerciseIndex: 'asc' },
+				include: {
+					sets: { orderBy: { setIndex: 'asc' } },
+					exercise: {
+						select: {
+							id: true,
+							title: true,
+							thumbnailUrl: true,
+							exerciseType: true,
+						},
+					},
+				},
+			},
+		},
 	})
 
-	return res.json(new ApiResponse(200, null, 'Template deleted successfully'))
+	if (!template) {
+		throw new ApiError(404, 'Shared Tempplate not found')
+	}
+
+	return res.json(new ApiResponse(200, template, 'Template fetched successfully'))
 })
 
 export const updateTemplate = asyncHandler(
 	async (req: Request<{ id: string }, object, CreateTemplateBody>, res: Response) => {
 		const userId = req.user!.id
 		const templateId = req.params.id
+
 		const { title, notes, exercises, exerciseGroups } = req.body
 
 		await prisma.$transaction(async tx => {
+			const user = await tx.user.findUnique({
+				where: { id: req.user!.id },
+				select: { firstName: true, lastName: true },
+			})
+
+			const authorName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Unknown' : 'Unknown'
+
 			const template = await tx.workoutTemplate.findUnique({ where: { id: templateId } })
+
 			if (!template || template.userId !== userId) {
 				throw new ApiError(404, 'Template not found')
 			}
@@ -233,7 +270,12 @@ export const updateTemplate = asyncHandler(
 			// Update Header
 			await tx.workoutTemplate.update({
 				where: { id: templateId },
-				data: { title, notes },
+				data: {
+					title,
+					notes,
+					authorName: template.authorName || authorName, // only if missing
+					shareId: template.shareId || generateSecureToken(), // only if missing
+				},
 			})
 
 			// Recreate Children (Reuse create logic mostly)
@@ -298,3 +340,21 @@ export const updateTemplate = asyncHandler(
 		return res.json(new ApiResponse(200, { id: templateId }, 'Template updated successfully'))
 	}
 )
+
+export const deleteTemplate = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
+	const userId = req.user!.id
+	const templateId = req.params.id
+
+	const template = await prisma.workoutTemplate.findUnique({ where: { id: templateId } })
+
+	if (!template || template.userId !== userId) {
+		throw new ApiError(404, 'Template not found')
+	}
+
+	await prisma.workoutTemplate.update({
+		where: { id: templateId },
+		data: { deletedAt: new Date() },
+	})
+
+	return res.json(new ApiResponse(200, null, 'Template deleted successfully'))
+})

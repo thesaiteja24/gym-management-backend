@@ -6,6 +6,7 @@ import {
 	getTemplateById,
 	deleteTemplate,
 	updateTemplate,
+	getTemplateByShareId,
 } from '../controllers/template.controllers.js'
 import { createTemplateSchema, updateTemplateSchema } from '../validators/template.validators.js'
 
@@ -18,5 +19,7 @@ router
 	.get(getTemplateById)
 	.put(validateResource(updateTemplateSchema), updateTemplate)
 	.delete(deleteTemplate)
+
+router.route('/share/:id').get(getTemplateByShareId)
 
 export const templateRoutes = router

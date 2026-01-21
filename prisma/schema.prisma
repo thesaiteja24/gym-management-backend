@@ -309,6 +309,9 @@ model WorkoutTemplate {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
+  shareId       String?   @unique
+  sourceShareId String?
+  authorName    String?
 
   exercises      WorkoutTemplateExercise[]
   exerciseGroups WorkoutTemplateExerciseGroup[]
