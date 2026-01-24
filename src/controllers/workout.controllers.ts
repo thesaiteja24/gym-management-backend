@@ -571,6 +571,52 @@ export const updateWorkout = asyncHandler(
 
 		/* ───────────────── Response ───────────────── */
 
+		/* ───── Fetch Updated Workout ───── */
+
+		const updatedWorkout = await prisma.workoutLog.findUnique({
+			where: { id: workoutId },
+			select: {
+				id: true,
+				clientId: true,
+				title: true,
+				startTime: true,
+				endTime: true,
+				createdAt: true,
+				updatedAt: true,
+				isEdited: true,
+				editedAt: true,
+				exerciseGroups: {
+					orderBy: { groupIndex: 'asc' },
+					select: {
+						id: true,
+						groupType: true,
+						groupIndex: true,
+						restSeconds: true,
+					},
+				},
+				exercises: {
+					orderBy: { exerciseIndex: 'asc' },
+					select: {
+						id: true,
+						exerciseId: true,
+						exerciseIndex: true,
+						exerciseGroupId: true,
+						exercise: {
+							select: {
+								id: true,
+								title: true,
+								thumbnailUrl: true,
+								exerciseType: true,
+							},
+						},
+						sets: {
+							orderBy: { setIndex: 'asc' },
+						},
+					},
+				},
+			},
+		})
+
 		logInfo(
 			'Workout updated',
 			{
@@ -582,6 +628,6 @@ export const updateWorkout = asyncHandler(
 			req
 		)
 
-		return res.json(new ApiResponse(200, { id: workoutId }, 'Workout updated successfully'))
+		return res.json(new ApiResponse(200, updatedWorkout, 'Workout updated successfully'))
 	}
 )

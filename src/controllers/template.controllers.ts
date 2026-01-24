@@ -337,7 +337,32 @@ export const updateTemplate = asyncHandler(
 			}
 		})
 
-		return res.json(new ApiResponse(200, { id: templateId }, 'Template updated successfully'))
+		/* ───── Fetch Updated Template ───── */
+
+		const updatedTemplate = await prisma.workoutTemplate.findUnique({
+			where: { id: templateId },
+			include: {
+				exerciseGroups: {
+					orderBy: { groupIndex: 'asc' },
+				},
+				exercises: {
+					orderBy: { exerciseIndex: 'asc' },
+					include: {
+						sets: { orderBy: { setIndex: 'asc' } },
+						exercise: {
+							select: {
+								id: true,
+								title: true,
+								thumbnailUrl: true,
+								exerciseType: true,
+							},
+						},
+					},
+				},
+			},
+		})
+
+		return res.json(new ApiResponse(200, updatedTemplate, 'Template updated successfully'))
 	}
 )
 
