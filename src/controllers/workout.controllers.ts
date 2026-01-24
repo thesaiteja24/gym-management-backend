@@ -278,6 +278,12 @@ export const getAllWorkouts = asyncHandler(async (req: Request, res: Response) =
 						},
 					},
 				},
+				user: {
+					select: {
+						firstName: true,
+						lastName: true,
+					},
+				},
 			},
 		})
 	} catch (error) {
