@@ -209,11 +209,42 @@ export const createWorkout = asyncHandler(async (req: Request<object, object, Cr
 
 	/* ───────────────── Response ───────────────── */
 
+	let fullWorkout
+
+	try {
+		fullWorkout = await prisma.workoutLog.findUnique({
+			where: { id: workout!.id },
+			select: workoutSelect,
+		})
+	} catch (error) {
+		logError(
+			'Failed to fetch full workout details after creation',
+			error as Error,
+			{ action: 'createWorkout' },
+			req
+		)
+		// Fallback to the basic workout object if fetch fails, though this shouldn't happen
+		return res.json(
+			new ApiResponse(
+				201,
+				{
+					workout: workout!,
+					meta: {
+						droppedSets,
+						droppedExercises,
+						droppedGroups,
+					},
+				},
+				'Workout created, but failed to fetch full details'
+			)
+		)
+	}
+
 	return res.json(
 		new ApiResponse(
 			201,
 			{
-				workout: workout!,
+				workout: fullWorkout!,
 				meta: {
 					droppedSets,
 					droppedExercises,
@@ -224,6 +255,53 @@ export const createWorkout = asyncHandler(async (req: Request<object, object, Cr
 		)
 	)
 })
+
+const workoutSelect = {
+	id: true,
+	clientId: true,
+	title: true,
+	startTime: true,
+	endTime: true,
+	createdAt: true,
+	updatedAt: true,
+	isEdited: true,
+	editedAt: true,
+	exerciseGroups: {
+		orderBy: { groupIndex: 'asc' },
+		select: {
+			id: true,
+			groupType: true,
+			groupIndex: true,
+			restSeconds: true,
+		},
+	},
+	exercises: {
+		orderBy: { exerciseIndex: 'asc' },
+		select: {
+			id: true,
+			exerciseId: true,
+			exerciseIndex: true,
+			exerciseGroupId: true,
+			exercise: {
+				select: {
+					id: true,
+					title: true,
+					thumbnailUrl: true,
+					exerciseType: true,
+				},
+			},
+			sets: {
+				orderBy: { setIndex: 'asc' },
+			},
+		},
+	},
+	user: {
+		select: {
+			firstName: true,
+			lastName: true,
+		},
+	},
+} as const
 
 export const getAllWorkouts = asyncHandler(async (req: Request, res: Response) => {
 	const userId = req.user!.id
@@ -239,52 +317,7 @@ export const getAllWorkouts = asyncHandler(async (req: Request, res: Response) =
 				deletedAt: null,
 			},
 			orderBy: { createdAt: 'desc' },
-			select: {
-				id: true,
-				clientId: true,
-				title: true,
-				startTime: true,
-				endTime: true,
-				createdAt: true,
-				updatedAt: true,
-				isEdited: true,
-				editedAt: true,
-				exerciseGroups: {
-					orderBy: { groupIndex: 'asc' },
-					select: {
-						id: true,
-						groupType: true,
-						groupIndex: true,
-						restSeconds: true,
-					},
-				},
-				exercises: {
-					orderBy: { exerciseIndex: 'asc' },
-					select: {
-						id: true,
-						exerciseId: true,
-						exerciseIndex: true,
-						exerciseGroupId: true,
-						exercise: {
-							select: {
-								id: true,
-								title: true,
-								thumbnailUrl: true,
-								exerciseType: true,
-							},
-						},
-						sets: {
-							orderBy: { setIndex: 'asc' },
-						},
-					},
-				},
-				user: {
-					select: {
-						firstName: true,
-						lastName: true,
-					},
-				},
-			},
+			select: workoutSelect,
 		})
 	} catch (error) {
 		const err = error as Error
@@ -308,6 +341,35 @@ export const getAllWorkouts = asyncHandler(async (req: Request, res: Response) =
 	)
 
 	return res.json(new ApiResponse(200, workouts, 'Workouts fetched successfully'))
+})
+
+export const getWorkoutById = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
+	const workoutId = req.params.id
+	const userId = req.user!.id
+
+	let workout
+
+	try {
+		// Use findFirst to ensure the workout belongs to the requesting user
+		workout = await prisma.workoutLog.findFirst({
+			where: {
+				id: workoutId,
+				userId,
+			},
+			select: workoutSelect,
+		})
+	} catch (error) {
+		const err = error as Error
+		logError('Failed to fetch workout', err, { action: 'getWorkoutById', error: err.message, workoutId }, req)
+		throw new ApiError(500, 'Failed to fetch workout')
+	}
+
+	if (!workout) {
+		logWarn('Workout not found', { action: 'getWorkoutById', workoutId }, req)
+		throw new ApiError(404, 'Workout not found')
+	}
+
+	return res.json(new ApiResponse(200, workout, 'Workout fetched successfully'))
 })
 
 export const deleteWorkout = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
@@ -581,46 +643,7 @@ export const updateWorkout = asyncHandler(
 
 		const updatedWorkout = await prisma.workoutLog.findUnique({
 			where: { id: workoutId },
-			select: {
-				id: true,
-				clientId: true,
-				title: true,
-				startTime: true,
-				endTime: true,
-				createdAt: true,
-				updatedAt: true,
-				isEdited: true,
-				editedAt: true,
-				exerciseGroups: {
-					orderBy: { groupIndex: 'asc' },
-					select: {
-						id: true,
-						groupType: true,
-						groupIndex: true,
-						restSeconds: true,
-					},
-				},
-				exercises: {
-					orderBy: { exerciseIndex: 'asc' },
-					select: {
-						id: true,
-						exerciseId: true,
-						exerciseIndex: true,
-						exerciseGroupId: true,
-						exercise: {
-							select: {
-								id: true,
-								title: true,
-								thumbnailUrl: true,
-								exerciseType: true,
-							},
-						},
-						sets: {
-							orderBy: { setIndex: 'asc' },
-						},
-					},
-				},
-			},
+			select: workoutSelect,
 		})
 
 		logInfo(

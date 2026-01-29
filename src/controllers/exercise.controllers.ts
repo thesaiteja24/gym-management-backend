@@ -1,6 +1,6 @@
 import { Request, Response } from 'express'
 import { withAccelerate } from '@prisma/extension-accelerate'
-import { PrismaClient, ExerciseType } from '@prisma/client'
+import { PrismaClient, ExerciseType, Exercise, PrismaPromise } from '@prisma/client'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { ApiError } from '../utils/ApiError.js'
 import { ApiResponse } from '../utils/ApiResponse.js'
@@ -21,10 +21,11 @@ interface CreateExerciseBody {
 	primaryMuscleGroupId?: string
 	equipmentId?: string
 	exerciseType: ExerciseType
+	otherMuscleGroupIds?: string[]
 }
 
 export const createExercise = asyncHandler(async (req: Request<object, object, CreateExerciseBody>, res: Response) => {
-	const { title, instructions, primaryMuscleGroupId, equipmentId, exerciseType } = req.body
+	const { title, instructions, primaryMuscleGroupId, equipmentId, exerciseType, otherMuscleGroupIds } = req.body
 	const video = req.file as UploadedFile | undefined
 
 	if (!video) {
@@ -57,6 +58,15 @@ export const createExercise = asyncHandler(async (req: Request<object, object, C
 				exerciseType,
 				videoUrl: uploaded.videoUrl,
 				thumbnailUrl: uploaded.thumbnailUrl,
+				...(otherMuscleGroupIds?.length && {
+					otherMuscleGroups: {
+						createMany: {
+							data: otherMuscleGroupIds.map(muscleGroupId => ({
+								muscleGroupId,
+							})),
+						},
+					},
+				}),
 			},
 		})
 
@@ -97,7 +107,11 @@ export const getAllExercises = asyncHandler(async (req: Request, res: Response) 
 		include: {
 			primaryMuscleGroup: true,
 			equipment: true,
-			otherMuscleGroups: true,
+			otherMuscleGroups: {
+				select: {
+					muscleGroup: true,
+				},
+			},
 		},
 	})
 
@@ -106,15 +120,20 @@ export const getAllExercises = asyncHandler(async (req: Request, res: Response) 
 		throw new ApiError(404, 'No exercises found')
 	}
 
+	const flattenedExerciseList = exerciseList.map(exercise => ({
+		...exercise,
+		otherMuscleGroups: exercise.otherMuscleGroups.map(omg => omg.muscleGroup),
+	}))
+
 	try {
-		await setCache(GET_ALL_EXERCISES_CACHE_KEY, exerciseList, EXERCISES_CACHE_TTL)
+		await setCache(GET_ALL_EXERCISES_CACHE_KEY, flattenedExerciseList, EXERCISES_CACHE_TTL)
 	} catch (error) {
 		const err = error as Error
 		logError('Failed to cache exercises list', err, { action: 'getAllExercises', error: err.message }, req)
 	}
 
-	logInfo('Exercises fetched', { action: 'getAllExercises', count: exerciseList.length }, req)
-	return res.json(new ApiResponse(200, exerciseList, 'Exercises list fetched successfully'))
+	logInfo('Exercises fetched', { action: 'getAllExercises', count: flattenedExerciseList.length }, req)
+	return res.json(new ApiResponse(200, flattenedExerciseList, 'Exercises list fetched successfully'))
 })
 
 export const getExerciseById = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
@@ -144,15 +163,19 @@ interface UpdateExerciseBody {
 	primaryMuscleGroupId?: string
 	equipmentId?: string
 	exerciseType?: ExerciseType
+	otherMuscleGroupIds?: string[]
 }
 
 export const updateExercise = asyncHandler(
 	async (req: Request<{ id: string }, object, UpdateExerciseBody>, res: Response) => {
 		const { id } = req.params
-		const { title, instructions, primaryMuscleGroupId, equipmentId, exerciseType } = req.body
+		const { title, instructions, primaryMuscleGroupId, equipmentId, exerciseType, otherMuscleGroupIds } = req.body
+
 		const video = req.file as UploadedFile | undefined
 
-		const existingExercise = await prisma.exercise.findUnique({ where: { id } })
+		const existingExercise = await prisma.exercise.findUnique({
+			where: { id },
+		})
 
 		if (!existingExercise) {
 			logWarn('Exercise not found for update', { action: 'updateExercise', exerciseId: id }, req)
@@ -164,6 +187,7 @@ export const updateExercise = asyncHandler(
 		let newVideoKey: string | null = null
 		let newThumbnailKey: string | null = null
 
+		// ───────────────── MEDIA UPLOAD ─────────────────
 		if (video) {
 			const filePath = `gym-sass/exercises/${randomUUID()}`
 			try {
@@ -189,22 +213,61 @@ export const updateExercise = asyncHandler(
 			}
 		}
 
-		let updatedExercise
+		// ───────────────── TRANSACTION ─────────────────
+		let updatedExercise: Exercise
 		try {
-			updatedExercise = await prisma.exercise.update({
-				where: { id },
-				data: {
-					...(title && { title: titleizeString(title) }),
-					...(instructions !== undefined && { instructions }),
-					...(primaryMuscleGroupId && { primaryMuscleGroupId }),
-					...(equipmentId && { equipmentId }),
-					...(exerciseType && { exerciseType }),
-					...(newVideoUrl && { videoUrl: newVideoUrl }),
-					...(newThumbnailUrl && { thumbnailUrl: newThumbnailUrl }),
-				},
-			})
+			const operations: PrismaPromise<any>[] = []
+
+			operations.push(
+				prisma.exercise.update({
+					where: { id },
+					data: {
+						...(title && { title: titleizeString(title) }),
+						...(instructions !== undefined && { instructions }),
+						...(primaryMuscleGroupId && { primaryMuscleGroupId }),
+						...(equipmentId && { equipmentId }),
+						...(exerciseType && { exerciseType }),
+						...(newVideoUrl && { videoUrl: newVideoUrl }),
+						...(newThumbnailUrl && { thumbnailUrl: newThumbnailUrl }),
+					},
+					include: {
+						primaryMuscleGroup: true,
+						equipment: true,
+						otherMuscleGroups: {
+							include: {
+								muscleGroup: true,
+							},
+						},
+					},
+				})
+			)
+
+			// Replace other muscle groups (authoritative set)
+			if (otherMuscleGroupIds) {
+				operations.push(
+					prisma.exerciseMuscleGroup.deleteMany({
+						where: { exerciseId: id },
+					})
+				)
+				if (otherMuscleGroupIds.length > 0) {
+					operations.push(
+						prisma.exerciseMuscleGroup.createMany({
+							data: otherMuscleGroupIds.map(muscleGroupId => ({
+								exerciseId: id,
+								muscleGroupId,
+							})),
+							skipDuplicates: true,
+						})
+					)
+				}
+			}
+
+			const results = await prisma.$transaction(operations)
+			updatedExercise = results[0] as Exercise
 		} catch (error) {
 			const err = error as Error
+
+			// Roll back newly uploaded media if DB failed
 			if (newVideoKey) {
 				await deleteMediaByKey({
 					key: newVideoKey,
@@ -227,10 +290,10 @@ export const updateExercise = asyncHandler(
 				{ action: 'updateExercise', exerciseId: id, error: err.message },
 				req
 			)
-			throw new ApiError(500, 'Failed to update Exercise')
+			throw new ApiError(500, 'Failed to update Exercise', [err.message])
 		}
 
-		// Delete old media AFTER successful update
+		// ───────────────── CLEAN UP OLD MEDIA ─────────────────
 		if (video && existingExercise.videoUrl) {
 			const oldVideoKey = extractS3KeyFromUrl(existingExercise.videoUrl)
 			if (oldVideoKey) {
@@ -253,7 +316,7 @@ export const updateExercise = asyncHandler(
 			}
 		}
 
-		// invalidate cache
+		// ───────────────── CACHE ─────────────────
 		await deleteCache(GET_ALL_EXERCISES_CACHE_KEY)
 
 		logInfo('Exercise updated', { action: 'updateExercise', exerciseId: id }, req)
