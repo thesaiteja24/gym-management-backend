@@ -93,6 +93,7 @@ const createMessageReal = async (message: string, phoneE164: string): Promise<Cr
 		body: message,
 		from: process.env.TWILIO_PHONE_NUMBER,
 		to: phoneE164,
+		riskCheck: 'disable',
 	})
 
 	const statusCheck = waitForStatus(msg.sid)
