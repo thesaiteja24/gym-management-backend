@@ -7,10 +7,20 @@ import { ApiError } from '../utils/ApiError.js'
 import { ApiResponse } from '../utils/ApiResponse.js'
 import { logDebug, logError, logInfo, logWarn } from '../utils/logger.js'
 import { generateResponse, synthesizeSpeech, transcribeAudio } from '../services/coach.service.js'
+import { getCache, setCache } from '../services/caching.service.js'
+import { ChatCompletionMessageParam } from 'openai/resources'
 import prompts from '../utils/coachPrompts.js'
+import NodeCache from 'node-cache'
 
 const prisma = new PrismaClient().$extends(withAccelerate())
-const TTS_CACHE: Record<string, Buffer> = {} // in-memory cache for demo (can use Redis or disk)
+
+const ttsCache = new NodeCache({
+	stdTTL: 300, // 5 minutes
+	checkperiod: 60, // cleanup every minute
+	useClones: false, // important for Buffers
+})
+
+const CONVERSATION_CACHE_TTL = '1hr'
 
 export const startChat = asyncHandler(async (req: Request, res: Response) => {
 	const userId = req.user!.id
@@ -21,12 +31,19 @@ export const startChat = asyncHandler(async (req: Request, res: Response) => {
 		throw new ApiError(404, 'User not found')
 	}
 
-	const systemPrompt = prompts.systemPrompt
-	const userPrompt = `Generate a brief, friendly greeting introducing yourself and asking how you can help with fitness goals. Keep it to 1-2 sentences. No emojis. Also the name of the user is ${user.firstName?.split(' ').at(-1)}`
+	const cacheKey = `coach:conversation:${userId}`
+	const name = user.firstName?.split(' ').at(-1)
 
+	const userPrompt = name ? prompts.greetingPrompt(name) : prompts.greetingPrompt()
+
+	const systemPrompt = prompts.systemPrompt
+	const messages: ChatCompletionMessageParam[] = [
+		{ role: 'system', content: systemPrompt },
+		{ role: 'user', content: userPrompt },
+	]
 	let generatedText
 	try {
-		generatedText = await generateResponse(systemPrompt, userPrompt)
+		generatedText = await generateResponse(messages)
 	} catch (error) {
 		const err = error as Error
 		logError('Failed to generate chat response', err, { action: 'startChat', error: err.message }, req)
@@ -48,7 +65,15 @@ export const startChat = asyncHandler(async (req: Request, res: Response) => {
 	}
 
 	const ttsId = crypto.randomUUID()
-	TTS_CACHE[ttsId] = ttsResponse.audio
+	ttsCache.set(ttsId, ttsResponse.audio)
+
+	// Only store the assistant's greeting in history (not the internal instruction prompt)
+	try {
+		await setCache(cacheKey, [{ role: 'assistant', content: generatedText.text }], CONVERSATION_CACHE_TTL)
+	} catch (error) {
+		const err = error as Error
+		logError('Failed to set conversation in cache', err, { action: 'startChat', error: err.message }, req)
+	}
 
 	const response = { text: generatedText.text, ttsId: ttsId }
 
@@ -58,7 +83,7 @@ export const startChat = asyncHandler(async (req: Request, res: Response) => {
 
 export const streamTTS = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
 	const ttsId = req.params.id
-	const audioBuffer = TTS_CACHE[ttsId]
+	const audioBuffer = ttsCache.get<Buffer>(ttsId)
 
 	if (!audioBuffer) {
 		logWarn('Audio not found in cache', { action: 'streamTTS', ttsId }, req)
@@ -103,11 +128,77 @@ export const askCoach = asyncHandler(async (req: Request, res: Response) => {
 		throw new ApiError(500, 'Failed to transcribe audio')
 	}
 
-	if (!transcription) {
-		logWarn('No transcription generated', { action: 'askCoach' }, req)
-		throw new ApiError(500, 'Failed to transcribe audio')
+	if (!transcription || !transcription.text.trim()) {
+		logWarn('No transcription generated or empty audio', { action: 'askCoach' }, req)
+		throw new ApiError(400, 'Could not understand audio. Please try again.')
 	}
 
-	logInfo('Coach response generated', { action: 'askCoach', transcriptLength: transcription.text.length }, req)
-	return res.json(new ApiResponse(200, { text: transcription.text }, 'Coach response generated'))
+	logInfo('Audio transcribed', { action: 'askCoach', transcriptLength: transcription.text.length }, req)
+	return res.json(new ApiResponse(200, { text: transcription.text }, 'Audio transcribed'))
+})
+
+export const answerQuestion = asyncHandler(async (req: Request, res: Response) => {
+	const { question } = req.body
+
+	if (!question || typeof question !== 'string' || !question.trim()) {
+		logWarn('Question missing or invalid', { action: 'answerQuestion', questionType: typeof question }, req)
+		throw new ApiError(400, 'Question is required and must be a non-empty string')
+	}
+
+	const cacheKey = `coach:conversation:${req.user!.id}`
+	const history = (await getCache<ChatCompletionMessageParam[]>(cacheKey)) ?? []
+
+	// Add the new user question to history
+	history.push({ role: 'user', content: question.trim() })
+
+	// Build model input: system prompt + recent history (excluding any stale system prompts)
+	const filteredHistory = history.filter(msg => msg.role === 'user' || msg.role === 'assistant').slice(-12)
+
+	const messages: ChatCompletionMessageParam[] = [
+		{ role: 'system', content: prompts.systemPrompt },
+		...filteredHistory,
+	]
+
+	let generatedText
+	try {
+		generatedText = await generateResponse(messages)
+	} catch (error) {
+		const err = error as Error
+		logError('Failed to generate chat response', err, { action: 'answerQuestion', error: err.message }, req)
+		throw new ApiError(500, 'Failed to generate chat response')
+	}
+
+	if (!generatedText) {
+		logWarn('No response generated', { action: 'answerQuestion' }, req)
+		throw new ApiError(500, 'Failed to generate chat response')
+	}
+
+	let ttsResponse
+	try {
+		ttsResponse = await synthesizeSpeech(generatedText.text)
+	} catch (error) {
+		const err = error as Error
+		logError('Failed to synthesize speech', err, { action: 'answer', error: err.message }, req)
+		throw new ApiError(500, 'Failed to synthesize speech')
+	}
+
+	if (!ttsResponse) {
+		logWarn('TTS returned empty response', { action: 'answerQuestion' }, req)
+		throw new ApiError(500, 'TTS failed')
+	}
+
+	const ttsId = crypto.randomUUID()
+	ttsCache.set(ttsId, ttsResponse.audio)
+
+	history.push({ role: 'assistant', content: generatedText.text })
+
+	try {
+		await setCache(cacheKey, history, CONVERSATION_CACHE_TTL)
+	} catch (error) {
+		const err = error as Error
+		logError('Failed to cache history', err, { action: 'answerQuestion', error: err.message }, req)
+	}
+
+	logInfo('Coach response generated', { action: 'answerQuestion', transcriptLength: generatedText.text.length }, req)
+	return res.json(new ApiResponse(200, { text: generatedText.text, ttsId }, 'Coach response generated'))
 })

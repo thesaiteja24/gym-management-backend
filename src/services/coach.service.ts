@@ -1,4 +1,5 @@
 import { OpenAI } from 'openai'
+import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions'
 import { logError, logInfo, logWarn } from '../utils/logger.js'
 import { toFile } from 'openai/uploads.js'
 
@@ -28,7 +29,7 @@ export const transcribeAudio = async (audioFile: Express.Multer.File): Promise<T
 		})
 
 		const response = await openai.audio.transcriptions.create({
-			model: 'whisper-1',
+			model: 'gpt-4o-transcribe',
 			file: file,
 			response_format: 'json',
 		})
@@ -46,14 +47,11 @@ export const transcribeAudio = async (audioFile: Express.Multer.File): Promise<T
 	}
 }
 
-export const generateResponse = async (systemPrompt: string, userPrompt: string): Promise<GenerateResponseResult> => {
+export const generateResponse = async (messages: ChatCompletionMessageParam[]): Promise<GenerateResponseResult> => {
 	try {
 		const response = await openai.chat.completions.create({
 			model: 'gpt-4.1',
-			messages: [
-				{ role: 'system', content: systemPrompt },
-				{ role: 'user', content: userPrompt },
-			],
+			messages: messages,
 			max_completion_tokens: 200,
 			temperature: 0.7,
 		})
