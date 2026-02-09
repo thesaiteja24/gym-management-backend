@@ -1,13 +1,22 @@
 import { Router } from 'express'
-import { answerQuestion, askCoach, startChat, streamTTS } from '../controllers/coach.controllers.js'
+import {
+	getActiveConversation,
+	sendMessage,
+	startConversation,
+	streamSpeech,
+	transcribeMessage,
+} from '../controllers/coach.controllers.js'
 import { authenticate } from '../middlewares/auth.middleware.js'
 import { upload } from '../middlewares/upload.middleware.js'
 
 const router = Router()
 
-router.route('/tts/:id').get(streamTTS)
-router.route('/start').get(authenticate, startChat)
-router.route('/ask').post(authenticate, upload.single('audioFile'), askCoach)
-router.route('/answer').post(authenticate, answerQuestion)
+router.route('/speech/:id').get(streamSpeech) // stream speech
+router.route('/transcriptions').post(authenticate, upload.single('audioFile'), transcribeMessage) // transcribe audio
+
+router.route('/conversations/active').get(authenticate, getActiveConversation) // get active conversation
+router.route('/conversations').post(authenticate, startConversation) // start fresh conversation
+router.route('/conversations/:id/messages').post(authenticate, sendMessage) // send message
+router.route('/conversations/:id').delete(authenticate) // delete conversation
 
 export const coachRoutes = router

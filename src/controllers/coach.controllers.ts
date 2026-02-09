@@ -20,9 +20,9 @@ const ttsCache = new NodeCache({
 	useClones: false, // important for Buffers
 })
 
-const CONVERSATION_CACHE_TTL = '1hr'
+const CONVERSATION_CACHE_TTL = '24hr'
 
-export const startChat = asyncHandler(async (req: Request, res: Response) => {
+export const startConversation = asyncHandler(async (req: Request, res: Response) => {
 	const userId = req.user!.id
 
 	const user = await prisma.user.findUnique({ where: { id: userId } })
@@ -31,7 +31,7 @@ export const startChat = asyncHandler(async (req: Request, res: Response) => {
 		throw new ApiError(404, 'User not found')
 	}
 
-	const cacheKey = `coach:conversation:${userId}`
+	const cacheKey = `coach:conversations:${userId}`
 	const name = user.firstName?.split(' ').at(-1)
 
 	const userPrompt = name ? prompts.greetingPrompt(name) : prompts.greetingPrompt()
@@ -75,13 +75,13 @@ export const startChat = asyncHandler(async (req: Request, res: Response) => {
 		logError('Failed to set conversation in cache', err, { action: 'startChat', error: err.message }, req)
 	}
 
-	const response = { text: generatedText.text, ttsId: ttsId }
+	const response = { id: userId, text: generatedText.text, ttsId: ttsId }
 
 	logInfo('Chat started successfully', { action: 'startChat', userId }, req)
 	return res.json(new ApiResponse(200, response, 'Chat started successfully'))
 })
 
-export const streamTTS = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
+export const streamSpeech = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
 	const ttsId = req.params.id
 	const audioBuffer = ttsCache.get<Buffer>(ttsId)
 
@@ -100,7 +100,7 @@ export const streamTTS = asyncHandler(async (req: Request<{ id: string }>, res: 
 	stream.pipe(res)
 })
 
-export const askCoach = asyncHandler(async (req: Request, res: Response) => {
+export const transcribeMessage = asyncHandler(async (req: Request, res: Response) => {
 	const audioFile = req.file
 
 	if (!audioFile?.buffer) {
@@ -137,7 +137,7 @@ export const askCoach = asyncHandler(async (req: Request, res: Response) => {
 	return res.json(new ApiResponse(200, { text: transcription.text }, 'Audio transcribed'))
 })
 
-export const answerQuestion = asyncHandler(async (req: Request, res: Response) => {
+export const sendMessage = asyncHandler(async (req: Request, res: Response) => {
 	const { question } = req.body
 
 	if (!question || typeof question !== 'string' || !question.trim()) {
@@ -145,7 +145,7 @@ export const answerQuestion = asyncHandler(async (req: Request, res: Response) =
 		throw new ApiError(400, 'Question is required and must be a non-empty string')
 	}
 
-	const cacheKey = `coach:conversation:${req.user!.id}`
+	const cacheKey = `coach:conversations:${req.user!.id}`
 	const history = (await getCache<ChatCompletionMessageParam[]>(cacheKey)) ?? []
 
 	// Add the new user question to history
@@ -201,4 +201,31 @@ export const answerQuestion = asyncHandler(async (req: Request, res: Response) =
 
 	logInfo('Coach response generated', { action: 'answerQuestion', transcriptLength: generatedText.text.length }, req)
 	return res.json(new ApiResponse(200, { text: generatedText.text, ttsId }, 'Coach response generated'))
+})
+
+export const getActiveConversation = asyncHandler(async (req: Request, res: Response) => {
+	const userId = req.user!.id
+
+	const cacheKey = `coach:conversations:${userId}`
+
+	if (!userId) {
+		logInfo('Unauthorized to fetch active conversation', { userId }, req)
+		throw new ApiError(401, 'Unauthorized to fetch active conversation')
+	}
+
+	const history = (await getCache<ChatCompletionMessageParam[]>(cacheKey)) ?? []
+
+	if (history.length === 0) {
+		logInfo('No active conversation', { id: userId }, req)
+		return res.json(new ApiResponse(200, null, 'No active conversation'))
+	}
+
+	logInfo('Active conversation fetched', { id: userId, history }, req)
+
+	return res.json(
+		new ApiResponse(200, {
+			id: userId,
+			messages: history,
+		})
+	)
 })
