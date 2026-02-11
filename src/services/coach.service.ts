@@ -2,6 +2,11 @@ import { OpenAI } from 'openai'
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions'
 import { logError, logInfo, logWarn } from '../utils/logger.js'
 import { toFile } from 'openai/uploads.js'
+import { PrismaClient } from '@prisma/client'
+import { withAccelerate } from '@prisma/extension-accelerate'
+import { calculateAge, formatTimeAgo } from '../utils/helpers.js'
+
+const prisma = new PrismaClient().$extends(withAccelerate())
 
 const openai = new OpenAI({
 	apiKey: process.env.OPENAI_API_KEY,
@@ -102,4 +107,63 @@ export const synthesizeSpeech = async (text: string): Promise<SynthesizeSpeechRe
 		logError('Failed to synthesize speech', err, { action: 'synthesizeSpeech', error: err.message }, null)
 		throw error
 	}
+}
+
+export const buildUserFitnessProfile = async (userId: string): Promise<string> => {
+	const userContext = await prisma.user.findUnique({
+		where: { id: userId },
+		select: {
+			height: true,
+			weight: true,
+			dateOfBirth: true,
+			preferredLengthUnit: true,
+			preferredWeightUnit: true,
+			fitnessProfile: {
+				select: {
+					fitnessGoal: true,
+					fitnessLevel: true,
+					injuries: true,
+					availableEquipment: true,
+				},
+			},
+		},
+	})
+
+	const workoutContext = await prisma.workoutLog.findFirst({
+		where: { userId: userId },
+		select: {
+			startTime: true,
+			createdAt: true,
+			updatedAt: true,
+		},
+		orderBy: {
+			createdAt: 'desc',
+		},
+	})
+
+	const userFitnessProfile = `--- USER FITNESS PROFILE ---
+Fitness level: ${userContext?.fitnessProfile?.fitnessLevel ?? 'Unknown'}
+Fitness goal: ${userContext?.fitnessProfile?.fitnessGoal ?? 'Unknown'}
+Available equipment: ${
+		userContext?.fitnessProfile?.availableEquipment?.length
+			? userContext.fitnessProfile.availableEquipment.join(', ')
+			: 'Unknown'
+	}
+Injuries: ${userContext?.fitnessProfile?.injuries ? userContext.fitnessProfile.injuries : 'Unknown'}
+Weight: ${
+		userContext?.weight && userContext?.preferredWeightUnit
+			? `${userContext.weight} ${userContext.preferredWeightUnit}`
+			: 'Unknown'
+	}
+Height: ${
+		userContext?.height && userContext?.preferredLengthUnit
+			? `${userContext.height} ${userContext.preferredLengthUnit}`
+			: 'Unknown'
+	}
+Age: ${userContext?.dateOfBirth ? calculateAge(userContext.dateOfBirth) : 'Unknown'}
+Last workout: ${workoutContext?.startTime ? formatTimeAgo(workoutContext.startTime, true) : 'No workouts recorded'}
+--- END PROFILE ---
+`
+
+	return userFitnessProfile
 }

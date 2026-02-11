@@ -1,3 +1,4 @@
+import { EquipmentType, FitnessGoal, FitnessLevel } from '@prisma/client'
 import { z } from 'zod'
 
 export const updateUserSchema = z.object({
@@ -18,5 +19,17 @@ export const updateUserSchema = z.object({
 export const updateProfilePicSchema = z.object({
 	params: z.object({
 		id: z.string().uuid('Invalid User ID'),
+	}),
+})
+
+export const updateFitnessProfileSchema = z.object({
+	params: z.object({
+		id: z.uuid('Invalid User ID'),
+	}),
+	body: z.object({
+		fitnessGoal: z.enum(FitnessGoal).nullable().optional(),
+		fitnessLevel: z.enum(FitnessLevel).nullable().optional(),
+		injuries: z.string().nullable().optional(),
+		availableEquipment: z.array(z.enum(EquipmentType)).nullable().optional(),
 	}),
 })

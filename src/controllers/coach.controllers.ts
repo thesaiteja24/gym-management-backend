@@ -6,11 +6,17 @@ import { asyncHandler } from '../utils/asyncHandler.js'
 import { ApiError } from '../utils/ApiError.js'
 import { ApiResponse } from '../utils/ApiResponse.js'
 import { logDebug, logError, logInfo, logWarn } from '../utils/logger.js'
-import { generateResponse, synthesizeSpeech, transcribeAudio } from '../services/coach.service.js'
+import {
+	buildUserFitnessProfile,
+	generateResponse,
+	synthesizeSpeech,
+	transcribeAudio,
+} from '../services/coach.service.js'
 import { getCache, setCache } from '../services/caching.service.js'
 import { ChatCompletionMessageParam } from 'openai/resources'
 import prompts from '../utils/coachPrompts.js'
 import NodeCache from 'node-cache'
+import { calculateAge, formatTimeAgo } from '../utils/helpers.js'
 
 const prisma = new PrismaClient().$extends(withAccelerate())
 
@@ -34,12 +40,14 @@ export const startConversation = asyncHandler(async (req: Request, res: Response
 	const cacheKey = `coach:conversations:${userId}`
 	const name = user.firstName?.split(' ').at(-1)
 
-	const userPrompt = name ? prompts.greetingPrompt(name) : prompts.greetingPrompt()
+	const userFitnessProfile = await buildUserFitnessProfile(userId)
+	const greetings = name ? prompts.greetingPrompt(name) : prompts.greetingPrompt()
 
 	const systemPrompt = prompts.systemPrompt
 	const messages: ChatCompletionMessageParam[] = [
 		{ role: 'system', content: systemPrompt },
-		{ role: 'user', content: userPrompt },
+		{ role: 'system', content: userFitnessProfile },
+		{ role: 'user', content: greetings },
 	]
 	let generatedText
 	try {
@@ -138,7 +146,13 @@ export const transcribeMessage = asyncHandler(async (req: Request, res: Response
 })
 
 export const sendMessage = asyncHandler(async (req: Request, res: Response) => {
+	const userId = req.params.id
 	const { question } = req.body
+
+	if (req.user?.id !== userId) {
+		logWarn('User ID mismatch', { action: 'answerQuestion' }, req)
+		throw new ApiError(400, 'User ID mismatch')
+	}
 
 	if (!question || typeof question !== 'string' || !question.trim()) {
 		logWarn('Question missing or invalid', { action: 'answerQuestion', questionType: typeof question }, req)
@@ -147,6 +161,7 @@ export const sendMessage = asyncHandler(async (req: Request, res: Response) => {
 
 	const cacheKey = `coach:conversations:${req.user!.id}`
 	const history = (await getCache<ChatCompletionMessageParam[]>(cacheKey)) ?? []
+	const userFitnessProfile = await buildUserFitnessProfile(req.user!.id)
 
 	// Add the new user question to history
 	history.push({ role: 'user', content: question.trim() })
@@ -156,6 +171,7 @@ export const sendMessage = asyncHandler(async (req: Request, res: Response) => {
 
 	const messages: ChatCompletionMessageParam[] = [
 		{ role: 'system', content: prompts.systemPrompt },
+		{ role: 'system', content: userFitnessProfile },
 		...filteredHistory,
 	]
 

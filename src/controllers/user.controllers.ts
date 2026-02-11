@@ -1,6 +1,6 @@
 import { Request, Response } from 'express'
 import { withAccelerate } from '@prisma/extension-accelerate'
-import { PrismaClient } from '@prisma/client'
+import { EquipmentType, FitnessGoal, FitnessLevel, PrismaClient } from '@prisma/client'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { ApiResponse } from '../utils/ApiResponse.js'
 import { ApiError } from '../utils/ApiError.js'
@@ -201,3 +201,41 @@ export const deleteProfilePic = asyncHandler(async (req: Request<{ id: string }>
 	logDebug('Profile picture deleted successfully', { action: 'deleteProfilePic', user: userId })
 	return res.status(200).json(new ApiResponse(200, updatedUser, 'Profile picture deleted successfully '))
 })
+
+interface UpdateUserFitnessProfileBody {
+	fitnessGoal?: FitnessGoal
+	fitnessLevel?: FitnessLevel
+	injuries?: string
+	availableEquipment?: EquipmentType[]
+}
+
+export const updateUserFitnessProfile = asyncHandler(
+	async (req: Request<{ id: string }, object, UpdateUserFitnessProfileBody>, res: Response) => {
+		const userId = req.params.id
+		const updates = req.body as UpdateUserFitnessProfileBody
+
+		const updatedFitnessProfile = await prisma.userFitnessProfile.upsert({
+			where: { userId },
+			update: {
+				...(updates.fitnessGoal !== undefined && { fitnessGoal: updates.fitnessGoal }),
+				...(updates.fitnessLevel !== undefined && { fitnessLevel: updates.fitnessLevel }),
+				...(updates.injuries !== undefined && { injuries: updates.injuries }),
+				...(updates.availableEquipment !== undefined && {
+					availableEquipment: updates.availableEquipment,
+				}),
+			},
+			create: {
+				userId,
+				fitnessGoal: updates.fitnessGoal ?? null,
+				fitnessLevel: updates.fitnessLevel ?? null,
+				injuries: updates.injuries ?? null,
+				availableEquipment: updates.availableEquipment ?? [],
+			},
+		})
+
+		logDebug('User fitness profile updated successfully', { action: 'updateUserFitnessProfile', user: userId })
+		return res
+			.status(200)
+			.json(new ApiResponse(200, updatedFitnessProfile, 'User fitness profile updated successfully '))
+	}
+)

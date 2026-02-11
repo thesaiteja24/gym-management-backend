@@ -58,3 +58,35 @@ import { randomBytes } from 'crypto'
 export const generateSecureToken = (): string => {
 	return randomBytes(16).toString('base64url')
 }
+
+export const calculateAge = (dateOfBirth: Date): number => {
+	const today = new Date()
+	const diff = today.getTime() - dateOfBirth.getTime()
+	const ageDate = new Date(diff)
+	return Math.abs(ageDate.getUTCFullYear() - 1970)
+}
+
+export const formatTimeAgo = (date: Date, daysOnly: boolean = false): string => {
+	const now = new Date()
+	const diffMs = now.getTime() - date.getTime()
+
+	const seconds = Math.floor(diffMs / 1000)
+	const minutes = Math.floor(seconds / 60)
+	const hours = Math.floor(minutes / 60)
+	const days = Math.floor(hours / 24)
+
+	if (days <= 0) return 'Today'
+	if (days === 1) return 'Yesterday'
+	if (days < 7) return `${days} days ago`
+
+	if (daysOnly) return `${days} days ago`
+
+	const weeks = Math.floor(days / 7)
+	if (weeks < 4) return `${weeks} week${weeks > 1 ? 's' : ''} ago`
+
+	const months = Math.floor(days / 30)
+	if (months < 12) return `${months} month${months > 1 ? 's' : ''} ago`
+
+	const years = Math.floor(days / 365)
+	return `${years} year${years > 1 ? 's' : ''} ago`
+}

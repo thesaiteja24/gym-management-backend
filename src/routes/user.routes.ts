@@ -1,9 +1,15 @@
 import { Router } from 'express'
-import { deleteProfilePic, getUser, updateProfilePic, updateUser } from '../controllers/user.controllers.js'
+import {
+	deleteProfilePic,
+	getUser,
+	updateProfilePic,
+	updateUser,
+	updateUserFitnessProfile,
+} from '../controllers/user.controllers.js'
 import { upload } from '../middlewares/upload.middleware.js'
 import { authorizeSelfOrAdmin } from '../middlewares/authorize.middleware.js'
 import { validateResource } from '../middlewares/validate.middleware.js'
-import { updateProfilePicSchema, updateUserSchema } from '../validators/user.validators.js'
+import { updateFitnessProfileSchema, updateProfilePicSchema, updateUserSchema } from '../validators/user.validators.js'
 
 const router = Router()
 
@@ -20,5 +26,8 @@ router
 router
 	.route('/:id/profile-picture')
 	.delete(validateResource(updateProfilePicSchema), authorizeSelfOrAdmin(), deleteProfilePic)
+router
+	.route('/:id/fitness-profile')
+	.patch(validateResource(updateFitnessProfileSchema), authorizeSelfOrAdmin(), updateUserFitnessProfile)
 
 export const userRoutes = router

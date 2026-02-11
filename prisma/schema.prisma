@@ -47,6 +47,31 @@ enum LengthUnits {
   inches
 }
 
+enum FitnessGoal {
+  loseWeight
+  gainMuscle
+  improveEndurance
+  improveFlexibility
+  improveStrength
+  improveOverallFitness
+}
+
+enum FitnessLevel {
+  beginner
+  intermediate
+  advanced
+}
+
+enum EquipmentType {
+  bodyweight
+  dumbbells
+  barbells
+  kettlebells
+  resistanceBands
+  machines
+  other
+}
+
 /**
  * ───────────────── USER ─────────────────
  */
@@ -68,14 +93,27 @@ model User {
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
 
-  gymsOwned        Gym[]             @relation("GymOwner")
+  gymsOwned        Gym[]               @relation("GymOwner")
   workoutLogs      WorkoutLog[]
   workoutTemplates WorkoutTemplate[]
   sessions         Session[]
   memberships      Membership[]
+  fitnessProfile   UserFitnessProfile?
 
   @@index([countryCode])
   @@index([role])
+}
+
+model UserFitnessProfile {
+  id                 String          @id @default(uuid(7))
+  userId             String          @unique
+  user               User            @relation(fields: [userId], references: [id])
+  fitnessGoal        FitnessGoal?
+  fitnessLevel       FitnessLevel?
+  injuries           String?
+  availableEquipment EquipmentType[]
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
 }
 
 /**
@@ -216,11 +254,12 @@ model Exercise {
  */
 
 model Equipment {
-  id           String   @id @default(uuid(7))
-  title        String   @unique
+  id           String         @id @default(uuid(7))
+  title        String         @unique
   thumbnailUrl String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  type         EquipmentType?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
 
   exercises Exercise[]
 }
@@ -301,14 +340,14 @@ model Session {
  */
 
 model WorkoutTemplate {
-  id        String    @id @default(uuid(7))
-  userId    String
-  user      User      @relation(fields: [userId], references: [id])
-  title     String
-  notes     String?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  id            String    @id @default(uuid(7))
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+  title         String
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
   shareId       String?   @unique
   sourceShareId String?
   authorName    String?
