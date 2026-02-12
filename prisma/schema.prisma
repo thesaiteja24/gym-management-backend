@@ -18,6 +18,12 @@ enum UserRole {
   member
 }
 
+enum Gender {
+  male
+  female
+  other
+}
+
 enum ExerciseType {
   repsOnly
   assisted
@@ -84,6 +90,7 @@ model User {
   firstName           String?
   lastName            String?
   dateOfBirth         DateTime?   @db.Date
+  gender              Gender?
   preferredWeightUnit WeightUnits @default(kg)
   preferredLengthUnit LengthUnits @default(cm)
   height              Decimal?    @db.Decimal(6, 2)

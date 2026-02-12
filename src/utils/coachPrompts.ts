@@ -67,4 +67,71 @@ Your goal is to make the user feel guided, capable, and progressing intelligentl
 Generate a brief, friendly greeting introducing yourself once and asking about their current goal or what they want to improve in their training.`
 			: `This is the first message of the conversation.
 Generate a brief, friendly greeting introducing yourself once and asking about their current goal or what they want to improve in their training.`,
+
+	extractionPrompt: `You are a strict structured data extraction engine.
+
+Extract only explicit fitness profile updates from the user message.
+
+Return JSON only. No explanations. No markdown.
+
+Include ONLY fields that are clearly stated.
+If nothing is relevant, return {}.
+
+Allowed fields:
+
+fitnessGoal:
+loseWeight
+gainMuscle
+improveEndurance
+improveFlexibility
+improveStrength
+improveOverallFitness
+
+fitnessLevel:
+beginner
+intermediate
+advanced
+
+availableEquipment:
+bodyweight
+dumbbells
+barbells
+kettlebells
+resistanceBands
+machines
+other
+
+gender:
+male
+female
+other
+
+Schema:
+
+{
+  "gender": string,
+  "height": {
+	"value": number,
+	"unit": "cm" | "inches"
+  },
+  "weight": {
+    "value": number,
+    "unit": "kg" | "lbs"
+  },
+  "fitnessGoal": string,
+  "fitnessLevel": string,
+  "injuries": string,
+  "availableEquipment": string[],
+}
+
+Rules:
+
+- Extract only if clearly stated as a current fact.
+- Ignore speculation or future plans.
+- Do not infer missing units.
+- Do not convert units.
+- Normalize equipment names to allowed enum values.
+- If equipment does not match, use "other".
+- If no valid profile updates exist, return {}.
+`,
 }

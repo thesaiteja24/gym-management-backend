@@ -2,9 +2,10 @@ import { OpenAI } from 'openai'
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions'
 import { logError, logInfo, logWarn } from '../utils/logger.js'
 import { toFile } from 'openai/uploads.js'
-import { PrismaClient } from '@prisma/client'
+import { EquipmentType, FitnessGoal, FitnessLevel, Gender, PrismaClient } from '@prisma/client'
 import { withAccelerate } from '@prisma/extension-accelerate'
 import { calculateAge, formatTimeAgo } from '../utils/helpers.js'
+import prompts from '../utils/coachPrompts.js'
 
 const prisma = new PrismaClient().$extends(withAccelerate())
 
@@ -116,6 +117,7 @@ export const buildUserFitnessProfile = async (userId: string): Promise<string> =
 			height: true,
 			weight: true,
 			dateOfBirth: true,
+			gender: true,
 			preferredLengthUnit: true,
 			preferredWeightUnit: true,
 			fitnessProfile: {
@@ -142,6 +144,18 @@ export const buildUserFitnessProfile = async (userId: string): Promise<string> =
 	})
 
 	const userFitnessProfile = `--- USER FITNESS PROFILE ---
+Gender: ${userContext?.gender ?? 'Unknown'}
+Age: ${userContext?.dateOfBirth ? calculateAge(userContext.dateOfBirth) : 'Unknown'}
+Height: ${
+		userContext?.height && userContext?.preferredLengthUnit
+			? `${userContext.height} ${userContext.preferredLengthUnit}`
+			: 'Unknown'
+	}
+Weight: ${
+		userContext?.weight && userContext?.preferredWeightUnit
+			? `${userContext.weight} ${userContext.preferredWeightUnit}`
+			: 'Unknown'
+	}
 Fitness level: ${userContext?.fitnessProfile?.fitnessLevel ?? 'Unknown'}
 Fitness goal: ${userContext?.fitnessProfile?.fitnessGoal ?? 'Unknown'}
 Available equipment: ${
@@ -150,20 +164,96 @@ Available equipment: ${
 			: 'Unknown'
 	}
 Injuries: ${userContext?.fitnessProfile?.injuries ? userContext.fitnessProfile.injuries : 'Unknown'}
-Weight: ${
-		userContext?.weight && userContext?.preferredWeightUnit
-			? `${userContext.weight} ${userContext.preferredWeightUnit}`
-			: 'Unknown'
-	}
-Height: ${
-		userContext?.height && userContext?.preferredLengthUnit
-			? `${userContext.height} ${userContext.preferredLengthUnit}`
-			: 'Unknown'
-	}
-Age: ${userContext?.dateOfBirth ? calculateAge(userContext.dateOfBirth) : 'Unknown'}
 Last workout: ${workoutContext?.startTime ? formatTimeAgo(workoutContext.startTime, true) : 'No workouts recorded'}
 --- END PROFILE ---
 `
 
 	return userFitnessProfile
+}
+
+interface ExtractedProfileUpdate {
+	gender?: Gender
+	height?: {
+		value: number
+		unit: 'cm' | 'inches'
+	}
+	weight?: {
+		value: number
+		unit: 'kg' | 'lbs'
+	}
+	fitnessGoal?: FitnessGoal
+	fitnessLevel?: FitnessLevel
+	injuries?: string | null
+	availableEquipment?: EquipmentType[]
+}
+
+export const extractProfileUpdates = async (userMessage: string): Promise<Partial<ExtractedProfileUpdate>> => {
+	try {
+		const response = await openai.chat.completions.create({
+			model: 'gpt-4.1-mini',
+			temperature: 0,
+			messages: [
+				{ role: 'system', content: prompts.extractionPrompt },
+				{ role: 'user', content: userMessage },
+			],
+		})
+
+		const raw = response.choices[0].message.content?.trim() || '{}'
+		return JSON.parse(raw)
+	} catch (error) {
+		logError('Failed to extract profile updates', error as Error)
+		return {}
+	}
+}
+
+export const applyProfileUpdates = async (userId: string, updates: Partial<ExtractedProfileUpdate>) => {
+	// 1. Gender
+	if (updates.gender) {
+		await prisma.user.update({
+			where: { id: userId },
+			data: { gender: updates.gender },
+		})
+	}
+
+	// 2. Weight (normalize to kg)
+	if (updates.weight) {
+		const weightKg = updates.weight.unit === 'lbs' ? updates.weight.value * 0.453592 : updates.weight.value
+
+		await prisma.user.update({
+			where: { id: userId },
+			data: { weight: weightKg },
+		})
+	}
+
+	// 3. Height (normalize to cm)
+	if (updates.height) {
+		const heightCm = updates.height.unit === 'inches' ? updates.height.value * 2.54 : updates.height.value
+
+		await prisma.user.update({
+			where: { id: userId },
+			data: { height: heightCm },
+		})
+	}
+
+	// 4. Fitness profile (upsert)
+	if (updates.fitnessGoal || updates.fitnessLevel || updates.injuries !== undefined || updates.availableEquipment) {
+		await prisma.userFitnessProfile.upsert({
+			where: { userId },
+			update: {
+				...(updates.fitnessGoal && { fitnessGoal: updates.fitnessGoal }),
+				...(updates.fitnessLevel && { fitnessLevel: updates.fitnessLevel }),
+				...(updates.injuries !== undefined && { injuries: updates.injuries }),
+				...(updates.availableEquipment && {
+					availableEquipment: updates.availableEquipment,
+				}),
+			},
+			create: {
+				userId,
+				fitnessGoal: updates.fitnessGoal ?? null,
+				fitnessLevel: updates.fitnessLevel ?? null,
+				injuries: updates.injuries ?? null,
+				availableEquipment: updates.availableEquipment ?? [],
+			},
+		})
+	}
 }

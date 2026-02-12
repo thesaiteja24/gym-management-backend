@@ -7,7 +7,9 @@ import { ApiError } from '../utils/ApiError.js'
 import { ApiResponse } from '../utils/ApiResponse.js'
 import { logDebug, logError, logInfo, logWarn } from '../utils/logger.js'
 import {
+	applyProfileUpdates,
 	buildUserFitnessProfile,
+	extractProfileUpdates,
 	generateResponse,
 	synthesizeSpeech,
 	transcribeAudio,
@@ -161,19 +163,26 @@ export const sendMessage = asyncHandler(async (req: Request, res: Response) => {
 
 	const cacheKey = `coach:conversations:${req.user!.id}`
 	const history = (await getCache<ChatCompletionMessageParam[]>(cacheKey)) ?? []
-	const userFitnessProfile = await buildUserFitnessProfile(req.user!.id)
 
 	// Add the new user question to history
 	history.push({ role: 'user', content: question.trim() })
 
+	// Extract profile updates from the user's question
+	const extractedDetails = await extractProfileUpdates(question.trim())
+
+	// Apply profile updates if any
+	if (Object.keys(extractedDetails).length > 0) {
+		await applyProfileUpdates(userId, extractedDetails)
+	}
+
+	const userFitnessProfile = await buildUserFitnessProfile(req.user!.id)
+
 	// Build model input: system prompt + recent history (excluding any stale system prompts)
 	const filteredHistory = history.filter(msg => msg.role === 'user' || msg.role === 'assistant').slice(-12)
 
-	const messages: ChatCompletionMessageParam[] = [
-		{ role: 'system', content: prompts.systemPrompt },
-		{ role: 'system', content: userFitnessProfile },
-		...filteredHistory,
-	]
+	const combinedPrompot = `${prompts.systemPrompt}\n${userFitnessProfile}`
+
+	const messages: ChatCompletionMessageParam[] = [{ role: 'system', content: combinedPrompot }, ...filteredHistory]
 
 	let generatedText
 	try {
