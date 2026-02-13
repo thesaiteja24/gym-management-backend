@@ -14,7 +14,8 @@ export interface TokenPayload {
 // Authenticated User (attached to req.user by auth middleware)
 export interface AuthUser {
 	id: string
-	phoneE164: string
+	phoneE164: string | null
+	email: string | null
 	role: UserRole
 }
 

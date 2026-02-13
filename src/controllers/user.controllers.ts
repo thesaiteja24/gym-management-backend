@@ -1,6 +1,6 @@
 import { Request, Response } from 'express'
 import { withAccelerate } from '@prisma/extension-accelerate'
-import { EquipmentType, FitnessGoal, FitnessLevel, PrismaClient } from '@prisma/client'
+import { EquipmentType, FitnessGoal, FitnessLevel, Gender, PrismaClient } from '@prisma/client'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { ApiResponse } from '../utils/ApiResponse.js'
 import { ApiError } from '../utils/ApiError.js'
@@ -29,6 +29,7 @@ interface UpdateUserBody {
 	preferredLengthUnit?: 'cm' | 'inches'
 	height?: number
 	weight?: number
+	gender?: Gender
 }
 
 export const updateUser = asyncHandler(async (req: Request<{ id: string }, object, UpdateUserBody>, res: Response) => {
@@ -45,6 +46,7 @@ export const updateUser = asyncHandler(async (req: Request<{ id: string }, objec
 		'preferredLengthUnit',
 		'height',
 		'weight',
+		'gender',
 	]
 	const fieldsToUpdate: Partial<UpdateUserBody> = {}
 
@@ -77,6 +79,7 @@ export const updateUser = asyncHandler(async (req: Request<{ id: string }, objec
 			preferredWeightUnit: true,
 			height: true,
 			weight: true,
+			gender: true,
 			updatedAt: true,
 		},
 		where: { id: userId },

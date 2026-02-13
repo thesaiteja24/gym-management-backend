@@ -14,7 +14,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
 	try {
 		const payload = verifyAccessToken(token)
 		logDebug('Token verified', { action: 'verifyAccessToken', payload }, req)
-		req.user = { id: payload.id, phoneE164: payload.phoneE164, role: payload.role }
+		req.user = { id: payload.id, phoneE164: payload.phoneE164, email: payload.email, role: payload.role }
 		logDebug('User attached to request', { action: 'attachUser', user: req.user }, req)
 		next()
 	} catch (error) {
