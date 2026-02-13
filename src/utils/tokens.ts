@@ -4,6 +4,7 @@ import { setRefreshToken } from '../services/caching.service.js'
 import { ApiError } from './ApiError.js'
 import { logInfo, logError } from './logger.js'
 import { TokenPayload } from '../types/index.js'
+import { UserRole } from '@prisma/client'
 
 const refreshTokenSecret = process.env.REFRESH_TOKEN_SECRET!
 const refreshTokenExpiry = process.env.REFRESH_TOKEN_EXPIRY! as StringValue
@@ -12,18 +13,28 @@ const accessTokenExpiry = process.env.ACCESS_TOKEN_EXPIRY! as StringValue
 
 interface UserForToken {
 	id: string
-	phoneE164: string | null
 	role: string
+	phoneE164?: string | null
+	email?: string | null
 }
 
 export const issueRefreshToken = async (user: UserForToken): Promise<string> => {
 	// Input Validation
-	if (!user?.id || !user?.phoneE164 || !user?.role) {
+	if (!user?.id || !user?.role) {
 		throw new ApiError(400, 'Invalid user data', [])
 	}
 
+	if (!user.phoneE164 && !user.email) {
+		throw new ApiError(400, 'User must have phone or email', [])
+	}
+
 	// Business Logic
-	const payload: TokenPayload = { id: user.id, phoneE164: user.phoneE164, role: user.role as TokenPayload['role'] }
+	const payload: TokenPayload = {
+		id: user.id,
+		phoneE164: user.phoneE164 || null,
+		email: user.email || null,
+		role: user.role as TokenPayload['role'],
+	}
 	const options: SignOptions = { expiresIn: refreshTokenExpiry }
 	let refreshToken: string
 	try {
@@ -45,12 +56,21 @@ export const issueRefreshToken = async (user: UserForToken): Promise<string> => 
 
 export const issueAccessToken = async (user: UserForToken): Promise<string> => {
 	// Input Validation
-	if (!user?.id || !user?.phoneE164 || !user?.role) {
+	if (!user?.id || !user?.role) {
 		throw new ApiError(400, 'Invalid user data', [])
 	}
 
+	if (!user.phoneE164 && !user.email) {
+		throw new ApiError(400, 'User must have phone or email', [])
+	}
+
 	// Business Logic
-	const payload: TokenPayload = { id: user.id, phoneE164: user.phoneE164, role: user.role as TokenPayload['role'] }
+	const payload: TokenPayload = {
+		id: user.id,
+		phoneE164: user.phoneE164 || null,
+		email: user.email || null,
+		role: user.role as TokenPayload['role'],
+	}
 	const options: SignOptions = { expiresIn: accessTokenExpiry }
 	try {
 		const accessToken = jwt.sign(payload, accessTokenSecret, options)

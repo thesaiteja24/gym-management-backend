@@ -85,8 +85,10 @@ enum EquipmentType {
 model User {
   id                  String      @id @default(uuid(7))
   countryCode         String?
-  phone               String      @unique
+  phone               String?     @unique
   phoneE164           String?     @unique
+  email               String?     @unique
+  googleId            String?     @unique
   firstName           String?
   lastName            String?
   dateOfBirth         DateTime?   @db.Date

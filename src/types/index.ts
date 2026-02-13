@@ -6,8 +6,9 @@ export type UserRole = 'systemAdmin' | 'gymAdmin' | 'trainer' | 'member'
 // JWT Token Payload
 export interface TokenPayload {
 	id: string
-	phoneE164: string
 	role: UserRole
+	email: string | null
+	phoneE164: string | null
 }
 
 // Authenticated User (attached to req.user by auth middleware)
