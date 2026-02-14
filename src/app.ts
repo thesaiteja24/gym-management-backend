@@ -6,6 +6,7 @@ import { morganStream } from './utils/logger.js'
 import { globalErrorHandler } from './middlewares/globalErrorHandler.js'
 import { indexRoutes } from './routes/index.routes.js'
 import { mountSwagger } from './utils/swagger.js'
+import path from 'path'
 
 const app: Express = express()
 
@@ -47,6 +48,8 @@ mountSwagger(app)
 
 // routes declaration
 app.use('/api/v1', indexRoutes)
+app.use('/delete-account', express.static('public/delete-account.html'))
+app.use('/privacy-policy', express.static('public/privacy-policy.html'))
 
 // global error handler
 app.use(globalErrorHandler)
