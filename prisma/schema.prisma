@@ -101,6 +101,8 @@ model User {
   role                UserRole    @default(member)
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
+  privacyPolicyAcceptedAt DateTime?
+  privacyPolicyVersion    String?     @default("1.0")
 
   gymsOwned        Gym[]               @relation("GymOwner")
   workoutLogs      WorkoutLog[]

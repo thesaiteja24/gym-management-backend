@@ -3,6 +3,7 @@ import { withAccelerate } from '@prisma/extension-accelerate'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 import { Request, Response } from 'express'
+import { OAuth2Client } from 'google-auth-library'
 import {
 	deleteOTP,
 	deleteRefreshToken,
@@ -17,7 +18,6 @@ import { ApiResponse } from '../utils/ApiResponse.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { logDebug, logError, logInfo, logWarn } from '../utils/logger.js'
 import { issueAccessToken, issueRefreshToken, verifyRefreshToken } from '../utils/tokens.js'
-import { OAuth2Client } from 'google-auth-library'
 
 const OTP_TTL = process.env.OTP_TTL!
 const SALT_ROUNDS = Number(process.env.BCRYPT_SALT_ROUNDS)
@@ -112,10 +112,12 @@ interface VerifyOTPBody {
 	countryCode: string
 	phone: string
 	otp: string
+	privacyAccepted?: boolean
+	privacyPolicyVersion?: string
 }
 
 export const verifyOTP = asyncHandler(async (req: Request<object, object, VerifyOTPBody>, res: Response) => {
-	const { countryCode, phone, otp } = req.body
+	const { countryCode, phone, otp, privacyAccepted, privacyPolicyVersion } = req.body
 	const phoneE164 = countryCode.startsWith('+') ? `${countryCode}${phone}` : `+${countryCode}${phone}`
 	const maskedPhone = phoneE164.replace(/(\d+)\d{4}$/, '$1XXXX')
 
@@ -178,8 +180,21 @@ export const verifyOTP = asyncHandler(async (req: Request<object, object, Verify
 				updatedAt: true,
 			},
 			where: { phoneE164: phoneE164 },
-			create: { countryCode: countryCode, phone, phoneE164: phoneE164 },
-			update: {},
+			create: {
+				countryCode: countryCode,
+				phone,
+				phoneE164: phoneE164,
+				...(privacyAccepted && {
+					privacyPolicyAcceptedAt: new Date(),
+					privacyPolicyVersion: privacyPolicyVersion,
+				}),
+			},
+			update: {
+				...(privacyAccepted && {
+					privacyPolicyAcceptedAt: new Date(),
+					privacyPolicyVersion: privacyPolicyVersion,
+				}),
+			},
 		})
 		logInfo(
 			user.createdAt.getTime() === user.updatedAt.getTime() ? 'New user created' : 'User found',
@@ -221,6 +236,8 @@ export const verifyOTP = asyncHandler(async (req: Request<object, object, Verify
 					lastName: user.lastName,
 					role: user.role,
 					profilePicUrl: user.profilePicUrl,
+					privacyPolicyAcceptedAt: (user as any).privacyPolicyAcceptedAt,
+					privacyPolicyVersion: (user as any).privacyPolicyVersion,
 				},
 				accessToken,
 			},
@@ -272,6 +289,8 @@ export const refreshToken = asyncHandler(async (req: Request<object, object, Ref
 				phoneE164: true,
 				role: true,
 				profilePicUrl: true,
+				privacyPolicyAcceptedAt: true,
+				privacyPolicyVersion: true,
 			},
 		})
 		if (!user) {
@@ -307,10 +326,12 @@ export const refreshToken = asyncHandler(async (req: Request<object, object, Ref
 
 interface GoogleLoginBody {
 	idToken: string
+	privacyAccepted?: boolean
+	privacyPolicyVersion?: string
 }
 
 export const googleLogin = asyncHandler(async (req: Request<object, object, GoogleLoginBody>, res: Response) => {
-	const { idToken } = req.body
+	const { idToken, privacyAccepted, privacyPolicyVersion } = req.body
 	const googleClientId = process.env.GOOGLE_WEB_CLIENT_ID
 	const googleAndroidClientId = process.env.GOOGLE_ANDROID_CLIENT_ID
 	const googleIosClientId = process.env.GOOGLE_IOS_CLIENT_ID
@@ -356,6 +377,8 @@ export const googleLogin = asyncHandler(async (req: Request<object, object, Goog
 				profilePicUrl: true,
 				email: true,
 				googleId: true,
+				privacyPolicyAcceptedAt: true,
+				privacyPolicyVersion: true,
 			},
 		})
 
@@ -374,6 +397,31 @@ export const googleLogin = asyncHandler(async (req: Request<object, object, Goog
 						profilePicUrl: true,
 						email: true,
 						googleId: true,
+						privacyPolicyAcceptedAt: true,
+						privacyPolicyVersion: true,
+					},
+				})
+			}
+
+			// Always update privacy policy if accepted, regardless of whether googleId was just linked
+			if (privacyAccepted) {
+				user = await prisma.user.update({
+					where: { id: user.id },
+					data: {
+						privacyPolicyAcceptedAt: new Date(),
+						privacyPolicyVersion: privacyPolicyVersion,
+					},
+					select: {
+						id: true,
+						firstName: true,
+						lastName: true,
+						phoneE164: true,
+						role: true,
+						profilePicUrl: true,
+						email: true,
+						googleId: true,
+						privacyPolicyAcceptedAt: true,
+						privacyPolicyVersion: true,
 					},
 				})
 			}
@@ -387,6 +435,10 @@ export const googleLogin = asyncHandler(async (req: Request<object, object, Goog
 					lastName: family_name,
 					profilePicUrl: picture,
 					role: 'member', // Default role
+					...(privacyAccepted && {
+						privacyPolicyAcceptedAt: new Date(),
+						privacyPolicyVersion: privacyPolicyVersion,
+					}),
 				},
 				select: {
 					id: true,
@@ -397,6 +449,8 @@ export const googleLogin = asyncHandler(async (req: Request<object, object, Goog
 					profilePicUrl: true,
 					email: true,
 					googleId: true,
+					privacyPolicyAcceptedAt: true,
+					privacyPolicyVersion: true,
 				},
 			})
 			logInfo('New user created via Google', { action: 'createUser', userId: user.id }, req)
@@ -425,6 +479,8 @@ export const googleLogin = asyncHandler(async (req: Request<object, object, Goog
 					role: user.role,
 					profilePicUrl: user.profilePicUrl,
 					email: user.email,
+					privacyPolicyAcceptedAt: (user as any).privacyPolicyAcceptedAt,
+					privacyPolicyVersion: (user as any).privacyPolicyVersion,
 				},
 				accessToken,
 			},
