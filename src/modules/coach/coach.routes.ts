@@ -5,9 +5,9 @@ import {
 	startConversation,
 	streamSpeech,
 	transcribeMessage,
-} from '../controllers/coach.controllers.js'
-import { authenticate } from '../middlewares/auth.middleware.js'
-import { upload } from '../middlewares/upload.middleware.js'
+} from './coach.controller.js'
+import { authenticate } from '../../common/middlewares/auth.middleware.js'
+import { upload } from '../../common/middlewares/upload.middleware.js'
 
 const router = Router()
 

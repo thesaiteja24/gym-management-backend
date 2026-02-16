@@ -1,11 +1,12 @@
 import { Request, Response } from 'express'
 import { withAccelerate } from '@prisma/extension-accelerate'
 import { EquipmentType, FitnessGoal, FitnessLevel, Gender, PrismaClient } from '@prisma/client'
-import { asyncHandler } from '../utils/asyncHandler.js'
-import { ApiResponse } from '../utils/ApiResponse.js'
-import { ApiError } from '../utils/ApiError.js'
-import { logDebug, logWarn } from '../utils/logger.js'
-import { deleteProfilePicture, uploadProfilePicture, UploadedFile } from '../services/media.service.js'
+import { ApiError } from '../../common/utils/ApiError.js'
+import { ApiResponse } from '../../common/utils/ApiResponse.js'
+import { asyncHandler } from '../../common/utils/asyncHandler.js'
+import { logDebug, logError, logInfo, logWarn } from '../../common/utils/logger.js'
+// import { deleteFromS3, getSignedUrl, uploadToS3 } from '../../common/utils/s3.js'
+import { deleteProfilePicture, uploadProfilePicture, UploadedFile } from '../../common/services/media.service.js'
 
 const prisma = new PrismaClient().$extends(withAccelerate())
 
@@ -242,3 +243,7 @@ export const updateUserFitnessProfile = asyncHandler(
 			.json(new ApiResponse(200, updatedFitnessProfile, 'User fitness profile updated successfully '))
 	}
 )
+
+export const searchUsers = asyncHandler(async (req: Request, res: Response) => {})
+
+export const getSuggestedUsers = asyncHandler(async (req: Request, res: Response) => {})

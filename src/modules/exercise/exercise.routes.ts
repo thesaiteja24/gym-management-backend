@@ -5,13 +5,13 @@ import {
 	getAllExercises,
 	getExerciseById,
 	updateExercise,
-} from '../controllers/exercise.controllers.js'
-import { upload } from '../middlewares/upload.middleware.js'
-import { authorize } from '../middlewares/authorize.middleware.js'
-import { ROLES as roles } from '../constants/roles.js'
-import { validateResource } from '../middlewares/validate.middleware.js'
-import { createExerciseSchema, updateExerciseSchema } from '../validators/exercise.validators.js'
-import { authenticate } from '../middlewares/auth.middleware.js'
+} from './exercise.controller.js'
+import { upload } from '../../common/middlewares/upload.middleware.js'
+import { authorize } from '../../common/middlewares/authorize.middleware.js'
+import { ROLES as roles } from '../../common/constants/roles.js'
+import { validateResource } from '../../common/middlewares/validate.middleware.js'
+import { createExerciseSchema, updateExerciseSchema } from './exercise.validators.js'
+import { authenticate } from '../../common/middlewares/auth.middleware.js'
 
 const router = Router()
 

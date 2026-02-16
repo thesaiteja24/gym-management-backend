@@ -1,11 +1,11 @@
 import { OpenAI } from 'openai'
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions'
-import { logError, logInfo, logWarn } from '../utils/logger.js'
+import { logError, logInfo, logWarn } from '../../common/utils/logger.js'
 import { toFile } from 'openai/uploads.js'
 import { EquipmentType, FitnessGoal, FitnessLevel, Gender, PrismaClient } from '@prisma/client'
 import { withAccelerate } from '@prisma/extension-accelerate'
-import { calculateAge, formatTimeAgo } from '../utils/helpers.js'
-import prompts from '../utils/coachPrompts.js'
+import { calculateAge, formatTimeAgo } from '../../common/utils/helpers.js'
+import prompts from '../../common/utils/coachPrompts.js'
 
 const prisma = new PrismaClient().$extends(withAccelerate())
 

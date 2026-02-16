@@ -1,6 +1,6 @@
 import http from 'http'
 import { app } from './app.js'
-import { logError, logInfo } from './utils/logger.js'
+import { logError, logInfo } from './common/utils/logger.js'
 
 const PORT = process.env.PORT || 9999
 

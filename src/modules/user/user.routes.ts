@@ -1,15 +1,9 @@
 import { Router } from 'express'
-import {
-	deleteProfilePic,
-	getUser,
-	updateProfilePic,
-	updateUser,
-	updateUserFitnessProfile,
-} from '../controllers/user.controllers.js'
-import { upload } from '../middlewares/upload.middleware.js'
-import { authorizeSelfOrAdmin } from '../middlewares/authorize.middleware.js'
-import { validateResource } from '../middlewares/validate.middleware.js'
-import { updateFitnessProfileSchema, updateProfilePicSchema, updateUserSchema } from '../validators/user.validators.js'
+import { deleteProfilePic, getUser, updateProfilePic, updateUser, updateUserFitnessProfile } from './user.controller.js'
+import { upload } from '../../common/middlewares/upload.middleware.js'
+import { authorizeSelfOrAdmin } from '../../common/middlewares/authorize.middleware.js'
+import { validateResource } from '../../common/middlewares/validate.middleware.js'
+import { updateFitnessProfileSchema, updateProfilePicSchema, updateUserSchema } from './user.validators.js'
 
 const router = Router()
 

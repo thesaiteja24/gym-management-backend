@@ -2,10 +2,10 @@ import { Request, Response } from 'express'
 import { Readable } from 'stream'
 import { withAccelerate } from '@prisma/extension-accelerate'
 import { PrismaClient } from '@prisma/client'
-import { asyncHandler } from '../utils/asyncHandler.js'
-import { ApiError } from '../utils/ApiError.js'
-import { ApiResponse } from '../utils/ApiResponse.js'
-import { logDebug, logError, logInfo, logWarn } from '../utils/logger.js'
+import { asyncHandler } from '../../common/utils/asyncHandler.js'
+import { ApiError } from '../../common/utils/ApiError.js'
+import { ApiResponse } from '../../common/utils/ApiResponse.js'
+import { logDebug, logError, logInfo, logWarn } from '../../common/utils/logger.js'
 import {
 	applyProfileUpdates,
 	buildUserFitnessProfile,
@@ -13,12 +13,12 @@ import {
 	generateResponse,
 	synthesizeSpeech,
 	transcribeAudio,
-} from '../services/coach.service.js'
-import { getCache, setCache } from '../services/caching.service.js'
+} from './coach.service.js'
+import { getCache, setCache } from '../../common/services/caching.service.js'
 import { ChatCompletionMessageParam } from 'openai/resources'
-import prompts from '../utils/coachPrompts.js'
+import prompts from '../../common/utils/coachPrompts.js'
 import NodeCache from 'node-cache'
-import { calculateAge, formatTimeAgo } from '../utils/helpers.js'
+import { calculateAge, formatTimeAgo } from '../../common/utils/helpers.js'
 
 const prisma = new PrismaClient().$extends(withAccelerate())
 
@@ -169,6 +169,7 @@ export const sendMessage = asyncHandler(async (req: Request, res: Response) => {
 
 	// Extract profile updates from the user's question
 	const extractedDetails = await extractProfileUpdates(question.trim())
+	logDebug('Extracted profile updates', { extractedDetails }, req)
 
 	// Apply profile updates if any
 	if (Object.keys(extractedDetails).length > 0) {
@@ -183,6 +184,8 @@ export const sendMessage = asyncHandler(async (req: Request, res: Response) => {
 	const combinedPrompot = `${prompts.systemPrompt}\n${userFitnessProfile}`
 
 	const messages: ChatCompletionMessageParam[] = [{ role: 'system', content: combinedPrompot }, ...filteredHistory]
+
+	logDebug('Chats sent to Coach', { messages: messages }, req)
 
 	let generatedText
 	try {

@@ -1,12 +1,12 @@
 import { Request, Response } from 'express'
 import { withAccelerate } from '@prisma/extension-accelerate'
 import { PrismaClient } from '@prisma/client'
-import { asyncHandler } from '../utils/asyncHandler.js'
-import { ApiError } from '../utils/ApiError.js'
-import { ApiResponse } from '../utils/ApiResponse.js'
-import { deleteMediaByKey, extractS3KeyFromUrl, uploadMedia, UploadedFile } from '../services/media.service.js'
-import { logError, logInfo, logWarn } from '../utils/logger.js'
-import { titleizeString } from '../utils/helpers.js'
+import { asyncHandler } from '../../common/utils/asyncHandler.js'
+import { ApiError } from '../../common/utils/ApiError.js'
+import { ApiResponse } from '../../common/utils/ApiResponse.js'
+import { deleteMediaByKey, extractS3KeyFromUrl, uploadMedia, UploadedFile } from '../../common/services/media.service.js'
+import { logError, logInfo, logWarn } from '../../common/utils/logger.js'
+import { titleizeString } from '../../common/utils/helpers.js'
 import { randomUUID } from 'crypto'
 
 const prisma = new PrismaClient().$extends(withAccelerate())

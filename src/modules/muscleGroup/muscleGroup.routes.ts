@@ -5,13 +5,13 @@ import {
 	getAllMuscleGroups,
 	getMuscleGroupById,
 	updateMuscleGroup,
-} from '../controllers/muscleGroup.controllers.js'
-import { upload } from '../middlewares/upload.middleware.js'
-import { authorize } from '../middlewares/authorize.middleware.js'
-import { ROLES as roles } from '../constants/roles.js'
-import { validateResource } from '../middlewares/validate.middleware.js'
-import { createMuscleGroupSchema, updateMuscleGroupSchema } from '../validators/muscleGroup.validators.js'
-import { authenticate } from '../middlewares/auth.middleware.js'
+} from './muscleGroup.controller.js'
+import { upload } from '../../common/middlewares/upload.middleware.js'
+import { authorize } from '../../common/middlewares/authorize.middleware.js'
+import { ROLES as roles } from '../../common/constants/roles.js'
+import { validateResource } from '../../common/middlewares/validate.middleware.js'
+import { createMuscleGroupSchema, updateMuscleGroupSchema } from './muscleGroup.validators.js'
+import { authenticate } from '../../common/middlewares/auth.middleware.js'
 
 const router = Router()
 

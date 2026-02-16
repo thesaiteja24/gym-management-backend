@@ -11,13 +11,13 @@ import {
 	getRefreshToken,
 	resendOTP,
 	setOTP,
-} from '../services/caching.service.js'
-import { createMessage } from '../services/messaging.service.js'
-import { ApiError } from '../utils/ApiError.js'
-import { ApiResponse } from '../utils/ApiResponse.js'
-import { asyncHandler } from '../utils/asyncHandler.js'
-import { logDebug, logError, logInfo, logWarn } from '../utils/logger.js'
-import { issueAccessToken, issueRefreshToken, verifyRefreshToken } from '../utils/tokens.js'
+} from '../../common/services/caching.service.js'
+import { createMessage } from '../../common/services/messaging.service.js'
+import { ApiError } from '../../common/utils/ApiError.js'
+import { ApiResponse } from '../../common/utils/ApiResponse.js'
+import { asyncHandler } from '../../common/utils/asyncHandler.js'
+import { logDebug, logError, logInfo, logWarn } from '../../common/utils/logger.js'
+import { issueAccessToken, issueRefreshToken, verifyRefreshToken } from '../../common/utils/tokens.js'
 
 const OTP_TTL = process.env.OTP_TTL!
 const SALT_ROUNDS = Number(process.env.BCRYPT_SALT_ROUNDS)

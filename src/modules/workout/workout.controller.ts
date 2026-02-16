@@ -1,11 +1,11 @@
 import { ExerciseGroupType, PrismaClient } from '@prisma/client'
 import { withAccelerate } from '@prisma/extension-accelerate'
 import { Request, Response } from 'express'
-import { ApiError } from '../utils/ApiError.js'
-import { ApiResponse } from '../utils/ApiResponse.js'
-import { asyncHandler } from '../utils/asyncHandler.js'
-import { logError, logInfo, logWarn } from '../utils/logger.js'
-import { isValidCompletedSet, WorkoutSet } from '../utils/workoutValidation.js'
+import { ApiError } from '../../common/utils/ApiError.js'
+import { ApiResponse } from '../../common/utils/ApiResponse.js'
+import { asyncHandler } from '../../common/utils/asyncHandler.js'
+import { logError, logInfo, logWarn } from '../../common/utils/logger.js'
+import { isValidCompletedSet, WorkoutSet } from '../../common/utils/workoutValidation.js'
 
 const prisma = new PrismaClient().$extends(withAccelerate())
 

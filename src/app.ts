@@ -2,11 +2,10 @@
 import express, { Express, Request } from 'express'
 import cors from 'cors'
 import morgan from 'morgan'
-import { morganStream } from './utils/logger.js'
-import { globalErrorHandler } from './middlewares/globalErrorHandler.js'
+import { morganStream } from './common/utils/logger.js'
+import { globalErrorHandler } from './common/middlewares/globalErrorHandler.js'
 import { indexRoutes } from './routes/index.routes.js'
-import { mountSwagger } from './utils/swagger.js'
-import path from 'path'
+import { mountSwagger } from './common/utils/swagger.js'
 
 const app: Express = express()
 

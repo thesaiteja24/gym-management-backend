@@ -1,14 +1,19 @@
 import { Request, Response } from 'express'
 import { withAccelerate } from '@prisma/extension-accelerate'
 import { PrismaClient, ExerciseType, Exercise, PrismaPromise } from '@prisma/client'
-import { asyncHandler } from '../utils/asyncHandler.js'
-import { ApiError } from '../utils/ApiError.js'
-import { ApiResponse } from '../utils/ApiResponse.js'
-import { deleteMediaByKey, extractS3KeyFromUrl, uploadExerciseVideo, UploadedFile } from '../services/media.service.js'
-import { logError, logInfo, logWarn } from '../utils/logger.js'
-import { titleizeString } from '../utils/helpers.js'
+import { asyncHandler } from '../../common/utils/asyncHandler.js'
+import { ApiError } from '../../common/utils/ApiError.js'
+import { ApiResponse } from '../../common/utils/ApiResponse.js'
+import {
+	deleteMediaByKey,
+	extractS3KeyFromUrl,
+	uploadExerciseVideo,
+	UploadedFile,
+} from '../../common/services/media.service.js'
+import { logError, logInfo, logWarn } from '../../common/utils/logger.js'
+import { titleizeString } from '../../common/utils/helpers.js'
 import { randomUUID } from 'crypto'
-import { deleteCache, getCache, setCache } from '../services/caching.service.js'
+import { deleteCache, getCache, setCache } from '../../common/services/caching.service.js'
 
 const prisma = new PrismaClient().$extends(withAccelerate())
 

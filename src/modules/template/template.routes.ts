@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { validateResource } from '../middlewares/validate.middleware.js'
+import { validateResource } from '../../common/middlewares/validate.middleware.js'
 import {
 	createTemplate,
 	getAllTemplates,
@@ -7,8 +7,8 @@ import {
 	deleteTemplate,
 	updateTemplate,
 	getTemplateByShareId,
-} from '../controllers/template.controllers.js'
-import { createTemplateSchema, updateTemplateSchema } from '../validators/template.validators.js'
+} from './template.controller.js'
+import { createTemplateSchema, updateTemplateSchema } from './template.validators.js'
 
 const router = Router()
 

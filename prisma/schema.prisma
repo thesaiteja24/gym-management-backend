@@ -113,6 +113,8 @@ model User {
 
   @@index([countryCode])
   @@index([role])
+  @@index([firstName])
+  @@index([lastName])
 }
 
 model UserFitnessProfile {
