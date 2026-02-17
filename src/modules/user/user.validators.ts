@@ -33,3 +33,12 @@ export const updateFitnessProfileSchema = z.object({
 		availableEquipment: z.array(z.enum(EquipmentType)).nullable().optional(),
 	}),
 })
+
+export const searchUsersSchema = z.object({
+	query: z
+		.string('Search query is required')
+		.trim()
+		.refine(val => val.length >= 3, {
+			message: 'Search query must contain at least 3 characters',
+		}),
+})

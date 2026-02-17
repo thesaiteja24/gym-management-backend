@@ -244,6 +244,42 @@ export const updateUserFitnessProfile = asyncHandler(
 	}
 )
 
-export const searchUsers = asyncHandler(async (req: Request, res: Response) => {})
+export const searchUsers = asyncHandler(async (req: Request, res: Response) => {
+	const query = req.query.query as string
+
+	if (!query) {
+		logWarn('No query provided', { action: 'searchUsers' }, req)
+		throw new ApiError(400, 'No query provided')
+	}
+	logDebug('Query', { action: 'searchUsers', query }, req)
+
+	const results = await prisma.user.findMany({
+		where: {
+			OR: [
+				{
+					firstName: {
+						startsWith: query,
+						mode: 'insensitive',
+					},
+				},
+				{
+					lastName: {
+						startsWith: query,
+						mode: 'insensitive',
+					},
+				},
+			],
+		},
+		take: 20,
+		select: {
+			id: true,
+			profilePicUrl: true,
+			firstName: true,
+			lastName: true,
+		},
+	})
+
+	return res.status(200).json(new ApiResponse(200, results, 'Users fetched successfully'))
+})
 
 export const getSuggestedUsers = asyncHandler(async (req: Request, res: Response) => {})
