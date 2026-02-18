@@ -282,4 +282,83 @@ export const searchUsers = asyncHandler(async (req: Request, res: Response) => {
 	return res.status(200).json(new ApiResponse(200, results, 'Users fetched successfully'))
 })
 
-export const getSuggestedUsers = asyncHandler(async (req: Request, res: Response) => {})
+export const getSuggestedUsers = asyncHandler(async (req: Request, res: Response) => {
+	const result = await prisma.user.findMany({
+		select: {
+			id: true,
+			profilePicUrl: true,
+			firstName: true,
+			lastName: true,
+		},
+	})
+
+	return res.status(200).json(new ApiResponse(200, result, 'Users fetched successfully'))
+})
+
+export const followUser = asyncHandler(
+	async (req: Request<object, object, { currentUserId: string; targetUserId: string }>, res: Response) => {
+		const currentUserId = req.body.currentUserId
+		const targetUserId = req.body.targetUserId
+		if (req.user?.id === targetUserId) {
+			logWarn('You cannot follow yourself', { action: 'followUser' }, req)
+			throw new ApiError(400, 'You cannot follow yourself')
+		}
+
+		const result = await prisma.$transaction([
+			prisma.follow.create({
+				data: {
+					followerId: currentUserId,
+					followingId: targetUserId,
+				},
+			}),
+			prisma.user.update({
+				where: { id: currentUserId },
+				data: {
+					followingCount: { increment: 1 },
+				},
+			}),
+			prisma.user.update({
+				where: { id: targetUserId },
+				data: { followersCount: { increment: 1 } },
+			}),
+		])
+
+		logDebug('Following', { result }, req)
+		return res.status(200).json(new ApiResponse(200, result, 'Your now following'))
+	}
+)
+
+export const unFollowUser = asyncHandler(
+	async (req: Request<object, object, { currentUserId: string; targetUserId: string }>, res: Response) => {
+		const currentUserId = req.body.currentUserId
+		const targetUserId = req.body.targetUserId
+		if (req.user?.id === targetUserId) {
+			logWarn('You cannot unfollow yourself', { action: 'unfollowUser' }, req)
+			throw new ApiError(400, 'You cannot unfollow yourself')
+		}
+
+		const result = await prisma.$transaction([
+			prisma.follow.delete({
+				where: {
+					followerId_followingId: {
+						followerId: currentUserId,
+						followingId: targetUserId,
+					},
+				},
+			}),
+			prisma.user.update({
+				where: { id: currentUserId },
+				data: {
+					followingCount: { decrement: 1 },
+				},
+			}),
+			prisma.user.update({
+				where: { id: targetUserId },
+				data: { followersCount: { decrement: 1 } },
+			}),
+		])
+
+		logDebug('Following', { result }, req)
+		return res.status(200).json(new ApiResponse(200, result, 'Your have unfollowed'))
+	}
+)

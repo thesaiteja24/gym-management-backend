@@ -35,10 +35,7 @@ export const updateFitnessProfileSchema = z.object({
 })
 
 export const searchUsersSchema = z.object({
-	query: z
-		.string('Search query is required')
-		.trim()
-		.refine(val => val.length >= 3, {
-			message: 'Search query must contain at least 3 characters',
-		}),
+	query: z.object({
+		query: z.string().min(3, 'Search query must be at least 3 characters long'),
+	}),
 })

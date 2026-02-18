@@ -83,27 +83,31 @@ enum EquipmentType {
  */
 
 model User {
-  id                  String      @id @default(uuid(7))
-  countryCode         String?
-  phone               String?     @unique
-  phoneE164           String?     @unique
-  email               String?     @unique
-  googleId            String?     @unique
-  firstName           String?
-  lastName            String?
-  dateOfBirth         DateTime?   @db.Date
-  gender              Gender?
-  preferredWeightUnit WeightUnits @default(kg)
-  preferredLengthUnit LengthUnits @default(cm)
-  height              Decimal?    @db.Decimal(6, 2)
-  weight              Decimal?    @db.Decimal(6, 2)
-  profilePicUrl       String?
-  role                UserRole    @default(member)
-  createdAt           DateTime    @default(now())
-  updatedAt           DateTime    @updatedAt
+  id                      String      @id @default(uuid(7))
+  countryCode             String?
+  phone                   String?     @unique
+  phoneE164               String?     @unique
+  email                   String?     @unique
+  googleId                String?     @unique
+  firstName               String?
+  lastName                String?
+  dateOfBirth             DateTime?   @db.Date
+  gender                  Gender?
+  preferredWeightUnit     WeightUnits @default(kg)
+  preferredLengthUnit     LengthUnits @default(cm)
+  height                  Decimal?    @db.Decimal(6, 2)
+  weight                  Decimal?    @db.Decimal(6, 2)
+  profilePicUrl           String?
+  role                    UserRole    @default(member)
   privacyPolicyAcceptedAt DateTime?
   privacyPolicyVersion    String?     @default("1.0")
+  followersCount          Int         @default(0)
+  followingCount          Int         @default(0)
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
 
+  followers        Follow[]            @relation("UserFollowers")
+  following        Follow[]            @relation("UserFollowing")
   gymsOwned        Gym[]               @relation("GymOwner")
   workoutLogs      WorkoutLog[]
   workoutTemplates WorkoutTemplate[]
@@ -416,4 +420,17 @@ model WorkoutTemplateSet {
   note            String?
 
   @@index([templateExerciseId, setIndex])
+}
+
+model Follow {
+  followerId  String
+  followingId String
+
+  follwer   User @relation("UserFollowing", fields: [followerId], references: [id], onDelete: Cascade)
+  following User @relation("UserFollowers", fields: [followingId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@id([followerId, followingId])
+  @@index([followingId])
 }

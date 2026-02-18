@@ -1,6 +1,8 @@
 import { Router } from 'express'
 import {
 	deleteProfilePic,
+	followUser,
+	getSuggestedUsers,
 	getUser,
 	searchUsers,
 	updateProfilePic,
@@ -19,13 +21,13 @@ import {
 
 const router = Router()
 
-// search users
-router.route('/search').get(validateResource(searchUsersSchema), authorizeSelfOrAdmin(), searchUsers)
-// get user data
-router.route('/:id').get(getUser)
-// update user data
-router.route('/:id').patch(validateResource(updateUserSchema), authorizeSelfOrAdmin(), updateUser)
-// update profile picture
+router.get('/search', validateResource(searchUsersSchema), authorizeSelfOrAdmin(), searchUsers)
+router.get('/suggestions', authorizeSelfOrAdmin(), getSuggestedUsers)
+
+// single user
+router.route('/:id').get(getUser).patch(validateResource(updateUserSchema), authorizeSelfOrAdmin(), updateUser)
+
+// profile picture
 router
 	.route('/:id/profile-picture')
 	.patch(
@@ -34,13 +36,20 @@ router
 		authorizeSelfOrAdmin(),
 		updateProfilePic
 	)
-// delete profile picture
-router
-	.route('/:id/profile-picture')
 	.delete(validateResource(updateProfilePicSchema), authorizeSelfOrAdmin(), deleteProfilePic)
-// update fitness profile
-router
-	.route('/:id/fitness-profile')
-	.patch(validateResource(updateFitnessProfileSchema), authorizeSelfOrAdmin(), updateUserFitnessProfile)
+
+// fitness profile
+router.patch(
+	'/:id/fitness-profile',
+	validateResource(updateFitnessProfileSchema),
+	authorizeSelfOrAdmin(),
+	updateUserFitnessProfile
+)
+
+// follow system
+router.route('/:id/follow').post(authorizeSelfOrAdmin(), followUser).delete(authorizeSelfOrAdmin())
+
+router.get('/:id/followers', authorizeSelfOrAdmin())
+router.get('/:id/following', authorizeSelfOrAdmin())
 
 export const userRoutes = router
