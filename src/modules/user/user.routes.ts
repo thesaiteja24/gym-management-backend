@@ -5,6 +5,7 @@ import {
 	getSuggestedUsers,
 	getUser,
 	searchUsers,
+	unFollowUser,
 	updateProfilePic,
 	updateUser,
 	updateUserFitnessProfile,
@@ -13,6 +14,7 @@ import { upload } from '../../common/middlewares/upload.middleware.js'
 import { authorizeSelfOrAdmin } from '../../common/middlewares/authorize.middleware.js'
 import { validateResource } from '../../common/middlewares/validate.middleware.js'
 import {
+	followUserSchema,
 	searchUsersSchema,
 	updateFitnessProfileSchema,
 	updateProfilePicSchema,
@@ -47,7 +49,10 @@ router.patch(
 )
 
 // follow system
-router.route('/:id/follow').post(authorizeSelfOrAdmin(), followUser).delete(authorizeSelfOrAdmin())
+router
+	.route('/:id/follow')
+	.post(authorizeSelfOrAdmin(), validateResource(followUserSchema), followUser)
+	.delete(authorizeSelfOrAdmin(), validateResource(followUserSchema), unFollowUser)
 
 router.get('/:id/followers', authorizeSelfOrAdmin())
 router.get('/:id/following', authorizeSelfOrAdmin())
