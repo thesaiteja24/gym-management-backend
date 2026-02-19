@@ -1,10 +1,10 @@
-import { ExerciseGroupType, PrismaClient } from '@prisma/client'
+import { ExerciseGroupType, PrismaClient, WorkoutLogVisibility } from '@prisma/client'
 import { withAccelerate } from '@prisma/extension-accelerate'
 import { Request, Response } from 'express'
 import { ApiError } from '../../common/utils/ApiError.js'
 import { ApiResponse } from '../../common/utils/ApiResponse.js'
 import { asyncHandler } from '../../common/utils/asyncHandler.js'
-import { logError, logInfo, logWarn } from '../../common/utils/logger.js'
+import { logDebug, logError, logInfo, logWarn } from '../../common/utils/logger.js'
 import { isValidCompletedSet, WorkoutSet } from '../../common/utils/workoutValidation.js'
 
 const prisma = new PrismaClient().$extends(withAccelerate())
@@ -30,12 +30,13 @@ interface CreateWorkoutBody {
 	endTime: string
 	exercises: ExerciseInput[]
 	exerciseGroups?: ExerciseGroupInput[]
+	visibility?: WorkoutLogVisibility
 }
 
 interface UpdateWorkoutBody extends CreateWorkoutBody {}
 
 export const createWorkout = asyncHandler(async (req: Request<object, object, CreateWorkoutBody>, res: Response) => {
-	const { clientId, title, startTime, endTime, exercises, exerciseGroups } = req.body
+	const { clientId, title, startTime, endTime, exercises, exerciseGroups, visibility } = req.body
 
 	/* ───── Idempotency Check ───── */
 	if (clientId) {
@@ -71,6 +72,7 @@ export const createWorkout = asyncHandler(async (req: Request<object, object, Cr
 					title,
 					startTime: new Date(startTime),
 					endTime: new Date(endTime),
+					visibility: visibility,
 				},
 			})
 
@@ -297,8 +299,10 @@ const workoutSelect = {
 	},
 	user: {
 		select: {
+			id: true,
 			firstName: true,
 			lastName: true,
+			profilePicUrl: true,
 		},
 	},
 } as const
@@ -335,6 +339,48 @@ export const getAllWorkouts = asyncHandler(async (req: Request, res: Response) =
 		{
 			action: 'getWorkouts',
 			userId,
+			workoutCount: workouts.length,
+		},
+		req
+	)
+
+	return res.json(new ApiResponse(200, workouts, 'Workouts fetched successfully'))
+})
+
+export const getDiscoverWorkouts = asyncHandler(async (req: Request, res: Response) => {
+	const userId = req.user!.id
+
+	/* ───── Query ───── */
+	let workouts
+
+	try {
+		workouts = await prisma.workoutLog.findMany({
+			where: {
+				userId: {
+					not: userId,
+				},
+				deletedAt: null,
+				visibility: 'public',
+			},
+			orderBy: [{ userId: 'asc' }, { createdAt: 'desc' }],
+			distinct: ['userId'],
+			select: workoutSelect,
+		})
+	} catch (error) {
+		const err = error as Error
+		logError('Failed to fetch workouts', err, { action: 'getWorkouts', error: err.message }, req)
+		throw new ApiError(500, 'Failed to fetch workouts')
+	}
+
+	if (!workouts || workouts.length === 0) {
+		logInfo('No workouts found for user', { action: 'getWorkouts' }, req)
+		return res.json(new ApiResponse(200, [], 'No workouts found'))
+	}
+
+	logInfo(
+		'Workouts fetched',
+		{
+			action: 'getWorkouts',
 			workoutCount: workouts.length,
 		},
 		req
@@ -435,7 +481,7 @@ export const updateWorkout = asyncHandler(
 	async (req: Request<{ id: string }, object, UpdateWorkoutBody>, res: Response) => {
 		const workoutId = req.params.id
 		const userId = req.user!.id
-		const { title, startTime, endTime, exercises, exerciseGroups } = req.body
+		const { title, startTime, endTime, exercises, exerciseGroups, visibility } = req.body
 
 		/* ───────────────── Prune Counters ───────────────── */
 
@@ -468,7 +514,20 @@ export const updateWorkout = asyncHandler(
 					throw new ApiError(404, 'Workout not found (deleted)')
 				}
 
-				if (!existingWorkout || existingWorkout.userId !== userId) {
+				if (existingWorkout?.userId !== userId) {
+					logWarn(
+						'Your unauthorized to update this workout',
+						{
+							action: 'updateWorkout',
+							workoutId,
+							userId,
+						},
+						req
+					)
+					throw new ApiError(403, 'Unauthorized to update this workout')
+				}
+
+				if (!existingWorkout) {
 					logWarn(
 						'Workout not found or does not belong to user',
 						{
@@ -501,6 +560,7 @@ export const updateWorkout = asyncHandler(
 						endTime: new Date(endTime),
 						isEdited: true,
 						editedAt: new Date(),
+						visibility,
 					},
 				})
 

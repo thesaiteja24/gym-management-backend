@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { ExerciseGroupType, SetType } from '@prisma/client'
+import { ExerciseGroupType, SetType, WorkoutLogVisibility } from '@prisma/client'
 
 const workoutSetSchema = z.object({
 	setIndex: z.number(),
@@ -31,6 +31,7 @@ const createWorkoutBody = z.object({
 	title: z.string().optional(),
 	startTime: z.string().datetime(),
 	endTime: z.string().datetime(),
+	visibility: z.enum(WorkoutLogVisibility).default(WorkoutLogVisibility.public),
 	exercises: z.array(exerciseInputSchema).min(1, 'At least one exercise is required'),
 	exerciseGroups: z.array(exerciseGroupInputSchema).optional(),
 })

@@ -78,6 +78,11 @@ enum EquipmentType {
   other
 }
 
+enum WorkoutLogVisibility {
+  public
+  private
+}
+
 /**
  * ───────────────── USER ─────────────────
  */
@@ -158,18 +163,19 @@ model Gym {
  */
 
 model WorkoutLog {
-  clientId  String?   @unique
-  id        String    @id @default(uuid(7))
-  userId    String
-  user      User      @relation(fields: [userId], references: [id])
-  title     String?
-  startTime DateTime?
-  endTime   DateTime?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  isEdited  Boolean   @default(false)
-  editedAt  DateTime?
-  deletedAt DateTime?
+  clientId   String?   @unique
+  id         String    @id @default(uuid(7))
+  userId     String
+  user       User      @relation(fields: [userId], references: [id])
+  title      String?
+  startTime  DateTime?
+  endTime    DateTime?
+  visibility WorkoutLogVisibility @default(public)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  isEdited   Boolean   @default(false)
+  editedAt   DateTime?
+  deletedAt  DateTime?
 
   exercises      WorkoutLogExercise[]
   exerciseGroups WorkoutLogExerciseGroup[]
