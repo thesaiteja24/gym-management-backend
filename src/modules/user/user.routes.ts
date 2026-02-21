@@ -4,6 +4,8 @@ import {
 	followUser,
 	getSuggestedUsers,
 	getUser,
+	getUserFollowers,
+	getUserFollowing,
 	searchUsers,
 	unFollowUser,
 	updateProfilePic,
@@ -11,7 +13,7 @@ import {
 	updateUserFitnessProfile,
 } from './user.controller.js'
 import { upload } from '../../common/middlewares/upload.middleware.js'
-import { authorizeSelfOrAdmin } from '../../common/middlewares/authorize.middleware.js'
+import { authorize, authorizeSelfOrAdmin } from '../../common/middlewares/authorize.middleware.js'
 import { validateResource } from '../../common/middlewares/validate.middleware.js'
 import {
 	followUserSchema,
@@ -23,8 +25,13 @@ import {
 
 const router = Router()
 
-router.get('/search', validateResource(searchUsersSchema), authorizeSelfOrAdmin(), searchUsers)
-router.get('/suggestions', authorizeSelfOrAdmin(), getSuggestedUsers)
+router.get(
+	'/search',
+	validateResource(searchUsersSchema),
+	authorize('systemAdmin', 'gymAdmin', 'trainer', 'member'),
+	searchUsers
+)
+router.get('/suggestions', authorize('systemAdmin', 'gymAdmin', 'trainer', 'member'), getSuggestedUsers)
 
 // single user
 router.route('/:id').get(getUser).patch(validateResource(updateUserSchema), authorizeSelfOrAdmin(), updateUser)
@@ -51,10 +58,10 @@ router.patch(
 // follow system
 router
 	.route('/:id/follow')
-	.post(authorizeSelfOrAdmin(), validateResource(followUserSchema), followUser)
-	.delete(authorizeSelfOrAdmin(), validateResource(followUserSchema), unFollowUser)
+	.post(authorize('systemAdmin', 'gymAdmin', 'trainer', 'member'), validateResource(followUserSchema), followUser)
+	.delete(authorize('systemAdmin', 'gymAdmin', 'trainer', 'member'), validateResource(followUserSchema), unFollowUser)
 
-router.get('/:id/followers', authorizeSelfOrAdmin())
-router.get('/:id/following', authorizeSelfOrAdmin())
+router.get('/:id/followers', authorize('systemAdmin', 'gymAdmin', 'trainer', 'member'), getUserFollowers)
+router.get('/:id/following', authorize('systemAdmin', 'gymAdmin', 'trainer', 'member'), getUserFollowing)
 
 export const userRoutes = router
