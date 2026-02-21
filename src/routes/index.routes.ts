@@ -9,6 +9,8 @@ import { exerciseRoutes } from '../modules/exercise/exercise.routes.js'
 import { workoutRoutes } from '../modules/workout/workout.routes.js'
 import { templateRoutes } from '../modules/template/template.routes.js'
 import { coachRoutes } from '../modules/coach/coach.routes.js'
+import { discoverRoutes } from '../modules/discover/discover.routes.js'
+import { engagementRoutes } from '../modules/engagement/engagement.routes.js'
 
 const router = Router()
 
@@ -21,5 +23,7 @@ router.use('/exercises', exerciseRoutes)
 router.use('/workouts', authenticate, workoutRoutes)
 router.use('/templates', authenticate, templateRoutes)
 router.use('/coach', coachRoutes)
+router.use('/discover', discoverRoutes)
+router.use('/engagement', engagementRoutes)
 
 export const indexRoutes = router

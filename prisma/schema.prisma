@@ -111,14 +111,17 @@ model User {
   createdAt               DateTime    @default(now())
   updatedAt               DateTime    @updatedAt
 
-  followers        Follow[]            @relation("UserFollowers")
-  following        Follow[]            @relation("UserFollowing")
-  gymsOwned        Gym[]               @relation("GymOwner")
-  workoutLogs      WorkoutLog[]
-  workoutTemplates WorkoutTemplate[]
-  sessions         Session[]
-  memberships      Membership[]
-  fitnessProfile   UserFitnessProfile?
+  followers           Follow[]             @relation("UserFollowers")
+  following           Follow[]             @relation("UserFollowing")
+  gymsOwned           Gym[]                @relation("GymOwner")
+  workoutLogs         WorkoutLog[]
+  workoutTemplates    WorkoutTemplate[]
+  sessions            Session[]
+  memberships         Membership[]
+  fitnessProfile      UserFitnessProfile?
+  workoutLikes        WorkoutLike[]
+  workoutComments     WorkoutComment[]
+  workoutCommentLikes WorkoutCommentLike[]
 
   @@index([countryCode])
   @@index([role])
@@ -163,22 +166,26 @@ model Gym {
  */
 
 model WorkoutLog {
-  clientId   String?   @unique
-  id         String    @id @default(uuid(7))
-  userId     String
-  user       User      @relation(fields: [userId], references: [id])
-  title      String?
-  startTime  DateTime?
-  endTime    DateTime?
-  visibility WorkoutLogVisibility @default(public)
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-  isEdited   Boolean   @default(false)
-  editedAt   DateTime?
-  deletedAt  DateTime?
+  clientId      String?              @unique
+  id            String               @id @default(uuid(7))
+  userId        String
+  user          User                 @relation(fields: [userId], references: [id])
+  title         String?
+  startTime     DateTime?
+  endTime       DateTime?
+  likesCount    Int                  @default(0)
+  commentsCount Int                  @default(0)
+  visibility    WorkoutLogVisibility @default(public)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  isEdited      Boolean              @default(false)
+  editedAt      DateTime?
+  deletedAt     DateTime?
 
-  exercises      WorkoutLogExercise[]
-  exerciseGroups WorkoutLogExerciseGroup[]
+  exercises       WorkoutLogExercise[]
+  exerciseGroups  WorkoutLogExerciseGroup[]
+  workoutComments WorkoutComment[]
+  workoutLikes    WorkoutLike[]
 
   @@index([userId, createdAt])
 }
@@ -432,11 +439,64 @@ model Follow {
   followerId  String
   followingId String
 
-  follwer   User @relation("UserFollowing", fields: [followerId], references: [id], onDelete: Cascade)
+  follower  User @relation("UserFollowing", fields: [followerId], references: [id], onDelete: Cascade)
   following User @relation("UserFollowers", fields: [followingId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
 
   @@id([followerId, followingId])
   @@index([followingId])
+}
+
+model WorkoutLike {
+  userId    String
+  workoutId String
+
+  user    User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workout WorkoutLog @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@id([userId, workoutId])
+  @@index([workoutId])
+}
+
+model WorkoutComment {
+  id        String @id @default(uuid(7))
+  workoutId String
+  userId    String
+
+  workout WorkoutLog @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  user    User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  content String
+
+  parentId String?
+  parent   WorkoutComment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies  WorkoutComment[] @relation("CommentReplies")
+
+  likesCount Int @default(0)
+
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  deletedAt           DateTime?
+  workoutCommentLikes WorkoutCommentLike[]
+
+  @@index([workoutId, parentId])
+  @@index([workoutId, createdAt])
+  @@index([parentId])
+  @@index([userId])
+}
+
+model WorkoutCommentLike {
+  userId    String
+  commentId String
+
+  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comment WorkoutComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@id([userId, commentId])
+  @@index([commentId])
 }
