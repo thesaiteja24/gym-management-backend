@@ -1,8 +1,17 @@
 import { Router } from 'express'
-import { followUser, getUserFollowers, getUserFollowing, unFollowUser } from './engagement.controller.js'
+import {
+	createComment,
+	followUser,
+	getComments,
+	getReplies,
+	getUserFollowers,
+	getUserFollowing,
+	unFollowUser,
+} from './engagement.controller.js'
 import { authorize } from '../../common/middlewares/authorize.middleware.js'
 import { validateResource } from '../../common/middlewares/validate.middleware.js'
 import { followUserSchema } from '../user/user.validators.js'
+import { createCommentSchema, getCommentsSchema, getRepliesSchema } from './engagement.validators.js'
 
 const router = Router()
 
@@ -13,5 +22,11 @@ router
 
 router.get('/:id/followers', authorize('systemAdmin', 'gymAdmin', 'trainer', 'member'), getUserFollowers)
 router.get('/:id/following', authorize('systemAdmin', 'gymAdmin', 'trainer', 'member'), getUserFollowing)
+
+router
+	.route('/:id/comments')
+	.post(validateResource(createCommentSchema), createComment)
+	.get(validateResource(getCommentsSchema), getComments)
+router.get('/:id/replies', validateResource(getRepliesSchema), getReplies)
 
 export const engagementRoutes = router

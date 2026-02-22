@@ -22,8 +22,8 @@ router.use('/muscle-groups', muscleGroupRoutes)
 router.use('/exercises', exerciseRoutes)
 router.use('/workouts', authenticate, workoutRoutes)
 router.use('/templates', authenticate, templateRoutes)
-router.use('/coach', coachRoutes)
-router.use('/discover', discoverRoutes)
-router.use('/engagement', engagementRoutes)
+router.use('/coach', authenticate, coachRoutes)
+router.use('/discover', authenticate, discoverRoutes)
+router.use('/engagement', authenticate, engagementRoutes)
 
 export const indexRoutes = router
