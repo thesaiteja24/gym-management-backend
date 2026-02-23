@@ -27,6 +27,7 @@ export const getCommentsSchema = z.object({
 		.object({
 			limit: z.string().regex(/^\d+$/, 'Limit must be a number').optional(),
 			cursor: z.uuid('Invalid Cursor ID').optional(),
+			isReply: z.string().optional(),
 		})
 		.strict(),
 })

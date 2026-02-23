@@ -268,6 +268,8 @@ const workoutSelect = {
 	updatedAt: true,
 	isEdited: true,
 	editedAt: true,
+	likesCount: true,
+	commentsCount: true,
 	exerciseGroups: {
 		orderBy: { groupIndex: 'asc' },
 		select: {

@@ -1,6 +1,6 @@
-import { Request, Response } from 'express'
-import { withAccelerate } from '@prisma/extension-accelerate'
 import { PrismaClient } from '@prisma/client'
+import { withAccelerate } from '@prisma/extension-accelerate'
+import { Request, Response } from 'express'
 import { ApiError } from '../../common/utils/ApiError.js'
 import { ApiResponse } from '../../common/utils/ApiResponse.js'
 import { asyncHandler } from '../../common/utils/asyncHandler.js'
@@ -225,12 +225,202 @@ export const createComment = asyncHandler(
 			}
 		}
 
-		const comment = await prisma.workoutComment.create({
+		const comment = await prisma.$transaction([
+			prisma.workoutComment.create({
+				data: {
+					workoutId,
+					userId: userId!,
+					content,
+					parentId: parentId ?? null,
+				},
+				select: {
+					id: true,
+					workoutId: true,
+					userId: true,
+					content: true,
+					parentId: true,
+					likesCount: true,
+					createdAt: true,
+					updatedAt: true,
+					deletedAt: true,
+					user: {
+						select: {
+							id: true,
+							firstName: true,
+							lastName: true,
+							profilePicUrl: true,
+						},
+					},
+					_count: {
+						select: { replies: true }, // Get the total count of direct replies without loading them
+					},
+				},
+			}),
+			prisma.workoutLog.update({
+				where: { id: workoutId },
+				data: {
+					commentsCount: { increment: 1 },
+				},
+			}),
+		])
+
+		logInfo('Comment created successfully', { action: 'createComment', workoutId, parentId }, req)
+		return res.status(200).json(new ApiResponse(200, comment[0], 'Comment created successfully'))
+	}
+)
+
+export const getComments = asyncHandler(
+	async (
+		req: Request<{ id: string }, object, object, { isReply?: string; limit?: string; cursor?: string }>,
+		res: Response
+	) => {
+		const id = req.params.id
+		const isRepliesRoute = req.query.isReply === 'true'
+		const limit = parseInt((req.query.limit as string) || (isRepliesRoute ? '10' : '20'), 10)
+		const cursor = req.query.cursor as string
+
+		const whereClause = isRepliesRoute ? { parentId: id } : { workoutId: id, parentId: null }
+		const orderByClause = isRepliesRoute ? { createdAt: 'asc' as const } : { createdAt: 'desc' as const }
+
+		const items = await prisma.workoutComment.findMany({
+			where: whereClause,
+			take: limit + 1, // Fetch an extra item to check if there's a next page
+			cursor: cursor ? { id: cursor } : undefined,
+			orderBy: orderByClause,
+			select: {
+				id: true,
+				workoutId: true,
+				userId: true,
+				content: true,
+				parentId: true,
+				likesCount: true,
+				createdAt: true,
+				updatedAt: true,
+				deletedAt: true,
+				user: {
+					select: {
+						id: true,
+						firstName: true,
+						lastName: true,
+						profilePicUrl: true,
+					},
+				},
+				_count: {
+					select: { replies: true },
+				},
+				replies: isRepliesRoute
+					? {
+							take: 3,
+							orderBy: { createdAt: 'asc' },
+							select: {
+								id: true,
+								workoutId: true,
+								userId: true,
+								content: true,
+								parentId: true,
+								likesCount: true,
+								createdAt: true,
+								updatedAt: true,
+								deletedAt: true,
+								user: {
+									select: {
+										id: true,
+										firstName: true,
+										lastName: true,
+										profilePicUrl: true,
+									},
+								},
+								_count: {
+									select: { replies: true },
+								},
+							},
+						}
+					: false,
+			},
+		})
+
+		let nextCursor: string | null = null
+		if (items.length > limit) {
+			const nextItem = items.pop() // Remove the extra item
+			nextCursor = nextItem!.id
+		}
+
+		// Dynamic select types from Prisma make strict typing difficult here
+		const formattedItems = (items as any[]).map(item => {
+			const isDeleted = !!item.deletedAt
+
+			const formattedReplies =
+				item.replies?.map((reply: any) => {
+					const replyIsDeleted = !!reply.deletedAt
+					return {
+						...reply,
+						content: replyIsDeleted ? '[This comment has been deleted]' : reply.content,
+						user: replyIsDeleted ? null : reply.user,
+					}
+				}) || []
+
+			return {
+				...item,
+				content: isDeleted ? '[This comment has been deleted]' : item.content,
+				user: isDeleted ? null : item.user,
+				replies: formattedReplies,
+			}
+		})
+
+		logInfo(
+			isRepliesRoute ? 'Replies fetched successfully' : 'Comments fetched successfully',
+			{ action: 'getComments', id },
+			req
+		)
+
+		const responseData = isRepliesRoute
+			? { replies: formattedItems, nextCursor }
+			: { comments: formattedItems, nextCursor }
+
+		return res
+			.status(200)
+			.json(
+				new ApiResponse(
+					200,
+					responseData,
+					isRepliesRoute ? 'Replies fetched successfully' : 'Comments fetched successfully'
+				)
+			)
+	}
+)
+
+export const editComment = asyncHandler(
+	async (req: Request<{ id: string }, {}, { content: string }>, res: Response) => {
+		const commentId = req.params.id
+		const userId = req.user?.id
+		const { content } = req.body
+
+		const existingComment = await prisma.workoutComment.findUnique({
+			where: { id: commentId },
+		})
+
+		if (!existingComment) {
+			logWarn(
+				`Comment with the comment id:${commentId} does not exist`,
+				{ action: 'editComment', commentId },
+				req
+			)
+			throw new ApiError(404, 'Comment does not exist')
+		}
+
+		if (existingComment.userId !== userId) {
+			logWarn(
+				`Comment with the comment id:${commentId} does not belong to the user with the user id:${userId}`,
+				{ action: 'editComment', commentId, userId },
+				req
+			)
+			throw new ApiError(403, 'This comment does not belong to you')
+		}
+
+		const comment = await prisma.workoutComment.update({
+			where: { id: commentId },
 			data: {
-				workoutId,
-				userId: userId!,
 				content,
-				parentId: parentId ?? null,
 			},
 			select: {
 				id: true,
@@ -251,137 +441,55 @@ export const createComment = asyncHandler(
 					},
 				},
 				_count: {
-					select: { replies: true }, // Get the total count of direct replies without loading them
+					select: { replies: true },
 				},
 			},
 		})
 
-		logInfo('Comment created successfully', { action: 'createComment', workoutId, parentId }, req)
-		return res.status(200).json(new ApiResponse(200, comment, 'Comment created successfully'))
+		logInfo('Comment edited successfully', { action: 'editComment', commentId }, req)
+		return res.status(200).json(new ApiResponse(200, comment, 'Comment edited successfully'))
 	}
 )
 
-export const getComments = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
-	const workoutId = req.params.id
-	const limit = parseInt((req.query.limit as string) || '20', 10)
-	const cursor = req.query.cursor as string
-
-	// Fetch the top-level comments (parentId is null)
-	const comments = await prisma.workoutComment.findMany({
-		where: { workoutId, parentId: null },
-		take: limit + 1, // Fetch an extra item to check if there's a next page
-		cursor: cursor ? { id: cursor } : undefined,
-		orderBy: {
-			createdAt: 'desc', // Order top-level comments by creation time (newest first)
-		},
-		select: {
-			id: true,
-			workoutId: true,
-			userId: true,
-			content: true,
-			parentId: true,
-			likesCount: true,
-			createdAt: true,
-			updatedAt: true,
-			deletedAt: true,
-			user: {
-				select: {
-					id: true,
-					firstName: true,
-					lastName: true,
-					profilePicUrl: true,
-				},
-			},
-			_count: {
-				select: { replies: true }, // Get the total count of direct replies without loading them
-			},
-		},
-	})
-
-	let nextCursor: string | null = null
-	if (comments.length > limit) {
-		const nextItem = comments.pop() // Remove the extra item
-		nextCursor = nextItem!.id
-	}
-
-	const formattedComments = comments.map(comment => {
-		const isDeleted = !!comment.deletedAt
-		return {
-			...comment,
-			content: isDeleted ? '[This comment has been deleted]' : comment.content,
-			user: isDeleted ? null : comment.user,
-		}
-	})
-
-	logInfo('Comments fetched successfully', { action: 'getComments', workoutId }, req)
-	return res
-		.status(200)
-		.json(new ApiResponse(200, { comments: formattedComments, nextCursor }, 'Comments fetched successfully'))
-})
-
-export const getReplies = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
+export const deleteComment = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
 	const commentId = req.params.id
-	const limit = parseInt((req.query.limit as string) || '10', 10)
-	const cursor = req.query.cursor as string
+	const userId = req.user?.id
 
-	const replies = await prisma.workoutComment.findMany({
-		where: { parentId: commentId },
-		take: limit + 1,
-		cursor: cursor ? { id: cursor } : undefined,
-		orderBy: {
-			createdAt: 'asc', // Order replies by creation time (oldest first, typical for reading threads)
-		},
-		select: {
-			id: true,
-			workoutId: true,
-			userId: true,
-			content: true,
-			parentId: true,
-			likesCount: true,
-			createdAt: true,
-			updatedAt: true,
-			deletedAt: true,
-			user: {
-				select: {
-					id: true,
-					firstName: true,
-					lastName: true,
-					profilePicUrl: true,
-				},
-			},
-			_count: {
-				select: { replies: true }, // Allow replies to have their own replies (infinite nesting)
-			},
-		},
+	const existingComment = await prisma.workoutComment.findUnique({
+		where: { id: commentId },
 	})
 
-	let nextCursor: string | null = null
-	if (replies.length > limit) {
-		const nextItem = replies.pop()
-		nextCursor = nextItem!.id
+	if (!existingComment) {
+		logWarn(`Comment with the comment id:${commentId} does not exist`, { action: 'deleteComment', commentId }, req)
+		throw new ApiError(404, 'Comment does not exist')
 	}
 
-	const formattedReplies = replies.map(reply => {
-		const isDeleted = !!reply.deletedAt
-		return {
-			...reply,
-			content: isDeleted ? '[This comment has been deleted]' : reply.content,
-			user: isDeleted ? null : reply.user,
-		}
-	})
+	if (existingComment.userId !== userId) {
+		logWarn(
+			`Comment with the comment id:${commentId} does not belong to the user with the user id:${userId}`,
+			{ action: 'deleteComment', commentId, userId },
+			req
+		)
+		throw new ApiError(403, 'Your unauthorized to delete this comment')
+	}
 
-	logInfo('Replies fetched successfully', { action: 'getReplies', parentId: commentId }, req)
-	return res
-		.status(200)
-		.json(new ApiResponse(200, { replies: formattedReplies, nextCursor }, 'Replies fetched successfully'))
+	const comment = await prisma.$transaction([
+		prisma.workoutComment.update({
+			where: { id: commentId },
+			data: {
+				deletedAt: new Date(),
+			},
+		}),
+	])
+
+	logInfo('Comment deleted successfully', { action: 'deleteComment', commentId }, req)
+	return res.status(200).json(new ApiResponse(200, comment[0], 'Comment deleted successfully'))
 })
 
-export const editComment = asyncHandler(async (req: Request, res: Response) => {})
+export const createCommentLike = asyncHandler(async (req: Request, res: Response) => {})
 
-export const deleteComment = asyncHandler(async (req: Request, res: Response) => {})
+export const deleteCommentLike = asyncHandler(async (req: Request, res: Response) => {})
 
-export const deleteCommentReply = asyncHandler(async (req: Request, res: Response) => {})
+export const createPostLike = asyncHandler(async (req: Request, res: Response) => {})
 
-export const createLike = asyncHandler(async (req: Request, res: Response) => {})
-
-export const deleteLike = asyncHandler(async (req: Request, res: Response) => {})
+export const deletePostLike = asyncHandler(async (req: Request, res: Response) => {})

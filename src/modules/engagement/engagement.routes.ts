@@ -1,9 +1,9 @@
 import { Router } from 'express'
 import {
 	createComment,
+	deleteComment,
 	followUser,
 	getComments,
-	getReplies,
 	getUserFollowers,
 	getUserFollowing,
 	unFollowUser,
@@ -27,6 +27,7 @@ router
 	.route('/:id/comments')
 	.post(validateResource(createCommentSchema), createComment)
 	.get(validateResource(getCommentsSchema), getComments)
-router.get('/:id/replies', validateResource(getRepliesSchema), getReplies)
+	.delete(validateResource(getCommentsSchema), deleteComment)
+// .put(validateResource(getCommentsSchema))
 
 export const engagementRoutes = router
