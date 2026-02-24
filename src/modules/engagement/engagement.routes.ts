@@ -34,6 +34,9 @@ router
 	.route('/:id/comments')
 	.post(validateResource(createCommentSchema), createComment)
 	.get(validateResource(getCommentsSchema), getComments)
+
+router
+	.route('/comments/:id')
 	.delete(validateResource(getCommentsSchema), deleteComment)
 	.put(validateResource(editCommentSchema), editComment)
 
