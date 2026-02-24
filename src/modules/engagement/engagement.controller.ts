@@ -486,10 +486,343 @@ export const deleteComment = asyncHandler(async (req: Request<{ id: string }>, r
 	return res.status(200).json(new ApiResponse(200, comment[0], 'Comment deleted successfully'))
 })
 
-export const createCommentLike = asyncHandler(async (req: Request, res: Response) => {})
+export const createCommentLike = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
+	const userId = req.user?.id
+	const commentId = req.params.id
 
-export const deleteCommentLike = asyncHandler(async (req: Request, res: Response) => {})
+	const existingUser = await prisma.user.findUnique({
+		where: { id: userId },
+	})
 
-export const createPostLike = asyncHandler(async (req: Request, res: Response) => {})
+	if (!existingUser) {
+		logWarn(`User with the user id:${userId} does not exist`, { action: 'createCommentLike', userId }, req)
+		throw new ApiError(404, 'User does not exist')
+	}
 
-export const deletePostLike = asyncHandler(async (req: Request, res: Response) => {})
+	const existingComment = await prisma.workoutComment.findUnique({
+		where: { id: commentId },
+	})
+
+	if (!existingComment) {
+		logWarn(
+			`Comment with the comment id:${commentId} does not exist`,
+			{ action: 'createCommentLike', commentId },
+			req
+		)
+		throw new ApiError(404, 'Comment does not exist')
+	}
+
+	const commentLike = await prisma.$transaction([
+		prisma.workoutCommentLike.create({
+			data: {
+				commentId,
+				userId: userId!,
+			},
+			select: {
+				commentId: true,
+				userId: true,
+				createdAt: true,
+				user: {
+					select: {
+						id: true,
+						firstName: true,
+						lastName: true,
+						profilePicUrl: true,
+					},
+				},
+			},
+		}),
+		prisma.workoutComment.update({
+			where: { id: commentId },
+			data: {
+				likesCount: { increment: 1 },
+			},
+		}),
+	])
+
+	logInfo('Comment like created successfully', { action: 'createCommentLike', commentId }, req)
+	return res.status(200).json(new ApiResponse(200, commentLike[0], 'Comment like created successfully'))
+})
+
+export const getCommentLikes = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
+	const commentId = req.params.id
+
+	const existingComment = await prisma.workoutComment.findUnique({
+		where: { id: commentId },
+	})
+
+	if (!existingComment) {
+		logWarn(
+			`Comment with the comment id:${commentId} does not exist`,
+			{ action: 'getCommentLikes', commentId },
+			req
+		)
+		throw new ApiError(404, 'Comment does not exist')
+	}
+
+	const commentLikes = await prisma.workoutCommentLike.findMany({
+		where: { commentId },
+		select: {
+			commentId: true,
+			userId: true,
+			createdAt: true,
+			user: {
+				select: {
+					id: true,
+					firstName: true,
+					lastName: true,
+					profilePicUrl: true,
+				},
+			},
+		},
+	})
+
+	logInfo('Comment likes fetched successfully', { action: 'getCommentLikes', commentId }, req)
+	return res.status(200).json(new ApiResponse(200, commentLikes, 'Comment likes fetched successfully'))
+})
+
+export const deleteCommentLike = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
+	const userId = req.user?.id
+	const commentId = req.params.id
+
+	const existingUser = await prisma.user.findUnique({
+		where: { id: userId },
+	})
+
+	if (!existingUser) {
+		logWarn(`User with the user id:${userId} does not exist`, { action: 'deleteCommentLike', userId }, req)
+		throw new ApiError(404, 'User does not exist')
+	}
+
+	const existingComment = await prisma.workoutComment.findUnique({
+		where: { id: commentId },
+	})
+
+	if (!existingComment) {
+		logWarn(
+			`Comment with the comment id:${commentId} does not exist`,
+			{ action: 'deleteCommentLike', commentId },
+			req
+		)
+		throw new ApiError(404, 'Comment does not exist')
+	}
+
+	const commentLike = await prisma.$transaction([
+		prisma.workoutCommentLike.delete({
+			where: {
+				userId_commentId: {
+					commentId,
+					userId: userId!,
+				},
+			},
+			select: {
+				commentId: true,
+				userId: true,
+				createdAt: true,
+				user: {
+					select: {
+						id: true,
+						firstName: true,
+						lastName: true,
+						profilePicUrl: true,
+					},
+				},
+			},
+		}),
+		prisma.workoutComment.update({
+			where: { id: commentId },
+			data: {
+				likesCount: { decrement: 1 },
+			},
+		}),
+	])
+
+	logInfo('Comment like deleted successfully', { action: 'deleteCommentLike', commentId }, req)
+	return res.status(200).json(new ApiResponse(200, commentLike[0], 'Comment like deleted successfully'))
+})
+
+export const getWorkoutLikes = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
+	const workoutId = req.params.id
+
+	const existingWorkout = await prisma.workoutLog.findUnique({
+		where: { id: workoutId },
+	})
+
+	if (!existingWorkout) {
+		logWarn(
+			`Workout with the workout id:${workoutId} does not exist`,
+			{ action: 'getWorkoutLikes', workoutId },
+			req
+		)
+		throw new ApiError(404, 'Workout does not exist')
+	}
+
+	const workoutLikes = await prisma.workoutLike.findMany({
+		where: { workoutId },
+		select: {
+			workoutId: true,
+			userId: true,
+			createdAt: true,
+			user: {
+				select: {
+					id: true,
+					firstName: true,
+					lastName: true,
+					profilePicUrl: true,
+				},
+			},
+		},
+	})
+
+	logInfo('Workout likes fetched successfully', { action: 'getWorkoutLikes', workoutId }, req)
+	return res.status(200).json(new ApiResponse(200, workoutLikes, 'Workout likes fetched successfully'))
+})
+
+export const createWorkoutLike = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
+	const userId = req.user?.id
+	const workoutId = req.params.id
+
+	const existingUser = await prisma.user.findUnique({
+		where: { id: userId },
+	})
+
+	if (!existingUser) {
+		logWarn(`User with the user id:${userId} does not exist`, { action: 'createWorkoutLike', userId }, req)
+		throw new ApiError(404, 'User does not exist')
+	}
+
+	const existingWorkout = await prisma.workoutLog.findUnique({
+		where: { id: workoutId },
+	})
+
+	if (!existingWorkout) {
+		logWarn(
+			`Workout with the workout id:${workoutId} does not exist`,
+			{ action: 'createWorkoutLike', workoutId },
+			req
+		)
+		throw new ApiError(404, 'Workout does not exist')
+	}
+
+	const liked = await prisma.workoutLike.findUnique({
+		where: {
+			userId_workoutId: {
+				workoutId,
+				userId: userId!,
+			},
+		},
+		select: {
+			workoutId: true,
+			userId: true,
+			createdAt: true,
+			user: {
+				select: {
+					id: true,
+					firstName: true,
+					lastName: true,
+					profilePicUrl: true,
+				},
+			},
+		},
+	})
+
+	if (liked) {
+		logWarn(
+			`Workout with the workout id:${workoutId} is already liked by the user with the user id:${userId}`,
+			{ action: 'createWorkoutLike', workoutId, userId },
+			req
+		)
+		return res.status(200).json(new ApiResponse(200, liked, 'Workout is already liked'))
+	}
+
+	const workoutLike = await prisma.$transaction([
+		prisma.workoutLike.create({
+			data: {
+				workoutId,
+				userId: userId!,
+			},
+			select: {
+				workoutId: true,
+				userId: true,
+				createdAt: true,
+				user: {
+					select: {
+						id: true,
+						firstName: true,
+						lastName: true,
+						profilePicUrl: true,
+					},
+				},
+			},
+		}),
+		prisma.workoutLog.update({
+			where: { id: workoutId },
+			data: {
+				likesCount: { increment: 1 },
+			},
+		}),
+	])
+
+	logInfo('Workout like created successfully', { action: 'createWorkoutLike', workoutId }, req)
+	return res.status(200).json(new ApiResponse(200, workoutLike[0], 'Workout like created successfully'))
+})
+
+export const deleteWorkoutLike = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
+	const userId = req.user?.id
+	const workoutId = req.params.id
+
+	const existingUser = await prisma.user.findUnique({
+		where: { id: userId },
+	})
+
+	if (!existingUser) {
+		logWarn(`User with the user id:${userId} does not exist`, { action: 'deleteWorkoutLike', userId }, req)
+		throw new ApiError(404, 'User does not exist')
+	}
+
+	const existingWorkout = await prisma.workoutLog.findUnique({
+		where: { id: workoutId },
+	})
+
+	if (!existingWorkout) {
+		logWarn(
+			`Workout with the workout id:${workoutId} does not exist`,
+			{ action: 'deleteWorkoutLike', workoutId },
+			req
+		)
+		throw new ApiError(404, 'Workout does not exist')
+	}
+
+	const workoutLike = await prisma.$transaction([
+		prisma.workoutLike.delete({
+			where: {
+				userId_workoutId: {
+					workoutId,
+					userId: userId!,
+				},
+			},
+			select: {
+				workoutId: true,
+				userId: true,
+				createdAt: true,
+				user: {
+					select: {
+						id: true,
+						firstName: true,
+						lastName: true,
+						profilePicUrl: true,
+					},
+				},
+			},
+		}),
+		prisma.workoutLog.update({
+			where: { id: workoutId },
+			data: {
+				likesCount: { decrement: 1 },
+			},
+		}),
+	])
+
+	logInfo('Workout like deleted successfully', { action: 'deleteWorkoutLike', workoutId }, req)
+	return res.status(200).json(new ApiResponse(200, workoutLike[0], 'Workout like deleted successfully'))
+})

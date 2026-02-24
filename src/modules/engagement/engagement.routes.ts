@@ -1,17 +1,24 @@
 import { Router } from 'express'
-import {
-	createComment,
-	deleteComment,
-	followUser,
-	getComments,
-	getUserFollowers,
-	getUserFollowing,
-	unFollowUser,
-} from './engagement.controller.js'
 import { authorize } from '../../common/middlewares/authorize.middleware.js'
 import { validateResource } from '../../common/middlewares/validate.middleware.js'
 import { followUserSchema } from '../user/user.validators.js'
-import { createCommentSchema, getCommentsSchema, getRepliesSchema } from './engagement.validators.js'
+import {
+	createComment,
+	createCommentLike,
+	createWorkoutLike,
+	deleteComment,
+	deleteCommentLike,
+	deleteWorkoutLike,
+	editComment,
+	followUser,
+	getCommentLikes,
+	getComments,
+	getUserFollowers,
+	getUserFollowing,
+	getWorkoutLikes,
+	unFollowUser,
+} from './engagement.controller.js'
+import { createCommentSchema, editCommentSchema, getCommentsSchema, LikesSchema } from './engagement.validators.js'
 
 const router = Router()
 
@@ -28,6 +35,18 @@ router
 	.post(validateResource(createCommentSchema), createComment)
 	.get(validateResource(getCommentsSchema), getComments)
 	.delete(validateResource(getCommentsSchema), deleteComment)
-// .put(validateResource(getCommentsSchema))
+	.put(validateResource(editCommentSchema), editComment)
+
+router
+	.route('/:id/like/workout')
+	.post(validateResource(LikesSchema), createWorkoutLike)
+	.get(validateResource(LikesSchema), getWorkoutLikes)
+	.delete(validateResource(LikesSchema), deleteWorkoutLike)
+
+router
+	.route('/:id/like/comment')
+	.post(validateResource(LikesSchema), createCommentLike)
+	.get(validateResource(LikesSchema), getCommentLikes)
+	.delete(validateResource(LikesSchema), deleteCommentLike)
 
 export const engagementRoutes = router

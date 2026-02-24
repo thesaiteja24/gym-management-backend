@@ -33,3 +33,27 @@ export const getCommentsSchema = z.object({
 })
 
 export const getRepliesSchema = getCommentsSchema
+
+export const editCommentSchema = z.object({
+	params: z
+		.object({
+			id: z.uuid('Invalid Comment ID'),
+		})
+		.strict(),
+	body: z
+		.object({
+			content: z
+				.string()
+				.min(1, 'Comment cannot be empty')
+				.max(1000, 'Comment cannot be longer than 1000 characters'),
+		})
+		.strict(),
+})
+
+export const LikesSchema = z.object({
+	params: z
+		.object({
+			id: z.uuid('Invalid ID'),
+		})
+		.strict(),
+})
