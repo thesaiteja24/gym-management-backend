@@ -181,6 +181,7 @@ model WorkoutLog {
   isEdited      Boolean              @default(false)
   editedAt      DateTime?
   deletedAt     DateTime?
+  shareId       String?              @unique
 
   exercises       WorkoutLogExercise[]
   exerciseGroups  WorkoutLogExerciseGroup[]
