@@ -27,6 +27,20 @@ export const followUser = asyncHandler(async (req: Request<{ id: string }, {}, {
 		throw new ApiError(404, 'User does not exist')
 	}
 
+	const existingFollow = await prisma.follow.findUnique({
+		where: {
+			followerId_followingId: {
+				followerId: currentUserId,
+				followingId: targetUserId,
+			},
+		},
+	})
+
+	if (existingFollow) {
+		logDebug('Already following', { existingFollow }, req)
+		return res.status(200).json(new ApiResponse(200, existingFollow, 'You are already following this user'))
+	}
+
 	const result = await prisma.$transaction([
 		prisma.follow.create({
 			data: {
@@ -47,7 +61,7 @@ export const followUser = asyncHandler(async (req: Request<{ id: string }, {}, {
 	])
 
 	logDebug('Following', { result }, req)
-	return res.status(200).json(new ApiResponse(200, result, 'Your now following'))
+	return res.status(200).json(new ApiResponse(200, result, "You're now following"))
 })
 
 export const unFollowUser = asyncHandler(async (req: Request<{ id: string }, {}, {}>, res: Response) => {
@@ -67,6 +81,20 @@ export const unFollowUser = asyncHandler(async (req: Request<{ id: string }, {},
 	if (!user) {
 		logWarn('User does not exist', { action: 'unfollowUser', userId: targetUserId }, req)
 		throw new ApiError(404, 'User does not exist')
+	}
+
+	const existingFollow = await prisma.follow.findUnique({
+		where: {
+			followerId_followingId: {
+				followerId: currentUserId,
+				followingId: targetUserId,
+			},
+		},
+	})
+
+	if (!existingFollow) {
+		logDebug('Not following', { currentUserId, targetUserId }, req)
+		return res.status(200).json(new ApiResponse(200, null, 'You are not following this user'))
 	}
 
 	const result = await prisma.$transaction([
@@ -91,7 +119,7 @@ export const unFollowUser = asyncHandler(async (req: Request<{ id: string }, {},
 	])
 
 	logDebug('Following', { result }, req)
-	return res.status(200).json(new ApiResponse(200, result, 'Your have unfollowed'))
+	return res.status(200).json(new ApiResponse(200, result, "You've unfollowed"))
 })
 
 export const getUserFollowing = asyncHandler(async (req: Request<{ id: string }, {}, {}>, res: Response) => {
@@ -286,6 +314,7 @@ export const getComments = asyncHandler(
 			where: whereClause,
 			take: limit + 1, // Fetch an extra item to check if there's a next page
 			cursor: cursor ? { id: cursor } : undefined,
+			skip: cursor ? 1 : undefined,
 			orderBy: orderByClause,
 			select: {
 				id: true,
@@ -308,7 +337,7 @@ export const getComments = asyncHandler(
 				_count: {
 					select: { replies: true },
 				},
-				replies: isRepliesRoute
+				replies: !isRepliesRoute // Prefetch first 3 nested replies for top-level comments; omit when fetching replies directly
 					? {
 							take: 3,
 							orderBy: { createdAt: 'asc' },
@@ -470,7 +499,7 @@ export const deleteComment = asyncHandler(async (req: Request<{ id: string }>, r
 			{ action: 'deleteComment', commentId, userId },
 			req
 		)
-		throw new ApiError(403, 'Your unauthorized to delete this comment')
+		throw new ApiError(403, "You're not authorized to delete this comment")
 	}
 
 	const comment = await prisma.$transaction([
@@ -510,6 +539,37 @@ export const createCommentLike = asyncHandler(async (req: Request<{ id: string }
 			req
 		)
 		throw new ApiError(404, 'Comment does not exist')
+	}
+
+	const liked = await prisma.workoutCommentLike.findUnique({
+		where: {
+			userId_commentId: {
+				commentId,
+				userId: userId!,
+			},
+		},
+		select: {
+			commentId: true,
+			userId: true,
+			createdAt: true,
+			user: {
+				select: {
+					id: true,
+					firstName: true,
+					lastName: true,
+					profilePicUrl: true,
+				},
+			},
+		},
+	})
+
+	if (liked) {
+		logWarn(
+			`Comment with the comment id:${commentId} is already liked by the user with the user id:${userId}`,
+			{ action: 'createCommentLike', commentId, userId },
+			req
+		)
+		return res.status(200).json(new ApiResponse(200, liked, 'Comment is already liked'))
 	}
 
 	const commentLike = await prisma.$transaction([
@@ -607,25 +667,39 @@ export const deleteCommentLike = asyncHandler(async (req: Request<{ id: string }
 		throw new ApiError(404, 'Comment does not exist')
 	}
 
-	const commentLike = await prisma.$transaction([
-		prisma.workoutCommentLike.delete({
+	const existingLike = await prisma.workoutCommentLike.findUnique({
+		where: {
+			userId_commentId: {
+				commentId,
+				userId: userId!,
+			},
+		},
+		select: {
+			commentId: true,
+			userId: true,
+			createdAt: true,
+			user: {
+				select: {
+					id: true,
+					firstName: true,
+					lastName: true,
+					profilePicUrl: true,
+				},
+			},
+		},
+	})
+
+	if (!existingLike) {
+		logDebug('Comment like does not exist', { action: 'deleteCommentLike', commentId, userId }, req)
+		return res.status(200).json(new ApiResponse(200, null, 'Comment is not liked'))
+	}
+
+	// Transaction result not captured; existingLike holds the data to return
+	await prisma.$transaction([
 			where: {
 				userId_commentId: {
 					commentId,
 					userId: userId!,
-				},
-			},
-			select: {
-				commentId: true,
-				userId: true,
-				createdAt: true,
-				user: {
-					select: {
-						id: true,
-						firstName: true,
-						lastName: true,
-						profilePicUrl: true,
-					},
 				},
 			},
 		}),
@@ -638,7 +712,7 @@ export const deleteCommentLike = asyncHandler(async (req: Request<{ id: string }
 	])
 
 	logInfo('Comment like deleted successfully', { action: 'deleteCommentLike', commentId }, req)
-	return res.status(200).json(new ApiResponse(200, commentLike[0], 'Comment like deleted successfully'))
+	return res.status(200).json(new ApiResponse(200, existingLike, 'Comment like deleted successfully'))
 })
 
 export const getWorkoutLikes = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
