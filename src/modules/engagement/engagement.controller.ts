@@ -696,6 +696,7 @@ export const deleteCommentLike = asyncHandler(async (req: Request<{ id: string }
 
 	// Transaction result not captured; existingLike holds the data to return
 	await prisma.$transaction([
+		prisma.workoutCommentLike.delete({
 			where: {
 				userId_commentId: {
 					commentId,
