@@ -36,6 +36,11 @@ export const authorizeSelfOrAdmin = (): RequestHandler => {
 			return next()
 		}
 
+		logWarn(
+			'Authorization failed',
+			{ action: 'authorizeSelfOrAdmin', userId: req.user.id, role: req.user.role },
+			req
+		)
 		return next(new ApiError(403, 'You do not have permission to perform this action'))
 	}
 }

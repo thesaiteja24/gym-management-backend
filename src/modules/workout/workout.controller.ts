@@ -4,7 +4,8 @@ import { Request, Response } from 'express'
 import { ApiError } from '../../common/utils/ApiError.js'
 import { ApiResponse } from '../../common/utils/ApiResponse.js'
 import { asyncHandler } from '../../common/utils/asyncHandler.js'
-import { logDebug, logError, logInfo, logWarn } from '../../common/utils/logger.js'
+import { generateSecureToken } from '../../common/utils/helpers.js'
+import { logError, logInfo, logWarn } from '../../common/utils/logger.js'
 import { isValidCompletedSet, WorkoutSet } from '../../common/utils/workoutValidation.js'
 
 const prisma = new PrismaClient().$extends(withAccelerate())
@@ -73,6 +74,7 @@ export const createWorkout = asyncHandler(async (req: Request<object, object, Cr
 					startTime: new Date(startTime),
 					endTime: new Date(endTime),
 					visibility: visibility,
+					shareId: generateSecureToken(),
 				},
 			})
 
@@ -261,6 +263,7 @@ export const createWorkout = asyncHandler(async (req: Request<object, object, Cr
 const workoutSelect = {
 	id: true,
 	clientId: true,
+	shareId: true,
 	title: true,
 	startTime: true,
 	endTime: true,
@@ -268,6 +271,10 @@ const workoutSelect = {
 	updatedAt: true,
 	isEdited: true,
 	editedAt: true,
+	deletedAt: true,
+	visibility: true,
+	likesCount: true,
+	commentsCount: true,
 	exerciseGroups: {
 		orderBy: { groupIndex: 'asc' },
 		select: {
@@ -561,6 +568,7 @@ export const updateWorkout = asyncHandler(
 						isEdited: true,
 						editedAt: new Date(),
 						visibility,
+						shareId: existingWorkout.shareId || generateSecureToken(),
 					},
 				})
 
@@ -720,3 +728,19 @@ export const updateWorkout = asyncHandler(
 		return res.json(new ApiResponse(200, updatedWorkout, 'Workout updated successfully'))
 	}
 )
+
+export const getWorkoutByShareId = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
+	const shareId = req.params.id
+
+	const workout = await prisma.workoutLog.findUnique({
+		where: { shareId },
+		select: workoutSelect,
+	})
+
+	if (!workout || workout.deletedAt || workout.visibility === 'private') {
+		logWarn('Shared workout not found or private', { action: 'getWorkoutByShareId', shareId }, req)
+		throw new ApiError(404, 'Shared workout not found')
+	}
+
+	return res.json(new ApiResponse(200, workout, 'Workout fetched successfully'))
+})

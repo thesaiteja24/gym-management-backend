@@ -9,6 +9,9 @@ import { exerciseRoutes } from '../modules/exercise/exercise.routes.js'
 import { workoutRoutes } from '../modules/workout/workout.routes.js'
 import { templateRoutes } from '../modules/template/template.routes.js'
 import { coachRoutes } from '../modules/coach/coach.routes.js'
+import { discoverRoutes } from '../modules/discover/discover.routes.js'
+import { engagementRoutes } from '../modules/engagement/engagement.routes.js'
+import { getWorkoutByShareId } from '../modules/workout/workout.controller.js'
 
 const router = Router()
 
@@ -18,8 +21,11 @@ router.use('/users', authenticate, userRoutes)
 router.use('/equipment', equipmentRoutes)
 router.use('/muscle-groups', muscleGroupRoutes)
 router.use('/exercises', exerciseRoutes)
+router.get('/workouts/share/:id', getWorkoutByShareId)
 router.use('/workouts', authenticate, workoutRoutes)
 router.use('/templates', authenticate, templateRoutes)
-router.use('/coach', coachRoutes)
+router.use('/coach', authenticate, coachRoutes)
+router.use('/discover', authenticate, discoverRoutes)
+router.use('/engagement', authenticate, engagementRoutes)
 
 export const indexRoutes = router

@@ -274,6 +274,7 @@ export const refreshToken = asyncHandler(async (req: Request<object, object, Ref
 		firstName: string | null
 		lastName: string | null
 		phoneE164: string | null
+		email: string | null
 		role: string
 		profilePicUrl: string | null
 	} | null
@@ -287,6 +288,7 @@ export const refreshToken = asyncHandler(async (req: Request<object, object, Ref
 				firstName: true,
 				lastName: true,
 				phoneE164: true,
+				email: true,
 				role: true,
 				profilePicUrl: true,
 				privacyPolicyAcceptedAt: true,

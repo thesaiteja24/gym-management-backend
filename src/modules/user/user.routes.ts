@@ -1,30 +1,11 @@
 import { Router } from 'express'
-import {
-	deleteProfilePic,
-	followUser,
-	getSuggestedUsers,
-	getUser,
-	searchUsers,
-	unFollowUser,
-	updateProfilePic,
-	updateUser,
-	updateUserFitnessProfile,
-} from './user.controller.js'
+import { deleteProfilePic, getUser, updateProfilePic, updateUser, updateUserFitnessProfile } from './user.controller.js'
 import { upload } from '../../common/middlewares/upload.middleware.js'
-import { authorizeSelfOrAdmin } from '../../common/middlewares/authorize.middleware.js'
+import { authorize, authorizeSelfOrAdmin } from '../../common/middlewares/authorize.middleware.js'
 import { validateResource } from '../../common/middlewares/validate.middleware.js'
-import {
-	followUserSchema,
-	searchUsersSchema,
-	updateFitnessProfileSchema,
-	updateProfilePicSchema,
-	updateUserSchema,
-} from './user.validators.js'
+import { updateFitnessProfileSchema, updateProfilePicSchema, updateUserSchema } from './user.validators.js'
 
 const router = Router()
-
-router.get('/search', validateResource(searchUsersSchema), authorizeSelfOrAdmin(), searchUsers)
-router.get('/suggestions', authorizeSelfOrAdmin(), getSuggestedUsers)
 
 // single user
 router.route('/:id').get(getUser).patch(validateResource(updateUserSchema), authorizeSelfOrAdmin(), updateUser)
@@ -47,14 +28,5 @@ router.patch(
 	authorizeSelfOrAdmin(),
 	updateUserFitnessProfile
 )
-
-// follow system
-router
-	.route('/:id/follow')
-	.post(authorizeSelfOrAdmin(), validateResource(followUserSchema), followUser)
-	.delete(authorizeSelfOrAdmin(), validateResource(followUserSchema), unFollowUser)
-
-router.get('/:id/followers', authorizeSelfOrAdmin())
-router.get('/:id/following', authorizeSelfOrAdmin())
 
 export const userRoutes = router
