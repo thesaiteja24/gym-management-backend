@@ -316,6 +316,9 @@ const workoutSelect = {
 
 export const getAllWorkouts = asyncHandler(async (req: Request, res: Response) => {
 	const userId = req.user!.id
+	const page = parseInt(req.query.page as string) || 1
+	const limit = parseInt(req.query.limit as string) || 10
+	const skip = (page - 1) * limit
 
 	/* ───── Query ───── */
 
@@ -328,6 +331,8 @@ export const getAllWorkouts = asyncHandler(async (req: Request, res: Response) =
 				deletedAt: null,
 			},
 			orderBy: { createdAt: 'desc' },
+			skip,
+			take: limit,
 			select: workoutSelect,
 		})
 	} catch (error) {
@@ -336,9 +341,17 @@ export const getAllWorkouts = asyncHandler(async (req: Request, res: Response) =
 		throw new ApiError(500, 'Failed to fetch workouts')
 	}
 
+	const hasMore = workouts.length === limit
+
 	if (!workouts || workouts.length === 0) {
 		logInfo('No workouts found for user', { action: 'getWorkouts', userId }, req)
-		return res.json(new ApiResponse(200, [], 'No workouts found'))
+		return res.json(
+			new ApiResponse(
+				200,
+				{ workouts: [], meta: { currentPage: page, limit, hasMore: false } },
+				'No workouts found'
+			)
+		)
 	}
 
 	logInfo(
@@ -347,15 +360,22 @@ export const getAllWorkouts = asyncHandler(async (req: Request, res: Response) =
 			action: 'getWorkouts',
 			userId,
 			workoutCount: workouts.length,
+			page,
+			limit,
 		},
 		req
 	)
 
-	return res.json(new ApiResponse(200, workouts, 'Workouts fetched successfully'))
+	return res.json(
+		new ApiResponse(200, { workouts, meta: { currentPage: page, limit, hasMore } }, 'Workouts fetched successfully')
+	)
 })
 
 export const getDiscoverWorkouts = asyncHandler(async (req: Request, res: Response) => {
 	const userId = req.user!.id
+	const page = parseInt(req.query.page as string) || 1
+	const limit = parseInt(req.query.limit as string) || 10
+	const skip = (page - 1) * limit
 
 	/* ───── Query ───── */
 	let workouts
@@ -371,6 +391,8 @@ export const getDiscoverWorkouts = asyncHandler(async (req: Request, res: Respon
 			},
 			orderBy: [{ userId: 'asc' }, { createdAt: 'desc' }],
 			distinct: ['userId'],
+			skip,
+			take: limit,
 			select: workoutSelect,
 		})
 	} catch (error) {
@@ -379,9 +401,17 @@ export const getDiscoverWorkouts = asyncHandler(async (req: Request, res: Respon
 		throw new ApiError(500, 'Failed to fetch workouts')
 	}
 
+	const hasMore = workouts.length === limit
+
 	if (!workouts || workouts.length === 0) {
 		logInfo('No workouts found for user', { action: 'getWorkouts' }, req)
-		return res.json(new ApiResponse(200, [], 'No workouts found'))
+		return res.json(
+			new ApiResponse(
+				200,
+				{ workouts: [], meta: { currentPage: page, limit, hasMore: false } },
+				'No workouts found'
+			)
+		)
 	}
 
 	logInfo(
@@ -389,11 +419,15 @@ export const getDiscoverWorkouts = asyncHandler(async (req: Request, res: Respon
 		{
 			action: 'getWorkouts',
 			workoutCount: workouts.length,
+			page,
+			limit,
 		},
 		req
 	)
 
-	return res.json(new ApiResponse(200, workouts, 'Workouts fetched successfully'))
+	return res.json(
+		new ApiResponse(200, { workouts, meta: { currentPage: page, limit, hasMore } }, 'Workouts fetched successfully')
+	)
 })
 
 export const getWorkoutById = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {

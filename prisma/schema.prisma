@@ -188,7 +188,8 @@ model WorkoutLog {
   workoutComments WorkoutComment[]
   workoutLikes    WorkoutLike[]
 
-  @@index([userId, createdAt])
+  @@index([userId, deletedAt, createdAt])
+  @@index([visibility, deletedAt, userId, createdAt])
 }
 
 /**
