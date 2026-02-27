@@ -1,17 +1,18 @@
 import { Router } from 'express'
-import { healthCheckRoutes } from '../modules/healthCheck/healthCheck.routes.js'
 import { authenticate } from '../common/middlewares/auth.middleware.js'
 import { authRoutes } from '../modules/auth/auth.routes.js'
-import { userRoutes } from '../modules/user/user.routes.js'
-import { equipmentRoutes } from '../modules/equipment/equipment.routes.js'
-import { muscleGroupRoutes } from '../modules/muscleGroup/muscleGroup.routes.js'
-import { exerciseRoutes } from '../modules/exercise/exercise.routes.js'
-import { workoutRoutes } from '../modules/workout/workout.routes.js'
-import { templateRoutes } from '../modules/template/template.routes.js'
 import { coachRoutes } from '../modules/coach/coach.routes.js'
+import { configRoutes } from '../modules/config/config.routes.js'
 import { discoverRoutes } from '../modules/discover/discover.routes.js'
 import { engagementRoutes } from '../modules/engagement/engagement.routes.js'
+import { equipmentRoutes } from '../modules/equipment/equipment.routes.js'
+import { exerciseRoutes } from '../modules/exercise/exercise.routes.js'
+import { healthCheckRoutes } from '../modules/healthCheck/healthCheck.routes.js'
+import { muscleGroupRoutes } from '../modules/muscleGroup/muscleGroup.routes.js'
+import { templateRoutes } from '../modules/template/template.routes.js'
+import { userRoutes } from '../modules/user/user.routes.js'
 import { getWorkoutByShareId } from '../modules/workout/workout.controller.js'
+import { workoutRoutes } from '../modules/workout/workout.routes.js'
 
 const router = Router()
 
@@ -27,5 +28,6 @@ router.use('/templates', authenticate, templateRoutes)
 router.use('/coach', authenticate, coachRoutes)
 router.use('/discover', authenticate, discoverRoutes)
 router.use('/engagement', authenticate, engagementRoutes)
+router.use('/config', configRoutes)
 
 export const indexRoutes = router

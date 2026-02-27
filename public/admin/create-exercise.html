@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="en" class="dark">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Create Exercise - Admin</title>
+		<!-- Tailwind CSS -->
+		<script src="https://cdn.tailwindcss.com"></script>
+		<style>
+			/* Custom scrollbar for dark mode */
+			::-webkit-scrollbar {
+				width: 8px;
+				height: 8px;
+			}
+			::-webkit-scrollbar-track {
+				background: #171717;
+			}
+			::-webkit-scrollbar-thumb {
+				background: #404040;
+				border-radius: 4px;
+			}
+			::-webkit-scrollbar-thumb:hover {
+				background: #525252;
+			}
+
+			/* Toast animation */
+			@keyframes slideInUp {
+				from {
+					transform: translateY(100%);
+					opacity: 0;
+				}
+				to {
+					transform: translateY(0);
+					opacity: 1;
+				}
+			}
+			@keyframes fadeOut {
+				from {
+					opacity: 1;
+				}
+				to {
+					opacity: 0;
+				}
+			}
+			.toast-enter {
+				animation: slideInUp 0.3s ease-out forwards;
+			}
+			.toast-exit {
+				animation: fadeOut 0.3s ease-in forwards;
+			}
+		</style>
+	</head>
+	<body class="bg-neutral-950 text-neutral-200 min-h-screen font-sans antialiased selection:bg-neutral-800">
+		<!-- Navbar -->
+		<nav class="sticky top-0 z-50 bg-neutral-900 border-b border-neutral-800 shadow-sm">
+			<div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+				<div class="flex justify-between h-16 items-center">
+					<div class="flex items-center gap-3">
+						<div
+							class="h-8 w-8 bg-white text-black font-extrabold flex items-center justify-center rounded-md"
+						>
+							G
+						</div>
+						<span class="font-bold text-xl tracking-tight text-white">Admin Console</span>
+					</div>
+					<button
+						onclick="logout()"
+						class="text-sm font-medium text-neutral-400 hover:text-white transition-colors"
+					>
+						Sign Out
+					</button>
+				</div>
+			</div>
+		</nav>
+
+		<main class="max-w-4xl mx-auto px-4 py-10 sm:px-6 lg:px-8">
+			<div class="mb-10">
+				<h1 class="text-3xl font-bold text-white tracking-tight">Create Exercise</h1>
+				<p class="mt-2 text-neutral-400">
+					Add a new exercise to the master database. Requires a video demonstration.
+				</p>
+			</div>
+
+			<form
+				id="create-exercise-form"
+				class="bg-neutral-900 shadow-2xl rounded-2xl border border-neutral-800 overflow-hidden backdrop-blur-sm"
+			>
+				<div class="p-8 space-y-8">
+					<!-- Title -->
+					<div>
+						<label
+							for="title"
+							class="block text-sm font-medium text-neutral-300 mb-1.5 flex justify-between"
+						>
+							Exercise Name <span class="text-xs text-neutral-500 font-normal">Required</span>
+						</label>
+						<input
+							type="text"
+							id="title"
+							name="title"
+							required
+							class="block w-full rounded-lg bg-neutral-950 border border-neutral-800 px-4 py-3 text-white focus:border-white focus:ring-1 focus:ring-white transition-all outline-none"
+							placeholder="e.g. Barbell Bench Press"
+						/>
+					</div>
+
+					<!-- Type -->
+					<div>
+						<label
+							for="exerciseType"
+							class="block text-sm font-medium text-neutral-300 mb-1.5 flex justify-between"
+						>
+							Tracking Type <span class="text-xs text-neutral-500 font-normal">Required</span>
+						</label>
+						<div class="relative">
+							<select
+								id="exerciseType"
+								name="exerciseType"
+								required
+								class="block w-full rounded-lg bg-neutral-950 border border-neutral-800 px-4 py-3 text-white appearance-none focus:border-white focus:ring-1 focus:ring-white transition-all outline-none"
+							>
+								<option value="weighted">Weighted (Sets x Reps x Weight)</option>
+								<option value="repsOnly">Reps Only (Sets x Reps)</option>
+								<option value="durationOnly">Duration Only (Time)</option>
+								<option value="assisted">Assisted (Weight subtracted)</option>
+							</select>
+							<div
+								class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-neutral-400"
+							>
+								<svg class="h-4 w-4 fill-current" viewBox="0 0 20 20">
+									<path
+										d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+									/>
+								</svg>
+							</div>
+						</div>
+					</div>
+
+					<div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+						<!-- Primary Muscle Group -->
+						<div>
+							<label
+								for="primaryMuscleGroupId"
+								class="block text-sm font-medium text-neutral-300 mb-1.5 flex justify-between"
+							>
+								Primary Muscle Group <span class="text-xs text-neutral-500 font-normal">Required</span>
+							</label>
+							<div class="relative">
+								<select
+									id="primaryMuscleGroupId"
+									name="primaryMuscleGroupId"
+									required
+									class="block w-full rounded-lg bg-neutral-950 border border-neutral-800 px-4 py-3 text-white appearance-none focus:border-white focus:ring-1 focus:ring-white transition-all outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+								>
+									<option value="" disabled selected>Loading...</option>
+								</select>
+								<div
+									class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-neutral-400"
+								>
+									<svg class="h-4 w-4 fill-current" viewBox="0 0 20 20">
+										<path
+											d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+										/>
+									</svg>
+								</div>
+							</div>
+						</div>
+
+						<!-- Equipment -->
+						<div>
+							<label
+								for="equipmentId"
+								class="block text-sm font-medium text-neutral-300 mb-1.5 flex justify-between"
+							>
+								Equipment <span class="text-xs text-neutral-500 font-normal">Required</span>
+							</label>
+							<div class="relative">
+								<select
+									id="equipmentId"
+									name="equipmentId"
+									required
+									class="block w-full rounded-lg bg-neutral-950 border border-neutral-800 px-4 py-3 text-white appearance-none focus:border-white focus:ring-1 focus:ring-white transition-all outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+								>
+									<option value="" disabled selected>Loading...</option>
+								</select>
+								<div
+									class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-neutral-400"
+								>
+									<svg class="h-4 w-4 fill-current" viewBox="0 0 20 20">
+										<path
+											d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+										/>
+									</svg>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<!-- Secondary Muscle Groups -->
+					<div>
+						<label class="block text-sm font-medium text-neutral-300 mb-3 flex justify-between">
+							Secondary Muscle Groups <span class="text-xs text-neutral-500 font-normal">Optional</span>
+						</label>
+						<div
+							id="secondaryMuscleGroupsContainer"
+							class="grid grid-cols-2 sm:grid-cols-3 gap-3 p-4 bg-neutral-950 border border-neutral-800 rounded-xl min-h-[100px] max-h-[250px] overflow-y-auto"
+						>
+							<div class="col-span-full flex items-center justify-center text-sm text-neutral-500">
+								Loading muscle groups...
+							</div>
+						</div>
+					</div>
+
+					<!-- Instructions -->
+					<div>
+						<label
+							for="instructions"
+							class="block text-sm font-medium text-neutral-300 mb-1.5 flex justify-between"
+						>
+							Form Instructions <span class="text-xs text-neutral-500 font-normal">Optional</span>
+						</label>
+						<textarea
+							id="instructions"
+							name="instructions"
+							rows="4"
+							class="block w-full rounded-lg bg-neutral-950 border border-neutral-800 px-4 py-3 text-white focus:border-white focus:ring-1 focus:ring-white transition-all outline-none resize-y"
+							placeholder="Step 1: Unrack the bar..."
+						></textarea>
+					</div>
+
+					<!-- Video Upload -->
+					<div>
+						<label class="block text-sm font-medium text-neutral-300 mb-1.5 flex justify-between">
+							Exercise Video <span class="text-xs text-neutral-500 font-normal">Required (.mp4)</span>
+						</label>
+
+						<div
+							class="mt-2 flex justify-center rounded-xl border border-dashed border-neutral-700 px-6 py-10 bg-neutral-950 hover:bg-neutral-900 transition-colors group relative"
+						>
+							<div class="text-center w-full">
+								<svg
+									class="mx-auto h-12 w-12 text-neutral-500 group-hover:text-neutral-400 transition-colors"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="1.5"
+								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+									></path>
+								</svg>
+								<div class="mt-4 flex text-sm leading-6 text-neutral-400 justify-center">
+									<label
+										for="video"
+										class="relative cursor-pointer rounded-md bg-transparent font-semibold text-white focus-within:outline-none focus-within:ring-2 focus-within:ring-white focus-within:ring-offset-2 focus-within:ring-offset-neutral-900 hover:underline"
+									>
+										<span>Upload a video</span>
+										<input
+											id="video"
+											name="video"
+											type="file"
+											accept="video/mp4,video/quicktime"
+											class="sr-only"
+											required
+											onchange="updateFileName(this)"
+										/>
+									</label>
+									<p class="pl-1">or drag and drop</p>
+								</div>
+								<p class="text-xs leading-5 text-neutral-500 mt-2" id="file-name-display">
+									MP4, MOV up to 50MB
+								</p>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<!-- Submit Footer -->
+				<div class="bg-neutral-950 border-t border-neutral-800 px-8 py-5 flex items-center justify-between">
+					<p class="text-xs text-neutral-500">All media is processed immediately.</p>
+					<button
+						type="submit"
+						id="submitBtn"
+						class="rounded-lg bg-white px-6 py-2.5 text-sm font-bold text-black shadow-sm hover:bg-neutral-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+					>
+						Create Exercise
+					</button>
+				</div>
+			</form>
+		</main>
+
+		<!-- Toast Container -->
+		<div id="toast-container" class="fixed bottom-0 right-0 p-6 z-50 flex flex-col gap-3 pointer-events-none"></div>
+
+		<script>
+			// ───────────────── AUTHENTICATION ─────────────────
+			const token = localStorage.getItem('adminAccessToken')
+			const role = localStorage.getItem('adminRole')
+
+			if (!token || role !== 'systemAdmin') {
+				window.location.href = '/admin/'
+			}
+
+			const baseUrl = window.location.origin
+			const apiHeaders = {
+				Authorization: `Bearer ${token}`,
+			}
+
+			function logout() {
+				localStorage.removeItem('adminAccessToken')
+				localStorage.removeItem('adminRole')
+				window.location.href = '/admin/'
+			}
+
+			// ───────────────── UI LOGIC ─────────────────
+			function updateFileName(input) {
+				const display = document.getElementById('file-name-display')
+				if (input.files && input.files[0]) {
+					const file = input.files[0]
+					const sizeMB = (file.size / (1024 * 1024)).toFixed(2)
+					display.innerHTML = `<span class="text-white font-medium">${file.name}</span> (${sizeMB} MB)`
+				} else {
+					display.textContent = 'MP4, MOV up to 50MB'
+				}
+			}
+
+			// ───────────────── TOAST SYSTEM ─────────────────
+			function showToast(message, type = 'success') {
+				const container = document.getElementById('toast-container')
+				const toast = document.createElement('div')
+
+				const isSuccess = type === 'success'
+				const bgColor = isSuccess ? 'bg-green-950/80 border-green-800' : 'bg-red-950/80 border-red-800'
+				const iconColor = isSuccess ? 'text-green-400' : 'text-red-400'
+				const svg = isSuccess
+					? `<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />`
+					: `<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />`
+
+				toast.className = `pointer-events-auto flex items-center gap-3 w-80 max-w-sm rounded-xl border ${bgColor} p-4 shadow-xl backdrop-blur-md toast-enter`
+				toast.innerHTML = `
+                <svg class="h-6 w-6 ${iconColor} flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    ${svg}
+                </svg>
+                <p class="text-sm font-medium text-white break-words w-full">${message}</p>
+            `
+
+				container.appendChild(toast)
+
+				setTimeout(() => {
+					toast.classList.remove('toast-enter')
+					toast.classList.add('toast-exit')
+					setTimeout(() => toast.remove(), 300)
+				}, 5000)
+			}
+
+			// ───────────────── DATA FETCHING ─────────────────
+			async function fetchDropdownData() {
+				try {
+					// Fetch Muscle Groups
+					const mgRes = await fetch(`${baseUrl}/api/v1/muscle-groups`, { headers: apiHeaders })
+					const mgData = await mgRes.json()
+
+					// Fetch Equipment
+					const eqRes = await fetch(`${baseUrl}/api/v1/equipment`, { headers: apiHeaders })
+					const eqData = await eqRes.json()
+
+					// Populate Primary Muscle Group
+					const primarySelect = document.getElementById('primaryMuscleGroupId')
+					const secondaryContainer = document.getElementById('secondaryMuscleGroupsContainer')
+
+					if (mgRes.ok && mgData.success) {
+						primarySelect.innerHTML = '<option value="" disabled selected>Select a muscle group</option>'
+						secondaryContainer.innerHTML = '' // clear loading text
+
+						mgData.data.forEach(mg => {
+							primarySelect.insertAdjacentHTML(
+								'beforeend',
+								`<option value="${mg.id}">${mg.title}</option>`
+							)
+
+							secondaryContainer.insertAdjacentHTML(
+								'beforeend',
+								`
+                            <label class="relative flex cursor-pointer items-start p-3 border border-neutral-800 rounded-lg bg-neutral-900 hover:bg-neutral-800 transition-colors group">
+                                <div class="flex h-6 items-center">
+                                    <input id="mg-${mg.id}" name="otherMuscleGroupIds" type="checkbox" value="${mg.id}" class="h-4 w-4 rounded border-neutral-700 bg-neutral-950 text-white focus:ring-white focus:ring-offset-neutral-900">
+                                </div>
+                                <div class="ml-3 text-sm leading-6">
+                                    <span class="font-medium text-neutral-300 group-hover:text-white transition-colors">${mg.title}</span>
+                                </div>
+                            </label>
+                        `
+							)
+						})
+						primarySelect.disabled = false
+					} else {
+						throw new Error('Failed to load muscle groups')
+					}
+
+					// Populate Equipment
+					const eqSelect = document.getElementById('equipmentId')
+					if (eqRes.ok && eqData.success) {
+						eqSelect.innerHTML = '<option value="" disabled selected>Select equipment</option>'
+						eqData.data.forEach(eq => {
+							eqSelect.insertAdjacentHTML('beforeend', `<option value="${eq.id}">${eq.title}</option>`)
+						})
+						eqSelect.disabled = false
+					} else {
+						throw new Error('Failed to load equipment')
+					}
+				} catch (error) {
+					console.error(error)
+					showToast('Failed to load form data. Please refresh.', 'error')
+				}
+			}
+
+			// ───────────────── FORM SUBMISSION ─────────────────
+			document.getElementById('create-exercise-form').addEventListener('submit', async e => {
+				e.preventDefault()
+
+				const form = e.target
+				const submitBtn = document.getElementById('submitBtn')
+				const originalBtnText = submitBtn.innerHTML
+
+				// Validate Secondary vs Primary overlap (Optional UX improvement)
+				const primaryId = document.getElementById('primaryMuscleGroupId').value
+				const secondaryCheckboxes = document.querySelectorAll('input[name="otherMuscleGroupIds"]:checked')
+
+				for (let cb of secondaryCheckboxes) {
+					if (cb.value === primaryId) {
+						showToast('Primary muscle group cannot also be a secondary muscle group.', 'error')
+						return
+					}
+				}
+
+				// Create FormData
+				const formData = new FormData(form)
+
+				// Build the final FormData to send
+				const submissionData = new FormData()
+				submissionData.append('title', formData.get('title'))
+				submissionData.append('exerciseType', formData.get('exerciseType'))
+				submissionData.append('primaryMuscleGroupId', formData.get('primaryMuscleGroupId'))
+				submissionData.append('equipmentId', formData.get('equipmentId'))
+
+				if (formData.get('instructions')) {
+					submissionData.append('instructions', formData.get('instructions'))
+				}
+
+				if (formData.get('video').size > 0) {
+					submissionData.append('video', formData.get('video'))
+				}
+
+				// Append each secondary muscle group ID separately for the API array validation to work
+				for (let cb of secondaryCheckboxes) {
+					submissionData.append('otherMuscleGroupIds', cb.value)
+				}
+
+				try {
+					// Loading state
+					submitBtn.disabled = true
+					submitBtn.innerHTML = `
+                    <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-black" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Uploading...
+                `
+
+					// Post directly (Fetch automatically sets multi-part boundries when body is FormData)
+					const res = await fetch(`${baseUrl}/api/v1/exercises`, {
+						method: 'POST',
+						headers: apiHeaders,
+						body: submissionData,
+					})
+
+					const data = await res.json()
+
+					if (res.ok && data.success) {
+						showToast('Exercise created and video uploaded successfully!')
+						form.reset()
+						updateFileName(document.getElementById('video'))
+					} else {
+						throw new Error(data.message || 'Validation failed')
+					}
+				} catch (error) {
+					console.error(error)
+					showToast(error.message, 'error')
+				} finally {
+					// Reset Loading State
+					submitBtn.disabled = false
+					submitBtn.innerHTML = originalBtnText
+				}
+			})
+
+			// Initialize
+			document.addEventListener('DOMContentLoaded', fetchDropdownData)
+		</script>
+	</body>
+</html>

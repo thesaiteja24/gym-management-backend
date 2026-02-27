@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Admin Login - Gym Management</title>
+		<!-- Tailwind CSS -->
+		<script src="https://cdn.tailwindcss.com"></script>
+		<!-- Google Identity Services -->
+		<script src="https://accounts.google.com/gsi/client" async defer></script>
+		<style>
+			.gsi-container {
+				width: 100%;
+				display: flex;
+				justify-content: center;
+			}
+		</style>
+	</head>
+	<body class="bg-neutral-900 text-white min-h-screen flex items-center justify-center p-4">
+		<div class="max-w-md w-full bg-neutral-800 rounded-2xl shadow-xl p-8 border border-neutral-700">
+			<div class="text-center mb-8">
+				<h1 class="text-3xl font-bold mb-2">Admin Portal</h1>
+				<p class="text-neutral-400">Sign in to manage exercises and system configuration.</p>
+			</div>
+
+			<!-- Error Alert -->
+			<div
+				id="error-alert"
+				class="hidden mb-6 p-4 bg-red-900/50 border border-red-500 rounded-lg text-red-200 text-sm text-center"
+			>
+				Authentication failed. Please try again.
+			</div>
+
+			<!-- Google Sign-In Button Container -->
+			<div class="gsi-container mb-6" id="gsi-wrapper">
+				<div class="text-sm text-neutral-500 animate-pulse">Initializing login...</div>
+			</div>
+
+			<div class="text-center text-xs text-neutral-500 mt-6 pt-6 border-t border-neutral-700">
+				Secure access restricted to system administrators only.
+			</div>
+		</div>
+
+		<script>
+			// Check if already logged in and simply redirect
+			document.addEventListener('DOMContentLoaded', async () => {
+				const token = localStorage.getItem('adminAccessToken')
+				const role = localStorage.getItem('adminRole')
+				if (token && role === 'systemAdmin') {
+					window.location.href = '/admin/create-exercise.html'
+					return
+				}
+
+				try {
+					const res = await fetch('/api/v1/config/google-client-id')
+					const data = await res.json()
+
+					if (res.ok && data.success && data.data.clientId) {
+						initializeGoogleLogin(data.data.clientId)
+					} else {
+						throw new Error('Could not fetch client ID')
+					}
+				} catch (error) {
+					console.error('Failed to initialize Google Login', error)
+					document.getElementById('gsi-wrapper').innerHTML =
+						'<div class="text-sm text-red-400">Login system unavailable. Check console.</div>'
+				}
+			})
+
+			function initializeGoogleLogin(clientId) {
+				const wrapper = document.getElementById('gsi-wrapper')
+				wrapper.innerHTML = `
+                    <div id="g_id_onload"
+                        data-client_id="${clientId}"
+                        data-context="signin"
+                        data-ux_mode="popup"
+                        data-callback="handleCredentialResponse"
+                        data-auto_prompt="false"></div>
+                    <div class="g_id_signin"
+                        data-type="standard"
+                        data-shape="rectangular"
+                        data-theme="outline"
+                        data-text="signin_with"
+                        data-size="large"
+                        data-logo_alignment="left"></div>
+                `
+
+				// Re-trigger google's script parsing
+				google.accounts.id.initialize({
+					client_id: clientId,
+					callback: handleCredentialResponse,
+				})
+				google.accounts.id.renderButton(wrapper.querySelector('.g_id_signin'), {
+					theme: 'outline',
+					size: 'large',
+				})
+			}
+
+			// Callback for Google Identity Services
+			async function handleCredentialResponse(response) {
+				const errorAlert = document.getElementById('error-alert')
+				errorAlert.classList.add('hidden')
+
+				try {
+					// Determine origin dynamically based on current host
+					const baseUrl = window.location.origin
+
+					const res = await fetch(`${baseUrl}/api/v1/auth/google`, {
+						method: 'POST',
+						headers: {
+							'Content-Type': 'application/json',
+						},
+						body: JSON.stringify({
+							idToken: response.credential,
+						}),
+					})
+
+					const data = await res.json()
+
+					if (res.ok && data.success) {
+						const userRole = data.data.user.role
+
+						if (userRole === 'systemAdmin') {
+							// Store the token and role
+							localStorage.setItem('adminAccessToken', data.data.accessToken)
+							localStorage.setItem('adminRole', userRole)
+							// Redirect to create exercise page
+							window.location.href = '/admin/create-exercise.html'
+						} else {
+							// Authorized but not an admin
+							throw new Error('Unauthorized: System Administrator access required.')
+						}
+					} else {
+						throw new Error(data.message || 'Authentication failed')
+					}
+				} catch (error) {
+					console.error('Login error:', error)
+					errorAlert.textContent = error.message
+					errorAlert.classList.remove('hidden')
+				}
+			}
+		</script>
+	</body>
+</html>
