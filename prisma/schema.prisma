@@ -7,9 +7,390 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/**
- * ───────────────── ENUMS ─────────────────
- */
+model User {
+  id                      String               @id @default(uuid(7))
+  countryCode             String?
+  phone                   String?              @unique
+  phoneE164               String?              @unique
+  firstName               String?
+  lastName                String?
+  dateOfBirth             DateTime?            @db.Date
+  height                  Decimal?             @db.Decimal(6, 2)
+  weight                  Decimal?             @db.Decimal(6, 2)
+  profilePicUrl           String?
+  role                    UserRole             @default(member)
+  createdAt               DateTime             @default(now())
+  updatedAt               DateTime             @updatedAt
+  preferredLengthUnit     LengthUnits          @default(cm)
+  preferredWeightUnit     WeightUnits          @default(kg)
+  gender                  Gender?
+  email                   String?              @unique
+  googleId                String?              @unique
+  privacyPolicyAcceptedAt DateTime?
+  privacyPolicyVersion    String?              @default("1.0")
+  followersCount          Int                  @default(0)
+  followingCount          Int                  @default(0)
+  following               Follow[]             @relation("UserFollowing")
+  followers               Follow[]             @relation("UserFollowers")
+  gymsOwned               Gym[]                @relation("GymOwner")
+  memberships             Membership[]
+  sessions                Session[]
+  fitnessProfile          UserFitnessProfile?
+  measurements            UserMeasurement[]
+  workoutComments         WorkoutComment[]
+  workoutCommentLikes     WorkoutCommentLike[]
+  workoutLikes            WorkoutLike[]
+  workoutLogs             WorkoutLog[]
+  workoutTemplates        WorkoutTemplate[]
+
+  @@index([countryCode])
+  @@index([role])
+  @@index([firstName])
+  @@index([lastName])
+}
+
+model UserFitnessProfile {
+  id     String @id @default(uuid(7))
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id])
+
+  fitnessGoal  FitnessGoal?
+  fitnessLevel FitnessLevel?
+
+  targetWeight Decimal?  @db.Decimal(6, 2)
+  targetDate   DateTime? @db.Date
+
+  injuries           String?
+  availableEquipment EquipmentType[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model UserMeasurement {
+  id              String   @id @default(uuid(7))
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date            DateTime @db.Date // Stores only the date portion
+  weight          Decimal? @db.Decimal(6, 2)
+  waist           Decimal? @db.Decimal(6, 2)
+  bodyFat         Decimal? @db.Decimal(5, 2)
+  leanBodyMass    Decimal? @db.Decimal(6, 2)
+  neck            Decimal? @db.Decimal(6, 2)
+  shoulders       Decimal? @db.Decimal(6, 2)
+  chest           Decimal? @db.Decimal(6, 2)
+  abdomen         Decimal? @db.Decimal(6, 2)
+  hips            Decimal? @db.Decimal(6, 2)
+  leftBicep       Decimal? @db.Decimal(6, 2)
+  rightBicep      Decimal? @db.Decimal(6, 2)
+  leftForearm     Decimal? @db.Decimal(6, 2)
+  rightForearm    Decimal? @db.Decimal(6, 2)
+  leftThigh       Decimal? @db.Decimal(6, 2)
+  rightThigh      Decimal? @db.Decimal(6, 2)
+  leftCalf        Decimal? @db.Decimal(6, 2)
+  rightCalf       Decimal? @db.Decimal(6, 2)
+  notes           String?
+  progressPicUrls String[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, date])
+  @@index([userId, date])
+}
+
+model Gym {
+  id          String       @id @default(uuid(7))
+  name        String
+  ownerId     String
+  description String?
+  timings     Json?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  owner       User         @relation("GymOwner", fields: [ownerId], references: [id])
+  memberships Membership[]
+
+  @@index([ownerId])
+  @@index([name])
+}
+
+model WorkoutLog {
+  id              String                    @id @default(uuid(7))
+  userId          String
+  title           String?
+  startTime       DateTime?
+  endTime         DateTime?
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+  editedAt        DateTime?
+  isEdited        Boolean                   @default(false)
+  clientId        String?                   @unique
+  deletedAt       DateTime?
+  visibility      WorkoutLogVisibility      @default(public)
+  commentsCount   Int                       @default(0)
+  likesCount      Int                       @default(0)
+  shareId         String?                   @unique
+  workoutComments WorkoutComment[]
+  workoutLikes    WorkoutLike[]
+  user            User                      @relation(fields: [userId], references: [id])
+  exercises       WorkoutLogExercise[]
+  exerciseGroups  WorkoutLogExerciseGroup[]
+
+  @@index([userId, deletedAt, createdAt])
+  @@index([visibility, deletedAt, userId, createdAt])
+}
+
+/// *
+/// * ───────────────── WORKOUT EXERCISE GROUP ─────────────────
+model WorkoutLogExerciseGroup {
+  id                  String               @id @default(uuid(7))
+  workoutId           String
+  groupIndex          Int
+  restSeconds         Int?
+  note                String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  groupType           ExerciseGroupType
+  workoutLogExercises WorkoutLogExercise[]
+  workout             WorkoutLog           @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+
+  @@index([workoutId, groupIndex])
+}
+
+model WorkoutLogExercise {
+  id              String                   @id @default(uuid(7))
+  workoutId       String
+  exerciseId      String
+  exerciseIndex   Int
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  exerciseGroupId String?
+  exerciseGroup   WorkoutLogExerciseGroup? @relation(fields: [exerciseGroupId], references: [id])
+  exercise        Exercise                 @relation(fields: [exerciseId], references: [id])
+  workout         WorkoutLog               @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  sets            WorkoutLogExerciseSet[]
+
+  @@index([workoutId, exerciseIndex])
+  @@index([exerciseId])
+}
+
+model WorkoutLogExerciseSet {
+  id                String             @id @default(uuid(7))
+  workoutExerciseId String
+  setIndex          Int
+  weight            Decimal?           @db.Decimal(8, 3)
+  reps              Int?
+  rpe               Int?
+  durationSeconds   Int?
+  note              String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  restSeconds       Int?
+  setType           SetType            @default(working)
+  workoutExercise   WorkoutLogExercise @relation(fields: [workoutExerciseId], references: [id], onDelete: Cascade)
+
+  @@index([workoutExerciseId, setIndex])
+}
+
+model Exercise {
+  id                   String                    @id @default(uuid(7))
+  title                String
+  instructions         String?
+  thumbnailUrl         String?
+  videoUrl             String?
+  primaryMuscleGroupId String?
+  equipmentId          String?
+  exerciseType         ExerciseType              @default(weighted)
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+  equipment            Equipment?                @relation(fields: [equipmentId], references: [id])
+  primaryMuscleGroup   MuscleGroup?              @relation("PrimaryMuscleGroup", fields: [primaryMuscleGroupId], references: [id])
+  otherMuscleGroups    ExerciseMuscleGroup[]
+  workoutLogExercises  WorkoutLogExercise[]
+  templateExercises    WorkoutTemplateExercise[]
+
+  @@index([title])
+  @@index([primaryMuscleGroupId])
+  @@index([equipmentId])
+}
+
+model Equipment {
+  id           String         @id @default(uuid(7))
+  title        String         @unique
+  thumbnailUrl String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  type         EquipmentType?
+  exercises    Exercise[]
+}
+
+model MuscleGroup {
+  id               String                @id @default(uuid(7))
+  title            String                @unique
+  thumbnailUrl     String?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  tags             String[]
+  primaryExercises Exercise[]            @relation("PrimaryMuscleGroup")
+  exercises        ExerciseMuscleGroup[]
+}
+
+model ExerciseMuscleGroup {
+  id            String      @id @default(uuid(7))
+  exerciseId    String
+  muscleGroupId String
+  exercise      Exercise    @relation(fields: [exerciseId], references: [id])
+  muscleGroup   MuscleGroup @relation(fields: [muscleGroupId], references: [id])
+
+  @@unique([exerciseId, muscleGroupId])
+  @@index([muscleGroupId])
+}
+
+model Membership {
+  id             String   @id @default(uuid(7))
+  gymId          String
+  userId         String
+  membershipType String?
+  joinedAt       DateTime @default(now())
+  status         String   @default("active")
+  gym            Gym      @relation(fields: [gymId], references: [id])
+  user           User     @relation(fields: [userId], references: [id])
+
+  @@unique([gymId, userId])
+  @@index([userId])
+}
+
+model Session {
+  id               String    @id @default(uuid(7))
+  userId           String
+  jwtId            String?
+  refreshTokenHash String
+  deviceId         String?
+  ipAddress        String?
+  userAgent        String?
+  expiresAt        DateTime
+  lastUsed         DateTime?
+  createdAt        DateTime  @default(now())
+  user             User      @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model WorkoutTemplate {
+  id             String                         @id @default(uuid(7))
+  userId         String
+  title          String
+  notes          String?
+  createdAt      DateTime                       @default(now())
+  updatedAt      DateTime                       @updatedAt
+  deletedAt      DateTime?
+  shareId        String?                        @unique
+  authorName     String?
+  sourceShareId  String?
+  user           User                           @relation(fields: [userId], references: [id])
+  exercises      WorkoutTemplateExercise[]
+  exerciseGroups WorkoutTemplateExerciseGroup[]
+
+  @@index([userId])
+}
+
+model WorkoutTemplateExerciseGroup {
+  id          String                    @id @default(uuid(7))
+  templateId  String
+  groupType   ExerciseGroupType
+  groupIndex  Int
+  restSeconds Int?
+  exercises   WorkoutTemplateExercise[]
+  template    WorkoutTemplate           @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId, groupIndex])
+}
+
+model WorkoutTemplateExercise {
+  id              String                        @id @default(uuid(7))
+  templateId      String
+  exerciseId      String
+  exerciseIndex   Int
+  exerciseGroupId String?
+  exerciseGroup   WorkoutTemplateExerciseGroup? @relation(fields: [exerciseGroupId], references: [id])
+  exercise        Exercise                      @relation(fields: [exerciseId], references: [id])
+  template        WorkoutTemplate               @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  sets            WorkoutTemplateSet[]
+
+  @@index([templateId, exerciseIndex])
+}
+
+model WorkoutTemplateSet {
+  id                 String                  @id @default(uuid(7))
+  templateExerciseId String
+  setIndex           Int
+  setType            SetType                 @default(working)
+  weight             Decimal?                @db.Decimal(8, 3)
+  reps               Int?
+  rpe                Int?
+  durationSeconds    Int?
+  restSeconds        Int?
+  note               String?
+  templateExercise   WorkoutTemplateExercise @relation(fields: [templateExerciseId], references: [id], onDelete: Cascade)
+
+  @@index([templateExerciseId, setIndex])
+}
+
+model Follow {
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+  follower    User     @relation("UserFollowing", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("UserFollowers", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@id([followerId, followingId])
+  @@index([followingId])
+}
+
+model WorkoutLike {
+  userId    String
+  workoutId String
+  createdAt DateTime   @default(now())
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workout   WorkoutLog @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+
+  @@id([userId, workoutId])
+  @@index([workoutId])
+}
+
+model WorkoutComment {
+  id                  String               @id @default(uuid(7))
+  workoutId           String
+  userId              String
+  content             String
+  parentId            String?
+  likesCount          Int                  @default(0)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  deletedAt           DateTime?
+  parent              WorkoutComment?      @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies             WorkoutComment[]     @relation("CommentReplies")
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workout             WorkoutLog           @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  workoutCommentLikes WorkoutCommentLike[]
+
+  @@index([workoutId, parentId])
+  @@index([workoutId, createdAt])
+  @@index([parentId])
+  @@index([userId])
+}
+
+model WorkoutCommentLike {
+  userId    String
+  commentId String
+  createdAt DateTime       @default(now())
+  comment   WorkoutComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, commentId])
+  @@index([commentId])
+}
 
 enum UserRole {
   systemAdmin
@@ -81,424 +462,4 @@ enum EquipmentType {
 enum WorkoutLogVisibility {
   public
   private
-}
-
-/**
- * ───────────────── USER ─────────────────
- */
-
-model User {
-  id                      String      @id @default(uuid(7))
-  countryCode             String?
-  phone                   String?     @unique
-  phoneE164               String?     @unique
-  email                   String?     @unique
-  googleId                String?     @unique
-  firstName               String?
-  lastName                String?
-  dateOfBirth             DateTime?   @db.Date
-  gender                  Gender?
-  preferredWeightUnit     WeightUnits @default(kg)
-  preferredLengthUnit     LengthUnits @default(cm)
-  height                  Decimal?    @db.Decimal(6, 2)
-  weight                  Decimal?    @db.Decimal(6, 2)
-  profilePicUrl           String?
-  role                    UserRole    @default(member)
-  privacyPolicyAcceptedAt DateTime?
-  privacyPolicyVersion    String?     @default("1.0")
-  followersCount          Int         @default(0)
-  followingCount          Int         @default(0)
-  createdAt               DateTime    @default(now())
-  updatedAt               DateTime    @updatedAt
-
-  followers           Follow[]             @relation("UserFollowers")
-  following           Follow[]             @relation("UserFollowing")
-  gymsOwned           Gym[]                @relation("GymOwner")
-  workoutLogs         WorkoutLog[]
-  workoutTemplates    WorkoutTemplate[]
-  sessions            Session[]
-  memberships         Membership[]
-  fitnessProfile      UserFitnessProfile?
-  workoutLikes        WorkoutLike[]
-  workoutComments     WorkoutComment[]
-  workoutCommentLikes WorkoutCommentLike[]
-
-  @@index([countryCode])
-  @@index([role])
-  @@index([firstName])
-  @@index([lastName])
-}
-
-model UserFitnessProfile {
-  id                 String          @id @default(uuid(7))
-  userId             String          @unique
-  user               User            @relation(fields: [userId], references: [id])
-  fitnessGoal        FitnessGoal?
-  fitnessLevel       FitnessLevel?
-  injuries           String?
-  availableEquipment EquipmentType[]
-  createdAt          DateTime        @default(now())
-  updatedAt          DateTime        @updatedAt
-}
-
-/**
- * ───────────────── GYM ─────────────────
- */
-
-model Gym {
-  id          String   @id @default(uuid(7))
-  name        String
-  ownerId     String
-  owner       User     @relation("GymOwner", fields: [ownerId], references: [id])
-  description String?
-  timings     Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  memberships Membership[]
-
-  @@index([ownerId])
-  @@index([name])
-}
-
-/**
- * ───────────────── WORKOUT LOG ─────────────────
- */
-
-model WorkoutLog {
-  clientId      String?              @unique
-  id            String               @id @default(uuid(7))
-  userId        String
-  user          User                 @relation(fields: [userId], references: [id])
-  title         String?
-  startTime     DateTime?
-  endTime       DateTime?
-  likesCount    Int                  @default(0)
-  commentsCount Int                  @default(0)
-  visibility    WorkoutLogVisibility @default(public)
-  createdAt     DateTime             @default(now())
-  updatedAt     DateTime             @updatedAt
-  isEdited      Boolean              @default(false)
-  editedAt      DateTime?
-  deletedAt     DateTime?
-  shareId       String?              @unique
-
-  exercises       WorkoutLogExercise[]
-  exerciseGroups  WorkoutLogExerciseGroup[]
-  workoutComments WorkoutComment[]
-  workoutLikes    WorkoutLike[]
-
-  @@index([userId, deletedAt, createdAt])
-  @@index([visibility, deletedAt, userId, createdAt])
-}
-
-/**
- * ───────────────── WORKOUT EXERCISE GROUP ─────────────────
- */
-model WorkoutLogExerciseGroup {
-  id                  String               @id @default(uuid(7))
-  workoutId           String
-  workout             WorkoutLog           @relation(fields: [workoutId], references: [id], onDelete: Cascade)
-  groupType           ExerciseGroupType
-  groupIndex          Int
-  restSeconds         Int?
-  note                String?
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
-  workoutLogExercises WorkoutLogExercise[]
-
-  @@index([workoutId, groupIndex])
-}
-
-/**
- * ───────────────── WORKOUT EXERCISE ─────────────────
- */
-
-model WorkoutLogExercise {
-  id              String                   @id @default(uuid(7))
-  workoutId       String
-  workout         WorkoutLog               @relation(fields: [workoutId], references: [id], onDelete: Cascade)
-  exerciseId      String
-  exercise        Exercise                 @relation(fields: [exerciseId], references: [id])
-  exerciseGroupId String?
-  exerciseGroup   WorkoutLogExerciseGroup? @relation(fields: [exerciseGroupId], references: [id], onDelete: SetNull)
-  exerciseIndex   Int
-  createdAt       DateTime                 @default(now())
-  updatedAt       DateTime                 @updatedAt
-
-  sets WorkoutLogExerciseSet[]
-
-  @@index([workoutId, exerciseIndex])
-  @@index([exerciseId])
-}
-
-/**
- * ───────────────── WORKOUT SET ─────────────────
- */
-
-model WorkoutLogExerciseSet {
-  id                String             @id @default(uuid(7))
-  workoutExerciseId String
-  workoutExercise   WorkoutLogExercise @relation(fields: [workoutExerciseId], references: [id], onDelete: Cascade)
-  setIndex          Int
-  weight            Decimal?           @db.Decimal(8, 3)
-  reps              Int?
-  rpe               Int?
-  durationSeconds   Int?
-  note              String?
-  restSeconds       Int?
-  setType           SetType            @default(working)
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-
-  @@index([workoutExerciseId, setIndex])
-}
-
-/**
- * ───────────────── EXERCISE MASTER ─────────────────
- */
-
-model Exercise {
-  id                   String       @id @default(uuid(7))
-  title                String
-  instructions         String?
-  thumbnailUrl         String?
-  videoUrl             String?
-  primaryMuscleGroupId String?
-  primaryMuscleGroup   MuscleGroup? @relation("PrimaryMuscleGroup", fields: [primaryMuscleGroupId], references: [id])
-  equipmentId          String?
-  equipment            Equipment?   @relation(fields: [equipmentId], references: [id])
-  exerciseType         ExerciseType @default(weighted)
-  createdAt            DateTime     @default(now())
-  updatedAt            DateTime     @updatedAt
-
-  otherMuscleGroups   ExerciseMuscleGroup[]
-  workoutLogExercises WorkoutLogExercise[]
-  templateExercises   WorkoutTemplateExercise[]
-
-  @@index([title])
-  @@index([primaryMuscleGroupId])
-  @@index([equipmentId])
-}
-
-/**
- * ───────────────── EQUIPMENT ─────────────────
- */
-
-model Equipment {
-  id           String         @id @default(uuid(7))
-  title        String         @unique
-  thumbnailUrl String?
-  type         EquipmentType?
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-
-  exercises Exercise[]
-}
-
-/**
- * ───────────────── MUSCLE GROUP ─────────────────
- */
-
-model MuscleGroup {
-  id           String   @id @default(uuid(7))
-  title        String   @unique
-  thumbnailUrl String?
-  tags         String[]
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  primaryExercises Exercise[]            @relation("PrimaryMuscleGroup")
-  exercises        ExerciseMuscleGroup[]
-}
-
-/**
- * ───────────────── EXERCISE ↔ MUSCLE GROUP ─────────────────
- */
-
-model ExerciseMuscleGroup {
-  id            String      @id @default(uuid(7))
-  exerciseId    String
-  exercise      Exercise    @relation(fields: [exerciseId], references: [id])
-  muscleGroupId String
-  muscleGroup   MuscleGroup @relation(fields: [muscleGroupId], references: [id])
-
-  @@unique([exerciseId, muscleGroupId])
-  @@index([muscleGroupId])
-}
-
-/**
- * ───────────────── MEMBERSHIP ─────────────────
- */
-
-model Membership {
-  id             String   @id @default(uuid(7))
-  gymId          String
-  gym            Gym      @relation(fields: [gymId], references: [id])
-  userId         String
-  user           User     @relation(fields: [userId], references: [id])
-  membershipType String?
-  joinedAt       DateTime @default(now())
-  status         String   @default("active")
-
-  @@unique([gymId, userId])
-  @@index([userId])
-}
-
-/**
- * ───────────────── SESSION ─────────────────
- */
-
-model Session {
-  id               String    @id @default(uuid(7))
-  userId           String
-  jwtId            String?
-  refreshTokenHash String
-  deviceId         String?
-  ipAddress        String?
-  userAgent        String?
-  expiresAt        DateTime
-  lastUsed         DateTime?
-  createdAt        DateTime  @default(now())
-
-  user User @relation(fields: [userId], references: [id])
-
-  @@index([userId])
-  @@index([expiresAt])
-}
-
-/**
- * ───────────────── MEMBER'S WORKOUT TEMPLATES ─────────────────
- */
-
-model WorkoutTemplate {
-  id            String    @id @default(uuid(7))
-  userId        String
-  user          User      @relation(fields: [userId], references: [id])
-  title         String
-  notes         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  deletedAt     DateTime?
-  shareId       String?   @unique
-  sourceShareId String?
-  authorName    String?
-
-  exercises      WorkoutTemplateExercise[]
-  exerciseGroups WorkoutTemplateExerciseGroup[]
-
-  @@index([userId])
-}
-
-model WorkoutTemplateExerciseGroup {
-  id          String            @id @default(uuid(7))
-  templateId  String
-  template    WorkoutTemplate   @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  groupType   ExerciseGroupType
-  groupIndex  Int
-  restSeconds Int?
-
-  exercises WorkoutTemplateExercise[]
-
-  @@index([templateId, groupIndex])
-}
-
-model WorkoutTemplateExercise {
-  id            String          @id @default(uuid(7))
-  templateId    String
-  template      WorkoutTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  exerciseId    String
-  exercise      Exercise        @relation(fields: [exerciseId], references: [id])
-  exerciseIndex Int
-
-  exerciseGroupId String?
-  exerciseGroup   WorkoutTemplateExerciseGroup? @relation(fields: [exerciseGroupId], references: [id], onDelete: SetNull)
-
-  sets WorkoutTemplateSet[]
-
-  @@index([templateId, exerciseIndex])
-}
-
-model WorkoutTemplateSet {
-  id                 String                  @id @default(uuid(7))
-  templateExerciseId String
-  templateExercise   WorkoutTemplateExercise @relation(fields: [templateExerciseId], references: [id], onDelete: Cascade)
-  setIndex           Int
-  setType            SetType                 @default(working)
-
-  // Targets (Optional)
-  weight          Decimal? @db.Decimal(8, 3)
-  reps            Int?
-  rpe             Int?
-  durationSeconds Int?
-  restSeconds     Int?
-  note            String?
-
-  @@index([templateExerciseId, setIndex])
-}
-
-model Follow {
-  followerId  String
-  followingId String
-
-  follower  User @relation("UserFollowing", fields: [followerId], references: [id], onDelete: Cascade)
-  following User @relation("UserFollowers", fields: [followingId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-
-  @@id([followerId, followingId])
-  @@index([followingId])
-}
-
-model WorkoutLike {
-  userId    String
-  workoutId String
-
-  user    User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  workout WorkoutLog @relation(fields: [workoutId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-
-  @@id([userId, workoutId])
-  @@index([workoutId])
-}
-
-model WorkoutComment {
-  id        String @id @default(uuid(7))
-  workoutId String
-  userId    String
-
-  workout WorkoutLog @relation(fields: [workoutId], references: [id], onDelete: Cascade)
-  user    User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  content String
-
-  parentId String?
-  parent   WorkoutComment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
-  replies  WorkoutComment[] @relation("CommentReplies")
-
-  likesCount Int @default(0)
-
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
-  deletedAt           DateTime?
-  workoutCommentLikes WorkoutCommentLike[]
-
-  @@index([workoutId, parentId])
-  @@index([workoutId, createdAt])
-  @@index([parentId])
-  @@index([userId])
-}
-
-model WorkoutCommentLike {
-  userId    String
-  commentId String
-
-  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  comment WorkoutComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-
-  @@id([userId, commentId])
-  @@index([commentId])
 }

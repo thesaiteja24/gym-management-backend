@@ -1,19 +1,31 @@
-import { Request, Response } from 'express'
-import { withAccelerate } from '@prisma/extension-accelerate'
 import { EquipmentType, FitnessGoal, FitnessLevel, Gender, PrismaClient } from '@prisma/client'
+import { withAccelerate } from '@prisma/extension-accelerate'
+import { Request, Response } from 'express'
 import { ApiError } from '../../common/utils/ApiError.js'
 import { ApiResponse } from '../../common/utils/ApiResponse.js'
 import { asyncHandler } from '../../common/utils/asyncHandler.js'
-import { logDebug, logError, logInfo, logWarn } from '../../common/utils/logger.js'
+import { logDebug, logError, logWarn } from '../../common/utils/logger.js'
 // import { deleteFromS3, getSignedUrl, uploadToS3 } from '../../common/utils/s3.js'
-import { deleteProfilePicture, uploadProfilePicture, UploadedFile } from '../../common/services/media.service.js'
+import {
+	deleteMediaByKey,
+	deleteProfilePicture,
+	extractS3KeyFromUrl,
+	UploadedFile,
+	uploadMedia,
+	uploadProfilePicture,
+	uploadVideo,
+} from '../../common/services/media.service.js'
+import { randomUUID } from 'crypto'
 
 const prisma = new PrismaClient().$extends(withAccelerate())
 
 export const getUser = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
 	const userId = req?.params?.id
 
-	const user = await prisma.user.findUnique({ where: { id: userId } })
+	const user = await prisma.user.findUnique({
+		where: { id: userId },
+		include: { fitnessProfile: true, measurements: true },
+	})
 
 	if (!user) {
 		throw new ApiError(404, 'User not found')
@@ -210,6 +222,8 @@ export const deleteProfilePic = asyncHandler(async (req: Request<{ id: string }>
 interface UpdateUserFitnessProfileBody {
 	fitnessGoal?: FitnessGoal
 	fitnessLevel?: FitnessLevel
+	targetWeight?: number
+	targetDate?: string
 	injuries?: string
 	availableEquipment?: EquipmentType[]
 }
@@ -224,6 +238,10 @@ export const updateUserFitnessProfile = asyncHandler(
 			update: {
 				...(updates.fitnessGoal !== undefined && { fitnessGoal: updates.fitnessGoal }),
 				...(updates.fitnessLevel !== undefined && { fitnessLevel: updates.fitnessLevel }),
+				...(updates.targetWeight !== undefined && { targetWeight: updates.targetWeight }),
+				...(updates.targetDate !== undefined && {
+					targetDate: updates.targetDate ? new Date(updates.targetDate) : null,
+				}),
 				...(updates.injuries !== undefined && { injuries: updates.injuries }),
 				...(updates.availableEquipment !== undefined && {
 					availableEquipment: updates.availableEquipment,
@@ -233,6 +251,8 @@ export const updateUserFitnessProfile = asyncHandler(
 				userId,
 				fitnessGoal: updates.fitnessGoal ?? null,
 				fitnessLevel: updates.fitnessLevel ?? null,
+				targetWeight: updates.targetWeight ?? null,
+				targetDate: updates.targetDate ? new Date(updates.targetDate) : null,
 				injuries: updates.injuries ?? null,
 				availableEquipment: updates.availableEquipment ?? [],
 			},
@@ -244,3 +264,200 @@ export const updateUserFitnessProfile = asyncHandler(
 			.json(new ApiResponse(200, updatedFitnessProfile, 'User fitness profile updated successfully '))
 	}
 )
+
+interface AddDailyMeasurementBody {
+	date: string
+	weight?: number
+	waist?: number
+	bodyFat?: number
+	leanBodyMass?: number
+	neck?: number
+	shoulders?: number
+	chest?: number
+	leftBicep?: number
+	rightBicep?: number
+	leftForearm?: number
+	rightForearm?: number
+	abdomen?: number
+	hips?: number
+	leftThigh?: number
+	rightThigh?: number
+	leftCalf?: number
+	rightCalf?: number
+	notes?: string
+}
+
+export const addDailyMeasurement = asyncHandler(
+	async (req: Request<{ id: string }, object, AddDailyMeasurementBody>, res: Response) => {
+		const userId = req.params.id
+		const {
+			date,
+			weight,
+			bodyFat,
+			chest,
+			waist,
+			neck,
+			shoulders,
+			leftBicep,
+			rightBicep,
+			leftForearm,
+			rightForearm,
+			abdomen,
+			hips,
+			leftThigh,
+			rightThigh,
+			leftCalf,
+			rightCalf,
+			notes,
+		} = req.body
+
+		const parsedDate = new Date(date)
+
+		const files = req.files as Express.Multer.File[] | undefined
+		const progressPicUrls: string[] = []
+		const uploadedKeys: string[] = []
+
+		if (files && files.length > 0) {
+			const uploadPromises = files.map(async file => {
+				const tempFile: UploadedFile = {
+					buffer: file.buffer,
+					size: file.size,
+					mimetype: file.mimetype,
+					originalname: file.originalname,
+				}
+				const filePath = `gym-sass/measurements/${userId}/${randomUUID()}`
+
+				if (file.mimetype.startsWith('video/')) {
+					const uploaded = await uploadVideo({
+						file: tempFile,
+						mediaType: 'progressVideo',
+						filePath,
+						userId,
+					})
+					uploadedKeys.push(uploaded.videoKey)
+					return uploaded.videoUrl
+				} else {
+					const url = await uploadMedia({
+						file: tempFile,
+						mediaType: 'progressPic',
+						filePath,
+						userId,
+					})
+					const key = extractS3KeyFromUrl(url)
+					if (key) uploadedKeys.push(key)
+					return url
+				}
+			})
+
+			try {
+				const urls = await Promise.all(uploadPromises)
+				progressPicUrls.push(...urls)
+			} catch (error) {
+				const err = error as Error
+				for (const key of uploadedKeys) {
+					await deleteMediaByKey({ key, userId, reason: 'Failed during multi-upload' })
+				}
+				logError(
+					'Failed to upload daily measurement media',
+					err,
+					{ action: 'addDailyMeasurement', userId },
+					req
+				)
+				throw new ApiError(500, 'Failed to upload daily measurement media')
+			}
+		}
+
+		try {
+			const measurement = await prisma.userMeasurement.upsert({
+				where: {
+					userId_date: {
+						userId,
+						date: parsedDate,
+					},
+				},
+				update: {
+					...(weight !== undefined && { weight }),
+					...(bodyFat !== undefined && { bodyFat }),
+					...(chest !== undefined && { chest }),
+					...(waist !== undefined && { waist }),
+					...(neck !== undefined && { neck }),
+					...(shoulders !== undefined && { shoulders }),
+					...(leftBicep !== undefined && { leftBicep }),
+					...(rightBicep !== undefined && { rightBicep }),
+					...(leftForearm !== undefined && { leftForearm }),
+					...(rightForearm !== undefined && { rightForearm }),
+					...(abdomen !== undefined && { abdomen }),
+					...(hips !== undefined && { hips }),
+					...(leftThigh !== undefined && { leftThigh }),
+					...(rightThigh !== undefined && { rightThigh }),
+					...(leftCalf !== undefined && { leftCalf }),
+					...(rightCalf !== undefined && { rightCalf }),
+					...(notes !== undefined && { notes }),
+					...(progressPicUrls.length > 0 && {
+						progressPicUrls: { push: progressPicUrls },
+					}),
+				},
+				create: {
+					userId,
+					date: parsedDate,
+					weight: weight ?? null,
+					bodyFat: bodyFat ?? null,
+					waist: waist ?? null,
+					neck: neck ?? null,
+					shoulders: shoulders ?? null,
+					chest: chest ?? null,
+					leftBicep: leftBicep ?? null,
+					rightBicep: rightBicep ?? null,
+					leftForearm: leftForearm ?? null,
+					rightForearm: rightForearm ?? null,
+					abdomen: abdomen ?? null,
+					hips: hips ?? null,
+					leftThigh: leftThigh ?? null,
+					rightThigh: rightThigh ?? null,
+					leftCalf: leftCalf ?? null,
+					rightCalf: rightCalf ?? null,
+					notes: notes ?? null,
+					progressPicUrls,
+				},
+			})
+
+			logDebug('Added daily measurement', { action: 'addDailyMeasurement', userId })
+			return res.status(200).json(new ApiResponse(200, measurement, 'Daily measurement saved successfully'))
+		} catch (error) {
+			const err = error as Error
+			// Roll back uploaded media if DB failed
+			for (const key of uploadedKeys) {
+				await deleteMediaByKey({
+					key,
+					userId,
+					reason: 'daily measurement db update failure',
+				})
+			}
+			logError('Failed to save daily measurement in DB', err, { action: 'addDailyMeasurement', userId }, req)
+			throw new ApiError(500, 'Failed to save daily measurement')
+		}
+	}
+)
+
+export const getMeasurementHistory = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
+	const userId = req.params.id
+	const limit = parseInt(req.query.limit as string) || 30 // default fetch last 30 measurements
+
+	const measurements = await prisma.userMeasurement.findMany({
+		where: { userId },
+		orderBy: { date: 'desc' },
+		take: limit,
+	})
+
+	logDebug('Fetched measurement history', { action: 'getMeasurementHistory', userId })
+	return res.status(200).json(new ApiResponse(200, measurements, 'Measurements fetched successfully'))
+})
+
+export const getUserFitnessProfile = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
+	const userId = req.params.id
+	const fitnessProfile = await prisma.userFitnessProfile.findUnique({
+		where: { userId },
+	})
+	logDebug('Fetched user fitness profile', { action: 'getUserFitnessProfile', userId })
+	return res.status(200).json(new ApiResponse(200, fitnessProfile, 'User fitness profile fetched successfully'))
+})

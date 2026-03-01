@@ -1,9 +1,23 @@
 import { Router } from 'express'
-import { deleteProfilePic, getUser, updateProfilePic, updateUser, updateUserFitnessProfile } from './user.controller.js'
+import { authorizeSelfOrAdmin } from '../../common/middlewares/authorize.middleware.js'
 import { upload } from '../../common/middlewares/upload.middleware.js'
-import { authorize, authorizeSelfOrAdmin } from '../../common/middlewares/authorize.middleware.js'
 import { validateResource } from '../../common/middlewares/validate.middleware.js'
-import { updateFitnessProfileSchema, updateProfilePicSchema, updateUserSchema } from './user.validators.js'
+import {
+	addDailyMeasurement,
+	deleteProfilePic,
+	getMeasurementHistory,
+	getUser,
+	getUserFitnessProfile,
+	updateProfilePic,
+	updateUser,
+	updateUserFitnessProfile,
+} from './user.controller.js'
+import {
+	addDailyMeasurementSchema,
+	updateFitnessProfileSchema,
+	updateProfilePicSchema,
+	updateUserSchema,
+} from './user.validators.js'
 
 const router = Router()
 
@@ -22,11 +36,20 @@ router
 	.delete(validateResource(updateProfilePicSchema), authorizeSelfOrAdmin(), deleteProfilePic)
 
 // fitness profile
-router.patch(
-	'/:id/fitness-profile',
-	validateResource(updateFitnessProfileSchema),
-	authorizeSelfOrAdmin(),
-	updateUserFitnessProfile
-)
+router
+	.route('/:id/fitness-profile')
+	.patch(validateResource(updateFitnessProfileSchema), authorizeSelfOrAdmin(), updateUserFitnessProfile)
+	.get(authorizeSelfOrAdmin(), getUserFitnessProfile)
+
+// user measurements
+router
+	.route('/:id/measurements')
+	.post(
+		upload.array('progressPics', 10),
+		validateResource(addDailyMeasurementSchema),
+		authorizeSelfOrAdmin(),
+		addDailyMeasurement
+	)
+	.get(authorizeSelfOrAdmin(), getMeasurementHistory)
 
 export const userRoutes = router

@@ -216,6 +216,87 @@ export const deleteMediaByKey = async ({ key, userId, reason }: DeleteMediaParam
 	}
 }
 
+interface UploadVideoParams {
+	file: UploadedFile
+	mediaType: string
+	filePath: string
+	userId: string
+}
+
+interface VideoUploadResult {
+	videoUrl: string
+	videoKey: string
+}
+
+export const uploadVideo = async ({
+	file,
+	mediaType,
+	filePath,
+	userId,
+}: UploadVideoParams): Promise<VideoUploadResult> => {
+	if (!file) {
+		logWarn('No file provided', { action: 'uploadVideo', userId })
+		throw new Error('No file provided')
+	}
+
+	const videoRule = MEDIA_RULES[mediaType] as VideoMediaRule
+
+	if (!videoRule || videoRule.kind !== 'video') {
+		logWarn('Invalid media type for video', { action: 'uploadVideo', mediaType })
+		throw new Error('Invalid media type for video')
+	}
+
+	if (file.size > videoRule.limits.maxInputBytes) {
+		throw new Error(`${mediaType} video exceeds size limit`)
+	}
+
+	const tempDir = '/tmp'
+	const inputPath = path.join(tempDir, `${randomUUID()}-input.mp4`)
+	const cleanedPath = path.join(tempDir, `${randomUUID()}-cleaned.mp4`)
+
+	try {
+		await fs.writeFile(inputPath, file.buffer)
+
+		if (videoRule.output.stripMetadata) {
+			await execFileAsync('ffmpeg', ['-i', inputPath, '-map_metadata', '-1', '-c', 'copy', cleanedPath])
+		} else {
+			await fs.copyFile(inputPath, cleanedPath)
+		}
+
+		const videoKey = `${filePath}.${videoRule.output.format}`
+		const videoBuffer = await fs.readFile(cleanedPath)
+
+		const videoUploadResponse = await s3.send(
+			new PutObjectCommand({
+				Bucket: BUCKET_NAME,
+				Key: videoKey,
+				Body: videoBuffer,
+				ContentType: `video/${videoRule.output.format}`,
+			})
+		)
+
+		logInfo('Video uploaded', {
+			action: 'uploadVideo',
+			userId,
+			mediaType,
+			videoKey,
+			videoSize: videoBuffer.length,
+			videoEtag: videoUploadResponse.ETag,
+		})
+
+		return {
+			videoUrl: `https://${BUCKET_NAME}.s3.amazonaws.com/${videoKey}`,
+			videoKey,
+		}
+	} catch (error) {
+		logError('Failed to upload video', error as Error, { action: 'uploadVideo', userId, filePath }, null)
+		throw error
+	} finally {
+		await fs.unlink(inputPath).catch(() => {})
+		await fs.unlink(cleanedPath).catch(() => {})
+	}
+}
+
 const execFileAsync = promisify(execFile)
 
 interface UploadExerciseVideoParams {

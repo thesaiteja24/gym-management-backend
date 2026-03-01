@@ -23,9 +23,27 @@ export const validateResource =
 			next()
 		} catch (e: unknown) {
 			if (e instanceof ZodError) {
-				const errorMessages = e.issues.map(iss => iss.path.join('.') + ': ' + iss.message)
-				logWarn('Validation failed', { action: 'validateResource', errors: errorMessages }, req)
-				next(new ApiError(400, 'Validation failed', errorMessages))
+				const errorDetails = e.issues.map(iss => ({
+					field: iss.path.join('.'),
+					message: iss.message,
+					received: (iss as any).received ?? undefined,
+				}))
+
+				logWarn(
+					'Validation failed',
+					{
+						action: 'validateResource',
+						errors: errorDetails,
+						input: {
+							body: req.body,
+							query: req.query,
+							params: req.params,
+						},
+					},
+					req
+				)
+
+				next(new ApiError(400, 'Validation failed', errorDetails))
 			} else {
 				next(e)
 			}

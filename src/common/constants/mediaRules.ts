@@ -38,6 +38,8 @@ export interface MediaRulesConfig {
 	post: ImageMediaRule
 	exerciseThumbnail: ImageMediaRule
 	exerciseVideo: VideoMediaRule
+	progressPic: ImageMediaRule
+	progressVideo: VideoMediaRule
 	[key: string]: MediaRule
 }
 
@@ -115,6 +117,34 @@ export const MEDIA_RULES: MediaRulesConfig = {
 			format: 'mp4',
 			stripMetadata: true,
 			thumbnailAtSeconds: 0.5,
+		},
+	},
+
+	progressPic: {
+		resize: {
+			maxWidth: 1080,
+			maxHeight: 1350,
+			fit: 'inside',
+		},
+		output: {
+			format: 'webp',
+			quality: 80,
+			maxBytes: 250 * 1024, // 250 KB
+		},
+		limits: {
+			maxInputBytes: 10 * 1024 * 1024, // 10 MB
+		},
+	},
+
+	progressVideo: {
+		kind: 'video',
+		limits: {
+			maxInputBytes: 50 * 1024 * 1024, // 50 MB
+		},
+		output: {
+			format: 'mp4',
+			stripMetadata: true,
+			thumbnailAtSeconds: 0,
 		},
 	},
 }
