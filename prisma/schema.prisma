@@ -42,6 +42,7 @@ model User {
   workoutLikes            WorkoutLike[]
   workoutLogs             WorkoutLog[]
   workoutTemplates        WorkoutTemplate[]
+  nutritionPlan           UserNutritionPlan?
 
   @@index([countryCode])
   @@index([role])
@@ -54,14 +55,32 @@ model UserFitnessProfile {
   userId String @unique
   user   User   @relation(fields: [userId], references: [id])
 
-  fitnessGoal  FitnessGoal?
-  fitnessLevel FitnessLevel?
+  fitnessGoal   FitnessGoal?
+  fitnessLevel  FitnessLevel?
+  activityLevel ActivityLevel?
 
-  targetWeight Decimal?  @db.Decimal(6, 2)
-  targetDate   DateTime? @db.Date
+  targetType         TargetType?
+  targetWeight       Decimal?    @db.Decimal(6, 2)
+  targetBodyFat      Decimal?    @db.Decimal(5, 2)
+  targetDate         DateTime?   @db.Date
+  weeklyWeightChange Decimal?    @db.Decimal(6, 2)
 
   injuries           String?
   availableEquipment EquipmentType[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model UserNutritionPlan {
+  id               String   @id @default(uuid(7))
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id])
+  caloriesTarget   Int?
+  proteinTarget    Int?
+  calculatedTDEE   Int?
+  deficitOrSurplus Int?
+  startDate        DateTime @db.Date
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -447,6 +466,19 @@ enum FitnessLevel {
   beginner
   intermediate
   advanced
+}
+
+enum ActivityLevel {
+  sedentary
+  lightlyActive
+  moderatelyActive
+  veryActive
+  athlete
+}
+
+enum TargetType {
+  weight
+  bodyFat
 }
 
 enum EquipmentType {
