@@ -310,6 +310,8 @@ const workoutSelect = {
 			firstName: true,
 			lastName: true,
 			profilePicUrl: true,
+			isPro: true,
+			proSubscriptionType: true,
 		},
 	},
 } as const

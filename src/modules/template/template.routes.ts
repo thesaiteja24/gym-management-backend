@@ -2,11 +2,11 @@ import { Router } from 'express'
 import { validateResource } from '../../common/middlewares/validate.middleware.js'
 import {
 	createTemplate,
+	deleteTemplate,
 	getAllTemplates,
 	getTemplateById,
-	deleteTemplate,
-	updateTemplate,
 	getTemplateByShareId,
+	updateTemplate,
 } from './template.controller.js'
 import { createTemplateSchema, updateTemplateSchema } from './template.validators.js'
 

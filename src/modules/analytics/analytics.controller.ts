@@ -20,7 +20,8 @@ import {
 import { ApiError } from '../../common/utils/ApiError.js'
 import { ApiResponse } from '../../common/utils/ApiResponse.js'
 import { asyncHandler } from '../../common/utils/asyncHandler.js'
-import { logDebug, logError } from '../../common/utils/logger.js'
+import { logDebug, logError, logWarn } from '../../common/utils/logger.js'
+import { date } from 'zod'
 
 const prisma = new PrismaClient().$extends(withAccelerate())
 
@@ -299,6 +300,7 @@ export const addMeasurements = asyncHandler(
 						bodyFat: bodyFat ?? null,
 						waist: waist ?? null,
 						neck: neck ?? null,
+						leanBodyMass: leanBodyMass ?? null,
 						shoulders: shoulders ?? null,
 						chest: chest ?? null,
 						leftBicep: leftBicep ?? null,
@@ -353,6 +355,8 @@ export const getMeasurements = asyncHandler(async (req, res) => {
 interface UpdateNutritionPlanBody {
 	caloriesTarget?: number
 	proteinTarget?: number
+	fatsTarget?: number
+	carbsTarget?: number
 	calculatedTDEE?: number
 	deficitOrSurplus?: number
 	startDate?: string
@@ -368,6 +372,8 @@ export const updateNutritionPlan = asyncHandler(
 			update: {
 				...(updates.caloriesTarget !== undefined && { caloriesTarget: updates.caloriesTarget }),
 				...(updates.proteinTarget !== undefined && { proteinTarget: updates.proteinTarget }),
+				...(updates.fatsTarget !== undefined && { fatsTarget: updates.fatsTarget }),
+				...(updates.carbsTarget !== undefined && { carbsTarget: updates.carbsTarget }),
 				...(updates.calculatedTDEE !== undefined && { calculatedTDEE: updates.calculatedTDEE }),
 				...(updates.deficitOrSurplus !== undefined && { deficitOrSurplus: updates.deficitOrSurplus }),
 				...(updates.startDate !== undefined && { startDate: new Date(updates.startDate) }),
@@ -376,6 +382,8 @@ export const updateNutritionPlan = asyncHandler(
 				userId,
 				caloriesTarget: updates.caloriesTarget ?? null,
 				proteinTarget: updates.proteinTarget ?? null,
+				fatsTarget: updates.fatsTarget ?? null,
+				carbsTarget: updates.carbsTarget ?? null,
 				calculatedTDEE: updates.calculatedTDEE ?? null,
 				deficitOrSurplus: updates.deficitOrSurplus ?? null,
 				startDate: updates.startDate ? new Date(updates.startDate) : new Date(),
@@ -393,4 +401,127 @@ export const getNutritionPlan = asyncHandler(async (req: Request<{ id: string }>
 	})
 	logDebug('Fetched user nutrition plan', { action: 'getUsersNutritionPlan', userId })
 	return res.status(200).json(new ApiResponse(200, nutritionPlan, 'User nutrition plan fetched successfully'))
+})
+
+export const getUserAnalytics = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
+	const userId = req.params.id
+
+	const workoutLogs = await prisma.workoutLog.findMany({
+		where: {
+			userId,
+			deletedAt: null,
+		},
+		include: {
+			exercises: {
+				include: {
+					exercise: {
+						select: { exerciseType: true },
+					},
+					sets: true,
+				},
+			},
+		},
+		orderBy: { startTime: 'desc' },
+	})
+
+	const today = new Date()
+
+	const toDateKey = (date: Date) =>
+		`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+
+	const workoutDates = new Set<string>()
+	workoutLogs.forEach(w => {
+		if (w.startTime) {
+			const d = new Date(w.startTime)
+			workoutDates.add(toDateKey(d))
+		}
+	})
+
+	// Streak Logic
+	let currentStreak = 0
+	let streakCursor = new Date(today)
+
+	if (!workoutDates.has(toDateKey(today))) {
+		streakCursor.setDate(streakCursor.getDate() - 1)
+		if (!workoutDates.has(toDateKey(streakCursor))) {
+			currentStreak = 0
+		} else {
+			while (workoutDates.has(toDateKey(streakCursor))) {
+				currentStreak++
+				streakCursor.setDate(streakCursor.getDate() - 1)
+			}
+		}
+	} else {
+		while (workoutDates.has(toDateKey(streakCursor))) {
+			currentStreak++
+			streakCursor.setDate(streakCursor.getDate() - 1)
+		}
+	}
+
+	// Days Since Last Workout
+	const lastWorkoutDate =
+		workoutLogs.length > 0 && workoutLogs[0].startTime ? new Date(workoutLogs[0].startTime) : null
+	const daysSinceLastWorkout = lastWorkoutDate
+		? Math.floor((today.getTime() - lastWorkoutDate.getTime()) / (1000 * 60 * 60 * 24))
+		: 0
+
+	// Volume & Weekly Frequency
+	const currentWeekStart = new Date(today)
+	currentWeekStart.setDate(today.getDate() - today.getDay()) // Sunday
+	currentWeekStart.setHours(0, 0, 0, 0)
+
+	const lastWeekStart = new Date(currentWeekStart)
+	lastWeekStart.setDate(lastWeekStart.getDate() - 7)
+
+	const lastWeekEnd = new Date(currentWeekStart)
+
+	let workoutsThisWeek = 0
+	let weeklyVolume = 0
+	let lastWeekVolume = 0
+
+	workoutLogs.forEach(workout => {
+		if (!workout.startTime) return
+		const wDate = new Date(workout.startTime)
+
+		const isThisWeek = wDate >= currentWeekStart
+		const isLastWeek = wDate >= lastWeekStart && wDate < lastWeekEnd
+
+		if (!isThisWeek && !isLastWeek) return
+
+		if (isThisWeek) workoutsThisWeek++
+
+		let workoutTonnage = 0
+		workout.exercises.forEach(ex => {
+			const type = ex.exercise.exerciseType
+			ex.sets.forEach(set => {
+				if (type === 'weighted' || type === 'assisted') {
+					const weight = set.weight ? Number(set.weight) : 0
+					const reps = set.reps ?? 0
+					if (weight > 0 && reps > 0) {
+						workoutTonnage += weight * reps
+					}
+				}
+			})
+		})
+
+		if (isThisWeek) weeklyVolume += workoutTonnage
+		if (isLastWeek) lastWeekVolume += workoutTonnage
+	})
+
+	logDebug('Fetched user analytics', { action: 'getUserAnalytics', userId })
+
+	return res.status(200).json(
+		new ApiResponse(
+			200,
+			{
+				streakDays: currentStreak,
+				workoutsThisWeek,
+				daysSinceLastWorkout,
+				weeklyVolume,
+				lastWeekVolume,
+				workoutDates: Array.from(workoutDates),
+			},
+			'User analytics fetched successfully'
+		)
+	)
 })

@@ -40,6 +40,8 @@ export const searchUsers = asyncHandler(async (req: Request, res: Response) => {
 			profilePicUrl: true,
 			firstName: true,
 			lastName: true,
+			isPro: true,
+			proSubscriptionType: true,
 		},
 	})
 
@@ -60,6 +62,8 @@ export const getSuggestedUsers = asyncHandler(async (req: Request, res: Response
 			profilePicUrl: true,
 			firstName: true,
 			lastName: true,
+			isPro: true,
+			proSubscriptionType: true,
 			followers: {
 				where: {
 					followerId: currentUserId,

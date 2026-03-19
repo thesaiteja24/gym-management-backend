@@ -6,6 +6,7 @@ import { ApiResponse } from '../../common/utils/ApiResponse.js'
 import { asyncHandler } from '../../common/utils/asyncHandler.js'
 import { generateSecureToken } from '../../common/utils/helpers.js'
 import { logError, logWarn } from '../../common/utils/logger.js'
+import { FREE_LIMITS } from '../../common/constants/limits.js'
 
 const prisma = new PrismaClient().$extends(withAccelerate())
 
@@ -52,8 +53,20 @@ export const createTemplate = asyncHandler(async (req: Request<object, object, C
 			// Get user details for authorName
 			const user = await tx.user.findUnique({
 				where: { id: req.user!.id },
-				select: { firstName: true, lastName: true },
+				select: { firstName: true, lastName: true, isPro: true },
 			})
+
+			if (!user?.isPro) {
+				const templateCount = await tx.workoutTemplate.count({
+					where: { userId: req.user!.id },
+				})
+				if (templateCount >= FREE_LIMITS.MAX_CUSTOM_TEMPLATES) {
+					throw new ApiError(
+						403,
+						`You can only add up to ${FREE_LIMITS.MAX_CUSTOM_TEMPLATES} custom templates on the Free plan. Upgrade to create UNLIMITED Templates`
+					)
+				}
+			}
 
 			const authorName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Unknown' : 'Unknown'
 

@@ -7,6 +7,7 @@ import {
 	getFitnessProfile,
 	getMeasurements,
 	getNutritionPlan,
+	getUserAnalytics,
 	updateFitnessProfile,
 	updateNutritionPlan,
 } from './analytics.controller.js'
@@ -39,5 +40,7 @@ router
 	.route('/nutrition-plan/:id')
 	.get(authorizeSelfOrAdmin(), getNutritionPlan)
 	.put(validateResource(updateNutritionPlanSchema), authorizeSelfOrAdmin(), updateNutritionPlan)
+
+router.route('/user-analytics/:id').get(authorizeSelfOrAdmin(), getUserAnalytics)
 
 export const analyticRoutes = router

@@ -28,6 +28,10 @@ model User {
   googleId                String?              @unique
   privacyPolicyAcceptedAt DateTime?
   privacyPolicyVersion    String?              @default("1.0")
+  isPro                   Boolean              @default(false)
+  proSubscriptionId       String?
+  proSubscriptionType     String?
+  proExpirationDate       DateTime?
   followersCount          Int                  @default(0)
   followingCount          Int                  @default(0)
   following               Follow[]             @relation("UserFollowing")
@@ -78,6 +82,8 @@ model UserNutritionPlan {
   user             User     @relation(fields: [userId], references: [id])
   caloriesTarget   Int?
   proteinTarget    Int?
+  fatsTarget       Int?
+  carbsTarget      Int?
   calculatedTDEE   Int?
   deficitOrSurplus Int?
   startDate        DateTime @db.Date
@@ -494,4 +500,14 @@ enum EquipmentType {
 enum WorkoutLogVisibility {
   public
   private
+}
+
+model RevenueCatEvent {
+  id             String   @id // RevenueCat Event ID
+  type           String // e.g., INITIAL_PURCHASE, RENEWAL
+  appUserId      String
+  eventTimestamp DateTime
+  processedAt    DateTime @default(now())
+
+  @@index([appUserId])
 }

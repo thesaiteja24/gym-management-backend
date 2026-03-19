@@ -79,6 +79,8 @@ export const updateNutritionPlanSchema = z.object({
 	body: z.object({
 		caloriesTarget: z.number().positive().nullable().optional(),
 		proteinTarget: z.number().positive().nullable().optional(),
+		fatsTarget: z.number().positive().nullable().optional(),
+		carbsTarget: z.number().positive().nullable().optional(),
 		calculatedTDEE: z.number().positive().nullable().optional(),
 		deficitOrSurplus: z.number().nullable().optional(),
 		startDate: z.string().datetime().nullable().optional(),
