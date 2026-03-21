@@ -7,6 +7,106 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum UserRole {
+  systemAdmin
+  gymAdmin
+  trainer
+  member
+}
+
+enum Gender {
+  male
+  female
+  other
+}
+
+enum ExerciseType {
+  repsOnly
+  assisted
+  weighted
+  durationOnly
+}
+
+enum SetType {
+  warmup
+  working
+  dropSet
+  failureSet
+}
+
+enum ExerciseGroupType {
+  superSet
+  giantSet
+}
+
+enum WeightUnits {
+  kg
+  lbs
+}
+
+enum LengthUnits {
+  cm
+  inches
+}
+
+enum FitnessGoal {
+  loseWeight
+  gainMuscle
+  improveEndurance
+  improveFlexibility
+  improveStrength
+  improveOverallFitness
+}
+
+enum FitnessLevel {
+  beginner
+  intermediate
+  advanced
+}
+
+enum ActivityLevel {
+  sedentary
+  lightlyActive
+  moderatelyActive
+  veryActive
+  athlete
+}
+
+enum TargetType {
+  weight
+  bodyFat
+}
+
+enum EquipmentType {
+  bodyweight
+  dumbbells
+  barbells
+  kettlebells
+  resistanceBands
+  machines
+  other
+}
+
+enum WorkoutLogVisibility {
+  public
+  private
+}
+
+enum HabitTrackingType {
+  streak
+  quantity
+}
+
+enum HabitFooterType {
+  weeklyStreak
+  weeklyCount
+}
+
+enum HabitSource {
+  manual
+  internal
+}
+
 model User {
   id                      String               @id @default(uuid(7))
   countryCode             String?
@@ -47,6 +147,7 @@ model User {
   workoutLogs             WorkoutLog[]
   workoutTemplates        WorkoutTemplate[]
   nutritionPlan           UserNutritionPlan?
+  habits                  Habit[]
 
   @@index([countryCode])
   @@index([role])
@@ -417,91 +518,6 @@ model WorkoutCommentLike {
   @@index([commentId])
 }
 
-enum UserRole {
-  systemAdmin
-  gymAdmin
-  trainer
-  member
-}
-
-enum Gender {
-  male
-  female
-  other
-}
-
-enum ExerciseType {
-  repsOnly
-  assisted
-  weighted
-  durationOnly
-}
-
-enum SetType {
-  warmup
-  working
-  dropSet
-  failureSet
-}
-
-enum ExerciseGroupType {
-  superSet
-  giantSet
-}
-
-enum WeightUnits {
-  kg
-  lbs
-}
-
-enum LengthUnits {
-  cm
-  inches
-}
-
-enum FitnessGoal {
-  loseWeight
-  gainMuscle
-  improveEndurance
-  improveFlexibility
-  improveStrength
-  improveOverallFitness
-}
-
-enum FitnessLevel {
-  beginner
-  intermediate
-  advanced
-}
-
-enum ActivityLevel {
-  sedentary
-  lightlyActive
-  moderatelyActive
-  veryActive
-  athlete
-}
-
-enum TargetType {
-  weight
-  bodyFat
-}
-
-enum EquipmentType {
-  bodyweight
-  dumbbells
-  barbells
-  kettlebells
-  resistanceBands
-  machines
-  other
-}
-
-enum WorkoutLogVisibility {
-  public
-  private
-}
-
 model RevenueCatEvent {
   id             String   @id // RevenueCat Event ID
   type           String // e.g., INITIAL_PURCHASE, RENEWAL
@@ -510,4 +526,34 @@ model RevenueCatEvent {
   processedAt    DateTime @default(now())
 
   @@index([appUserId])
+}
+
+model Habit {
+  id               String            @id @default(uuid(7))
+  userId           String
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title            String // Max 16 chars
+  colorScheme      String // e.g., "blue", "green", "orange"
+  trackingType     HabitTrackingType
+  targetValue      Decimal?          @db.Decimal(10, 2)
+  unit             String? // e.g., "liters"
+  footerType       HabitFooterType   @default(weeklyStreak)
+  source           HabitSource       @default(manual)
+  internalMetricId String? // e.g., "weight", "workout"
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  logs             HabitLog[]
+
+  @@index([userId])
+}
+
+model HabitLog {
+  id      String   @id @default(uuid(7))
+  habitId String
+  habit   Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  date    DateTime @db.Date
+  value   Decimal  @db.Decimal(10, 2)
+
+  @@unique([habitId, date])
+  @@index([habitId, date])
 }

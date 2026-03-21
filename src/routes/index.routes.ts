@@ -14,6 +14,7 @@ import { templateRoutes } from '../modules/template/template.routes.js'
 import { userRoutes } from '../modules/user/user.routes.js'
 import { getWorkoutByShareId } from '../modules/workout/workout.controller.js'
 import { workoutRoutes } from '../modules/workout/workout.routes.js'
+import { habitRoutes } from '../modules/habit/habit.routes.js'
 import { webhookRoutes } from './webhook.routes.js'
 
 const router = Router()
@@ -32,6 +33,7 @@ router.use('/discover', authenticate, discoverRoutes)
 router.use('/engagement', authenticate, engagementRoutes)
 router.use('/config', configRoutes)
 router.use('/analytics', authenticate, analyticRoutes)
+router.use('/habits', authenticate, habitRoutes)
 
 // Webhooks (no custom internal authentication, uses its own auth headers)
 router.use('/webhooks', webhookRoutes)

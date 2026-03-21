@@ -28,17 +28,23 @@ export const authorize = (...allowedRoles: UserRole[]): RequestHandler => {
 	}
 }
 
-export const authorizeSelfOrAdmin = (): RequestHandler => {
+export const authorizeSelfOrAdmin = (paramName: string = 'id'): RequestHandler => {
 	return (req: Request, res: Response, next: NextFunction): void => {
 		if (!req.user) return next(new ApiError(401, 'Unauthorized'))
 
-		if (req.user.role === 'systemAdmin' || req.user.id === req.params.id) {
+		if (req.user.role === 'systemAdmin' || req.user.id === req.params[paramName]) {
 			return next()
 		}
 
 		logWarn(
 			'Authorization failed',
-			{ action: 'authorizeSelfOrAdmin', userId: req.user.id, role: req.user.role },
+			{
+				action: 'authorizeSelfOrAdmin',
+				userId: req.user.id,
+				role: req.user.role,
+				paramName,
+				paramValue: req.params[paramName],
+			},
 			req
 		)
 		return next(new ApiError(403, 'You do not have permission to perform this action'))
