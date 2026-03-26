@@ -1,9 +1,7 @@
 import { z } from 'zod'
 import { ExerciseType } from '@prisma/client'
 
-const stringOrArrayToArray = z
-	.union([z.string().uuid(), z.array(z.string().uuid())])
-	.transform(val => (Array.isArray(val) ? val : [val]))
+const stringOrArrayToArray = z.union([z.uuid(), z.array(z.uuid())]).transform(val => (Array.isArray(val) ? val : [val]))
 
 export const createExerciseSchema = z.object({
 	body: z.object({
@@ -19,7 +17,7 @@ export const createExerciseSchema = z.object({
 
 export const updateExerciseSchema = z.object({
 	params: z.object({
-		id: z.string().uuid('Invalid Exercise ID'),
+		id: z.uuid('Invalid Exercise ID'),
 	}),
 	body: z.object({
 		title: z.string().min(1, 'Title cannot be empty').optional(),

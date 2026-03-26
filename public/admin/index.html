@@ -46,7 +46,8 @@
 			document.addEventListener('DOMContentLoaded', async () => {
 				const token = localStorage.getItem('adminAccessToken')
 				const role = localStorage.getItem('adminRole')
-				if (token && role === 'systemAdmin') {
+				const userId = localStorage.getItem('adminUserId')
+				if (token && role === 'systemAdmin' && userId) {
 					window.location.href = '/admin/create-exercise.html'
 					return
 				}
@@ -124,6 +125,7 @@
 							// Store the token and role
 							localStorage.setItem('adminAccessToken', data.data.accessToken)
 							localStorage.setItem('adminRole', userRole)
+							localStorage.setItem('adminUserId', data.data.user.userId)
 							// Redirect to create exercise page
 							window.location.href = '/admin/create-exercise.html'
 						} else {

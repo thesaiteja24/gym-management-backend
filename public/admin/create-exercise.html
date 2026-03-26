@@ -296,22 +296,94 @@
 
 		<script>
 			// ───────────────── AUTHENTICATION ─────────────────
-			const token = localStorage.getItem('adminAccessToken')
+			let token = localStorage.getItem('adminAccessToken')
 			const role = localStorage.getItem('adminRole')
+			const userId = localStorage.getItem('adminUserId')
 
-			if (!token || role !== 'systemAdmin') {
+			if (!token || role !== 'systemAdmin' || !userId) {
 				window.location.href = '/admin/'
 			}
 
 			const baseUrl = window.location.origin
-			const apiHeaders = {
+			let apiHeaders = {
 				Authorization: `Bearer ${token}`,
 			}
 
 			function logout() {
 				localStorage.removeItem('adminAccessToken')
 				localStorage.removeItem('adminRole')
+				localStorage.removeItem('adminUserId')
 				window.location.href = '/admin/'
+			}
+
+			let isRefreshing = false
+			let failedQueue = []
+
+			const processQueue = (error, token = null) => {
+				failedQueue.forEach(prom => {
+					if (error) {
+						prom.reject(error)
+					} else {
+						prom.resolve(token)
+					}
+				})
+				failedQueue = []
+			}
+
+			async function fetchWithAuth(url, options = {}) {
+				options.headers = { ...options.headers, ...apiHeaders }
+
+				const response = await fetch(url, options)
+
+				if (response.status === 401) {
+					if (isRefreshing) {
+						return new Promise((resolve, reject) => {
+							failedQueue.push({ resolve, reject })
+						}).then(newToken => {
+							options.headers['Authorization'] = `Bearer ${newToken}`
+							return fetch(url, options)
+						}).catch(err => {
+							return response
+						})
+					}
+
+					isRefreshing = true
+
+					try {
+						const refreshRes = await fetch(`${baseUrl}/api/v1/auth/refresh`, {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ userId }),
+						})
+
+						const refreshData = await refreshRes.json()
+
+						if (refreshRes.ok && refreshData.success) {
+							token = refreshData.data.accessToken
+							localStorage.setItem('adminAccessToken', token)
+							apiHeaders = { Authorization: `Bearer ${token}` }
+
+							// Retry the original request
+							options.headers['Authorization'] = `Bearer ${token}`
+
+							processQueue(null, token)
+							return fetch(url, options)
+						} else {
+							// Refresh failed
+							processQueue(new Error('Token refresh failed'))
+							logout()
+							throw new Error('Session expired')
+						}
+					} catch (error) {
+						processQueue(error)
+						logout()
+						throw error
+					} finally {
+						isRefreshing = false
+					}
+				}
+
+				return response
 			}
 
 			// ───────────────── UI LOGIC ─────────────────
@@ -359,11 +431,11 @@
 			async function fetchDropdownData() {
 				try {
 					// Fetch Muscle Groups
-					const mgRes = await fetch(`${baseUrl}/api/v1/muscle-groups`, { headers: apiHeaders })
+					const mgRes = await fetchWithAuth(`${baseUrl}/api/v1/muscle-groups`)
 					const mgData = await mgRes.json()
 
 					// Fetch Equipment
-					const eqRes = await fetch(`${baseUrl}/api/v1/equipment`, { headers: apiHeaders })
+					const eqRes = await fetchWithAuth(`${baseUrl}/api/v1/equipment`)
 					const eqData = await eqRes.json()
 
 					// Populate Primary Muscle Group
@@ -470,9 +542,8 @@
                 `
 
 					// Post directly (Fetch automatically sets multi-part boundries when body is FormData)
-					const res = await fetch(`${baseUrl}/api/v1/exercises`, {
+					const res = await fetchWithAuth(`${baseUrl}/api/v1/exercises`, {
 						method: 'POST',
-						headers: apiHeaders,
 						body: submissionData,
 					})
 
