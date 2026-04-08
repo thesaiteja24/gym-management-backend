@@ -350,7 +350,7 @@
 					isRefreshing = true
 
 					try {
-						const refreshRes = await fetch(`${baseUrl}/api/v1/auth/refresh`, {
+						const refreshRes = await fetch(`${baseUrl}/api/v1/auth/refresh-token`, {
 							method: 'POST',
 							headers: { 'Content-Type': 'application/json' },
 							body: JSON.stringify({ userId }),

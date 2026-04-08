@@ -53,18 +53,18 @@ const consoleFormat = winston.format.combine(
 // Create transports for file + console logging
 // ─────────────────────────────────────────────
 const transports: winston.transport[] = [
-	new winston.transports.File({
-		filename: path.join(logDir, 'error.log'),
-		level: 'error',
-	}),
-	new winston.transports.File({
-		filename: path.join(logDir, 'combined.log'),
-		level: 'info',
-	}),
-	new winston.transports.File({
-		filename: path.join(logDir, 'http.log'),
-		level: 'http',
-	}),
+	// new winston.transports.File({
+	// 	filename: path.join(logDir, 'error.log'),
+	// 	level: 'error',
+	// }),
+	// new winston.transports.File({
+	// 	filename: path.join(logDir, 'combined.log'),
+	// 	level: 'info',
+	// }),
+	// new winston.transports.File({
+	// 	filename: path.join(logDir, 'http.log'),
+	// 	level: 'http',
+	// }),
 ]
 
 // ─────────────────────────────────────────────
