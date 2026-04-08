@@ -47,5 +47,6 @@ jobs:
 
                     npx prisma migrate deploy
 
-                    pm2 reload pump-api || pm2 start dist/server.js --name pump-api
+                    pm2 delete pump-api || true
+                    pm2 start npm --name pump-api -- start
                   EOF
