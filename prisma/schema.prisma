@@ -114,6 +114,17 @@ enum UserProgramStatus {
   cancelled
 }
 
+enum ProgressionType {
+  linear
+  doubleProgression
+}
+
+enum ProgramWeekType {
+  base
+  progression
+  deload
+}
+
 model User {
   id                      String               @id @default(uuid(7))
   countryCode             String?
@@ -468,6 +479,11 @@ model WorkoutTemplateSet {
   durationSeconds    Int?
   restSeconds        Int?
   note               String?
+  progressionType    ProgressionType?
+  minReps            Int?
+  maxReps            Int?
+  progressionStep    Decimal?
+  autoProgress       Boolean                 @default(false)
   templateExercise   WorkoutTemplateExercise @relation(fields: [templateExerciseId], references: [id], onDelete: Cascade)
 
   @@index([templateExerciseId, setIndex])
@@ -569,77 +585,114 @@ model HabitLog {
 }
 
 model Program {
-  id           String        @id @default(uuid(7))
-  clientId     String        @unique
-  title        String
-  description  String?
-  createdBy    String
-  user         User          @relation(fields: [createdBy], references: [id], onDelete: Cascade)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  deletedAt    DateTime?
-  programWeeks ProgramWeek[]
-  userPrograms UserProgram[]
+  id              String        @id @default(uuid(7))
+  clientId        String        @unique
+  title           String
+  description     String?
+  experienceLevel FitnessLevel
+  durationOptions Int[]
+  createdBy       String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  deletedAt       DateTime?
+  user            User?         @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  weeks           ProgramWeek[]
+  userPrograms    UserProgram[]
 
   @@index([createdBy])
 }
 
 model ProgramWeek {
   id        String       @id @default(uuid(7))
-  name      String
   programId String
-  program   Program      @relation(fields: [programId], references: [id], onDelete: Cascade)
+  name      String
   weekIndex Int
+  program   Program      @relation(fields: [programId], references: [id], onDelete: Cascade)
   days      ProgramDay[]
 
   @@unique([programId, weekIndex])
-  @@index([programId, weekIndex])
+  @@index([programId])
 }
 
 model ProgramDay {
-  id                 String              @id @default(uuid(7))
-  name               String
-  weekId             String
-  week               ProgramWeek         @relation(fields: [weekId], references: [id], onDelete: Cascade)
-  dayIndex           Int
-  templateId         String?
-  template           WorkoutTemplate?    @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  isRestDay          Boolean             @default(false)
-  userProgramDayLogs UserProgramDayLog[]
+  id         String           @id @default(uuid(7))
+  weekId     String
+  name       String
+  dayIndex   Int
+  isRestDay  Boolean          @default(false)
+  templateId String?
+  week       ProgramWeek      @relation(fields: [weekId], references: [id], onDelete: Cascade)
+  template   WorkoutTemplate? @relation(fields: [templateId], references: [id])
 
   @@unique([weekId, dayIndex])
-  @@index([weekId, dayIndex])
+  @@index([weekId])
+  @@index([templateId])
 }
 
 model UserProgram {
-  id           String              @id @default(uuid(7))
-  userId       String
-  programId    String
-  startDate    DateTime
-  endedAt      DateTime?
-  currentWeek  Int                 @default(1)
-  currentDay   Int                 @default(1)
-  status       UserProgramStatus   @default(active)
-  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  program      Program             @relation(fields: [programId], references: [id], onDelete: Cascade)
-  progressLogs UserProgramDayLog[]
-  createdAt    DateTime            @default(now())
-  updatedAt    DateTime            @updatedAt()
+  id            String               @id @default(uuid(7))
+  userId        String
+  programId     String
+  durationWeeks Int
+  startDate     DateTime             @db.Date
+  status        UserProgramStatus    @default(active)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  user          User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  program       Program              @relation(fields: [programId], references: [id], onDelete: Restrict)
+  weeks         UserProgramWeek[]
+  progress      UserProgramProgress?
 
   @@index([userId])
   @@index([programId])
-  @@index([userId, programId])
+  @@index([userId, status])
 }
 
-model UserProgramDayLog {
-  id            String      @id @default(uuid(7))
+model UserProgramWeek {
+  id            String           @id @default(uuid(7))
   userProgramId String
-  programDayId  String
-  completed     Boolean     @default(false)
-  completedAt   DateTime?
-  workoutLogId  String? // link to actual workout
-  userProgram   UserProgram @relation(fields: [userProgramId], references: [id], onDelete: Cascade)
-  programDay    ProgramDay  @relation(fields: [programDayId], references: [id], onDelete: Cascade)
+  weekIndex     Int
+  userProgram   UserProgram      @relation(fields: [userProgramId], references: [id], onDelete: Cascade)
+  days          UserProgramDay[]
 
-  @@unique([userProgramId, programDayId])
+  @@unique([userProgramId, weekIndex])
+  @@index([userProgramId])
+}
+
+model UserProgramDay {
+  id                 String                   @id @default(uuid(7))
+  userProgramWeekId  String
+  name               String
+  dayIndex           Int
+  isRestDay          Boolean
+  templateSnapshotId String?
+  completed          Boolean                  @default(false)
+  completedAt        DateTime?
+  workoutLogId       String?
+  week               UserProgramWeek          @relation(fields: [userProgramWeekId], references: [id], onDelete: Cascade)
+  templateSnapshot   WorkoutTemplateSnapshot? @relation(fields: [templateSnapshotId], references: [id])
+
+  @@unique([userProgramWeekId, dayIndex])
+  @@index([userProgramWeekId])
+}
+
+model UserProgramProgress {
+  id            String      @id @default(uuid(7))
+  userProgramId String      @unique
+  currentWeek   Int         @default(0)
+  currentDay    Int         @default(0)
+  userProgram   UserProgram @relation(fields: [userProgramId], references: [id], onDelete: Cascade)
+  updatedAt     DateTime    @updatedAt
+}
+
+model WorkoutTemplateSnapshot {
+  id                 String           @id @default(uuid(7))
+  originalTemplateId String?
+  title              String
+  notes              String?
+  exercises          Json
+  createdAt          DateTime         @default(now())
+  userProgramDays    UserProgramDay[]
+
+  @@index([originalTemplateId])
 }
