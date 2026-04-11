@@ -43,7 +43,7 @@ export const validateResource =
 					req
 				)
 
-				next(new ApiError(400, 'Validation failed', errorDetails))
+				next(new ApiError(400, 'Validation failed: ' + errorDetails[0].message, errorDetails))
 			} else {
 				next(e)
 			}
