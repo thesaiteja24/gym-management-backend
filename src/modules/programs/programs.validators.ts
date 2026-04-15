@@ -56,20 +56,14 @@ export const createProgramSchema = z.object({
 	body: z
 		.object({
 			clientId: z.uuid('Invalid Client ID'),
-
 			title: z.string().min(1, 'Title is required').trim(),
-
 			description: z.string().optional().nullable(),
-
 			experienceLevel: z.enum(FitnessLevel),
-
 			durationOptions: z.array(z.number().int().positive()).min(1, 'At least one duration option is required'),
-
 			weeks: z.array(weekSchema).min(1, 'At least one week is required'),
 		})
 		.superRefine((data, ctx) => {
 			const seen = new Set<number>()
-
 			data.weeks.forEach((week, i) => {
 				if (seen.has(week.weekIndex)) {
 					ctx.addIssue({
@@ -81,9 +75,18 @@ export const createProgramSchema = z.object({
 				seen.add(week.weekIndex)
 			})
 		}),
+})
 
+export const getProgramsSchema = z.object({
+	query: z.object({
+		page: z.string().optional().transform(Number),
+		limit: z.string().optional().transform(Number),
+	}),
+})
+
+export const getProgramByIdSchema = z.object({
 	params: z.object({
-		userId: z.uuid('Invalid User ID'),
+		programId: z.uuid('Invalid Program ID'),
 	}),
 })
 
@@ -93,32 +96,49 @@ export const updateProgramSchema = z.object({
 		description: z.string().optional().nullable(),
 		experienceLevel: z.enum(FitnessLevel).optional(),
 		durationOptions: z.array(z.number().int().positive()).optional(),
-
 		weeks: z.array(weekSchema).min(1, 'At least one week is required').optional(),
 	}),
-
 	params: z.object({
-		userId: z.uuid('Invalid User ID'),
-		programId: z.uuid('Invalid Program ID'),
-	}),
-})
-
-export const getProgramsSchema = z.object({
-	params: z.object({
-		userId: z.uuid('Invalid User ID'),
-	}),
-})
-
-export const getProgramByIdSchema = z.object({
-	params: z.object({
-		userId: z.uuid('Invalid User ID'),
 		programId: z.uuid('Invalid Program ID'),
 	}),
 })
 
 export const deleteProgramSchema = z.object({
 	params: z.object({
+		programId: z.uuid('Invalid Program ID'),
+	}),
+})
+
+// User Specific Validators
+export const listUserProgramsSchema = z.object({
+	params: z.object({
+		userId: z.uuid('Invalid User ID'),
+	}),
+})
+
+export const getActiveUserProgramSchema = z.object({
+	params: z.object({
+		userId: z.uuid('Invalid User ID'),
+	}),
+})
+
+export const startProgramSchema = z.object({
+	params: z.object({
 		userId: z.uuid('Invalid User ID'),
 		programId: z.uuid('Invalid Program ID'),
+	}),
+	body: z.object({
+		duration: z.number().int().positive(),
+		startDate: z.string().transform(val => new Date(val)),
+	}),
+})
+
+export const getUserProgramSchema = z.object({
+	params: z.object({
+		userId: z.uuid('Invalid User ID'),
+		userProgramId: z.uuid('Invalid User Program ID'),
+	}),
+	query: z.object({
+		weekIndex: z.string().optional(),
 	}),
 })

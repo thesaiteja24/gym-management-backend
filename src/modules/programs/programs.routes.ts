@@ -12,12 +12,12 @@ import {
 const router = Router()
 
 router
-	.route('/:userId')
+	.route('/')
 	.post(validateResource(createProgramSchema), createProgram)
 	.get(validateResource(getProgramsSchema), getAllPrograms)
 
 router
-	.route('/:userId/:programId')
+	.route('/:programId')
 	.get(validateResource(getProgramByIdSchema), getProgramById)
 	.put(validateResource(updateProgramSchema), editProgram)
 	.delete(validateResource(deleteProgramSchema), deleteProgram)
