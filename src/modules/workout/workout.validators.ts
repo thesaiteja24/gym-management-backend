@@ -28,6 +28,7 @@ const exerciseGroupInputSchema = z.object({
 
 const createWorkoutBody = z.object({
 	clientId: z.uuid(),
+	userProgramDayId: z.uuid().optional(),
 	title: z.string().optional(),
 	startTime: z.string().datetime(),
 	endTime: z.string().datetime(),

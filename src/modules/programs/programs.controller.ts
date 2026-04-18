@@ -125,10 +125,167 @@ function formatUserProgram(userProgram: any) {
 		}),
 	}))
 
+	// ───── Handle progress.templateSnapshot if it exists (e.g. in getActiveUserProgram) ─────
+	const formattedProgress = userProgram.progress
+	if (formattedProgress?.templateSnapshot && typeof formattedProgress.templateSnapshot.exercises === 'object') {
+		const snapshot = formattedProgress.templateSnapshot
+		const exerciseData = snapshot.exercises as any
+		const { exercises = [], exerciseGroups = [] } = exerciseData || {}
+		const { exercises: _, ...restSnapshot } = snapshot
+
+		formattedProgress.templateSnapshot = {
+			...restSnapshot,
+			exercises,
+			exerciseGroups,
+		}
+	}
+
 	return {
 		...userProgram,
 		weeks: formattedWeeks,
+		progress: formattedProgress,
 	}
+}
+
+/**
+ * Helper to handle auto-advancing rest days and populating rich progress data
+ */
+async function syncAndPopulateUserProgram(userProgram: any) {
+	if (!userProgram || !userProgram.progress) return userProgram
+
+	let currentWeek = userProgram.progress.currentWeek
+	let currentDay = userProgram.progress.currentDay
+	let advanced = false
+
+	// ───── Auto-Advance Rest Days ─────
+
+	// Find the last activity date to anchor rest day auto-completion
+	let lastActivityDate: Date
+	const prevDayIndex = currentDay === 0 ? 6 : currentDay - 1
+	const prevWeekIndex = currentDay === 0 ? currentWeek - 1 : currentWeek
+
+	if (prevWeekIndex >= 0) {
+		const prevDay = await prisma.userProgramDay.findFirst({
+			where: {
+				dayIndex: prevDayIndex,
+				week: {
+					userProgramId: userProgram.id,
+					weekIndex: prevWeekIndex,
+				},
+			},
+			select: { completedAt: true },
+		})
+		lastActivityDate = prevDay?.completedAt || new Date(userProgram.startDate)
+	} else {
+		// If it's the very first day, use startDate - 1 day as the "previous activity" anchor
+		const start = new Date(userProgram.startDate)
+		lastActivityDate = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate() - 1))
+	}
+
+	// We use a loop to advance through multiple rest days if they have all passed
+	while (true) {
+		// Use UTC for all date calculations to avoid timezone issues
+		const today = new Date()
+		const todayUTC = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
+
+		const lastActivityUTC = Date.UTC(
+			lastActivityDate.getUTCFullYear(),
+			lastActivityDate.getUTCMonth(),
+			lastActivityDate.getUTCDate()
+		)
+		// The next day is considered "due" on the day after the last activity
+		const scheduledDateUTC = lastActivityUTC + 24 * 60 * 60 * 1000
+
+		// If the scheduled date has passed (it was yesterday or earlier in UTC)
+		if (scheduledDateUTC < todayUTC) {
+			const dayData = await prisma.userProgramDay.findFirst({
+				where: {
+					dayIndex: currentDay,
+					week: {
+						userProgramId: userProgram.id,
+						weekIndex: currentWeek,
+					},
+				},
+			})
+
+			// If it's a rest day and not completed, auto-complete it
+			if (dayData?.isRestDay && !dayData.completed) {
+				const now = new Date()
+				await prisma.userProgramDay.update({
+					where: { id: dayData.id },
+					data: { completed: true, completedAt: now },
+				})
+
+				// Update lastActivityDate for the next iteration in the loop
+				lastActivityDate = now
+
+				// Increment progress
+				currentDay++
+				if (currentDay >= 7) {
+					currentDay = 0
+					currentWeek++
+				}
+				advanced = true
+
+				// Stop if we reach duration limit
+				if (currentWeek >= userProgram.durationWeeks) break
+			} else {
+				// It's a training day that passed, we don't auto-complete training days
+				break
+			}
+		} else {
+			// We haven't reached the end of the current day yet
+			break
+		}
+	}
+
+	if (advanced) {
+		if (currentWeek < userProgram.durationWeeks) {
+			await prisma.userProgramProgress.update({
+				where: { id: userProgram.progress.id },
+				data: { currentWeek, currentDay },
+			})
+			// Update the local object for the final response
+			userProgram.progress.currentWeek = currentWeek
+			userProgram.progress.currentDay = currentDay
+		} else {
+			// Program finished
+			await prisma.userProgram.update({
+				where: { id: userProgram.id },
+				data: { status: 'completed' },
+			})
+			userProgram.status = 'completed'
+		}
+	}
+
+	// ───── Populate Rich Progress Data ─────
+
+	// Fetch current day info for the progress object (updated or original)
+	const dayData = await prisma.userProgramDay.findFirst({
+		where: {
+			dayIndex: userProgram.progress.currentDay,
+			week: {
+				userProgramId: userProgram.id,
+				weekIndex: userProgram.progress.currentWeek,
+			},
+		},
+		include: {
+			templateSnapshot: true,
+		},
+	})
+
+	if (dayData) {
+		// Ensure progress is a plain object so extra fields are serialized
+		userProgram.progress = {
+			...userProgram.progress,
+			userProgramDayId: dayData.id,
+			workoutTitle: dayData.templateSnapshot?.title || null,
+			isRestDay: dayData.isRestDay,
+			templateSnapshot: dayData.templateSnapshot,
+		}
+	}
+
+	return userProgram
 }
 
 export const createProgram = asyncHandler(async (req: Request<object, object, CreateProgramBody>, res: Response) => {
@@ -744,7 +901,10 @@ export const getUserProgramById = asyncHandler(
 			} catch (error) {
 				// Handle P2002: Unique constraint failed (another request instantiated this week simultaneously)
 				if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-					logInfo('Lazy-loading collision detected, refetching existing week', { userProgramId, requestedWeekIndex })
+					logInfo('Lazy-loading collision detected, refetching existing week', {
+						userProgramId,
+						requestedWeekIndex,
+					})
 					userProgram = await prisma.userProgram.findUnique({
 						where: { id: userProgramId },
 						include: {
@@ -767,6 +927,9 @@ export const getUserProgramById = asyncHandler(
 			}
 		}
 
+		// Auto-advance rest days and populate rich progress data
+		userProgram = await syncAndPopulateUserProgram(userProgram)
+
 		return res.json(
 			new ApiResponse(200, { program: formatUserProgram(userProgram) }, 'User program fetched successfully')
 		)
@@ -781,7 +944,7 @@ export const getActiveUserProgram = asyncHandler(async (req: Request<{ userId: s
 		throw new ApiError(403, 'You are not authorized to perform this action')
 	}
 
-	const userProgram = await prisma.userProgram.findFirst({
+	let userProgram = await prisma.userProgram.findFirst({
 		where: {
 			userId,
 			status: 'active',
@@ -800,34 +963,12 @@ export const getActiveUserProgram = asyncHandler(async (req: Request<{ userId: s
 		return res.json(new ApiResponse(200, { program: null }, 'No active program found'))
 	}
 
-	// Fetch current day info for the progress object
-	if (userProgram.progress) {
-		const { currentWeek, currentDay } = userProgram.progress
+	// Auto-advance rest days and populate rich progress data
+	userProgram = await syncAndPopulateUserProgram(userProgram)
 
-		const dayData = await prisma.userProgramDay.findFirst({
-			where: {
-				dayIndex: currentDay,
-				week: {
-					userProgramId: userProgram.id,
-					weekIndex: currentWeek,
-				},
-			},
-			include: {
-				templateSnapshot: {
-					select: { title: true },
-				},
-			},
-		})
-
-		if (dayData) {
-			Object.assign(userProgram.progress, {
-				workoutTitle: dayData.templateSnapshot?.title || null,
-				isRestDay: dayData.isRestDay,
-			})
-		}
-	}
-
-	return res.json(new ApiResponse(200, { program: userProgram }, 'Active program fetched successfully'))
+	return res.json(
+		new ApiResponse(200, { program: formatUserProgram(userProgram) }, 'Active program fetched successfully')
+	)
 })
 
 export const listUserPrograms = asyncHandler(async (req: Request<{ userId: string }>, res: Response) => {

@@ -32,12 +32,13 @@ interface CreateWorkoutBody {
 	exercises: ExerciseInput[]
 	exerciseGroups?: ExerciseGroupInput[]
 	visibility?: WorkoutLogVisibility
+	userProgramDayId?: string
 }
 
 interface UpdateWorkoutBody extends CreateWorkoutBody {}
 
 export const createWorkout = asyncHandler(async (req: Request<object, object, CreateWorkoutBody>, res: Response) => {
-	const { clientId, title, startTime, endTime, exercises, exerciseGroups, visibility } = req.body
+	const { clientId, title, startTime, endTime, exercises, exerciseGroups, visibility, userProgramDayId } = req.body
 
 	/* ───── Idempotency Check ───── */
 	if (clientId) {
@@ -203,6 +204,69 @@ export const createWorkout = asyncHandler(async (req: Request<object, object, Cr
 						where: { id: remainingGroups[i].id },
 						data: { groupIndex: i },
 					})
+				}
+			}
+
+			/* ───────────────── Link to Program Day & Advance Progress ───────────────── */
+
+			if (userProgramDayId) {
+				const userProgramDay = await tx.userProgramDay.findUnique({
+					where: { id: userProgramDayId },
+					include: {
+						week: {
+							include: {
+								userProgram: {
+									include: { progress: true },
+								},
+							},
+						},
+					},
+				})
+
+				if (userProgramDay && !userProgramDay.completed) {
+					// Verify this is the current day
+					const progress = userProgramDay.week.userProgram.progress
+					if (
+						progress &&
+						progress.currentWeek === userProgramDay.week.weekIndex &&
+						progress.currentDay === userProgramDay.dayIndex
+					) {
+						// 1. Mark day as completed
+						await tx.userProgramDay.update({
+							where: { id: userProgramDayId },
+							data: {
+								completed: true,
+								completedAt: new Date(),
+								workoutLogId: workout.id,
+							},
+						})
+
+						// 2. Advance Progress
+						let nextDay = progress.currentDay + 1
+						let nextWeek = progress.currentWeek
+
+						if (nextDay >= 7) {
+							nextDay = 0
+							nextWeek += 1
+						}
+
+						// Only advance if within duration limits
+						if (nextWeek < userProgramDay.week.userProgram.durationWeeks) {
+							await tx.userProgramProgress.update({
+								where: { id: progress.id },
+								data: {
+									currentDay: nextDay,
+									currentWeek: nextWeek,
+								},
+							})
+						} else {
+							// Program finished? Maybe mark status as completed
+							await tx.userProgram.update({
+								where: { id: userProgramDay.week.userProgramId },
+								data: { status: 'completed' },
+							})
+						}
+					}
 				}
 			}
 		})

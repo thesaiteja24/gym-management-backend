@@ -281,6 +281,7 @@ model WorkoutLog {
   user            User                      @relation(fields: [userId], references: [id])
   exercises       WorkoutLogExercise[]
   exerciseGroups  WorkoutLogExerciseGroup[]
+  userProgramDay  UserProgramDay?
 
   @@index([userId, deletedAt, createdAt])
   @@index([visibility, deletedAt, userId, createdAt])
@@ -668,9 +669,10 @@ model UserProgramDay {
   templateSnapshotId String?
   completed          Boolean                  @default(false)
   completedAt        DateTime?
-  workoutLogId       String?
+  workoutLogId       String?                  @unique
   week               UserProgramWeek          @relation(fields: [userProgramWeekId], references: [id], onDelete: Cascade)
   templateSnapshot   WorkoutTemplateSnapshot? @relation(fields: [templateSnapshotId], references: [id])
+  workoutLog         WorkoutLog?              @relation(fields: [workoutLogId], references: [id])
 
   @@unique([userProgramWeekId, dayIndex])
   @@index([userProgramWeekId])
