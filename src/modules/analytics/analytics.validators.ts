@@ -83,6 +83,34 @@ export const updateNutritionPlanSchema = z.object({
 		carbsTarget: z.number().positive().nullable().optional(),
 		calculatedTDEE: z.number().positive().nullable().optional(),
 		deficitOrSurplus: z.number().nullable().optional(),
-		startDate: z.string().datetime().nullable().optional(),
+		startDate: z.iso.datetime().nullable().optional(),
+	}),
+})
+
+export const getMeasurementsSchema = z.object({
+	params: z.object({
+		id: z.uuid('Invalid User ID'),
+	}),
+	query: z.object({
+		duration: z.enum(['1w', '1m', '3m', '6m', '1y', 'all']).default('1m'),
+	}),
+})
+
+export const getTrainingAnalyticsSchema = z.object({
+	params: z.object({
+		id: z.uuid('Invalid User ID'),
+	}),
+	query: z.object({
+		duration: z.enum(['1w', '1m', '3m', '6m', '1y', 'all']).default('1m'),
+	}),
+})
+
+export const getStrengthTrendSchema = z.object({
+	params: z.object({
+		id: z.uuid('Invalid User ID'),
+	}),
+	query: z.object({
+		duration: z.string().default('1M'),
+		top: z.union([z.literal('all'), z.coerce.number().positive()]).default(4),
 	}),
 })

@@ -285,6 +285,7 @@ model WorkoutLog {
 
   @@index([userId, deletedAt, createdAt])
   @@index([visibility, deletedAt, userId, createdAt])
+  @@index([userId, createdAt])
 }
 
 /// *
@@ -319,6 +320,7 @@ model WorkoutLogExercise {
 
   @@index([workoutId, exerciseIndex])
   @@index([exerciseId])
+  @@index([workoutId])
 }
 
 model WorkoutLogExerciseSet {
@@ -337,6 +339,7 @@ model WorkoutLogExerciseSet {
   workoutExercise   WorkoutLogExercise @relation(fields: [workoutExerciseId], references: [id], onDelete: Cascade)
 
   @@index([workoutExerciseId, setIndex])
+  @@index([workoutExerciseId])
 }
 
 model Exercise {

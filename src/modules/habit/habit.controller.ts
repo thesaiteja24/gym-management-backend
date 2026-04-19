@@ -195,11 +195,16 @@ export const getHabitLogs = asyncHandler(async (req: Request<{ userId: string }>
 		// Distribute virtual logs
 		internalHabits.forEach(h => {
 			if (h.internalMetricId === 'workout') {
-				const workoutDates = new Set(workouts.map(w => new Date(w.startTime).toISOString().split('T')[0]))
-				workoutDates.forEach(dateStr => {
+				const counts: Record<string, number> = {}
+				workouts.forEach(w => {
+					const dateStr = new Date(w.startTime).toISOString().split('T')[0]
+					counts[dateStr] = (counts[dateStr] || 0) + 1
+				})
+
+				Object.entries(counts).forEach(([dateStr, count]) => {
 					logsMap[h.id].push({
 						date: new Date(dateStr),
-						value: 1, // binary completion
+						value: count,
 					})
 				})
 			} else if (h.internalMetricId === 'weight') {

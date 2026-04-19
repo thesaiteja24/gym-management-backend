@@ -7,12 +7,17 @@ import {
 	getFitnessProfile,
 	getMeasurements,
 	getNutritionPlan,
+	getStrengthTrend,
+	getTrainingAnalytics,
 	getUserAnalytics,
 	updateFitnessProfile,
 	updateNutritionPlan,
 } from './analytics.controller.js'
 import {
 	addDailyMeasurementSchema,
+	getMeasurementsSchema,
+	getStrengthTrendSchema,
+	getTrainingAnalyticsSchema,
 	updateFitnessProfileSchema,
 	updateNutritionPlanSchema,
 } from './analytics.validators.js'
@@ -34,7 +39,7 @@ router
 		authorizeSelfOrAdmin(),
 		addMeasurements
 	)
-	.get(authorizeSelfOrAdmin(), getMeasurements)
+	.get(validateResource(getMeasurementsSchema), authorizeSelfOrAdmin(), getMeasurements)
 
 router
 	.route('/nutrition-plan/:id')
@@ -42,5 +47,13 @@ router
 	.put(validateResource(updateNutritionPlanSchema), authorizeSelfOrAdmin(), updateNutritionPlan)
 
 router.route('/user-analytics/:id').get(authorizeSelfOrAdmin(), getUserAnalytics)
+
+router
+	.route('/training/:id')
+	.get(validateResource(getTrainingAnalyticsSchema), authorizeSelfOrAdmin(), getTrainingAnalytics)
+
+router
+	.route('/strength-trend/:id')
+	.get(validateResource(getStrengthTrendSchema), authorizeSelfOrAdmin(), getStrengthTrend)
 
 export const analyticRoutes = router

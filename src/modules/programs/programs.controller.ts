@@ -148,6 +148,19 @@ function formatUserProgram(userProgram: any) {
 }
 
 /**
+ * Formats a number into a compact string (e.g., 1k, 200k, 1M)
+ */
+function formatCompactNumber(count: number): string {
+	if (count >= 1000000) {
+		return (count / 1000000).toFixed(1).replace(/\.0$/, '') + 'M'
+	}
+	if (count >= 1000) {
+		return (count / 1000).toFixed(1).replace(/\.0$/, '') + 'k'
+	}
+	return count.toString()
+}
+
+/**
  * Helper to handle auto-advancing rest days and populating rich progress data
  */
 async function syncAndPopulateUserProgram(userProgram: any) {
@@ -380,6 +393,11 @@ export const getAllPrograms = asyncHandler(async (req: Request, res: Response) =
 	const [programs, total] = await Promise.all([
 		prisma.program.findMany({
 			where: { deletedAt: null },
+			include: {
+				_count: {
+					select: { userPrograms: true },
+				},
+			},
 			skip,
 			take: limit,
 			orderBy: { createdAt: 'desc' },
@@ -389,11 +407,17 @@ export const getAllPrograms = asyncHandler(async (req: Request, res: Response) =
 		}),
 	])
 
+	const programsWithCounts = programs.map(p => ({
+		...p,
+		enrolledCount: p._count.userPrograms,
+		enrolledCountLabel: formatCompactNumber(p._count.userPrograms),
+	}))
+
 	return res.json(
 		new ApiResponse(
 			200,
 			{
-				programs,
+				programs: programsWithCounts,
 				pagination: {
 					total,
 					page,

@@ -21,16 +21,97 @@ import { ApiError } from '../../common/utils/ApiError.js'
 import { ApiResponse } from '../../common/utils/ApiResponse.js'
 import { asyncHandler } from '../../common/utils/asyncHandler.js'
 import { logDebug, logError, logWarn } from '../../common/utils/logger.js'
-import { date } from 'zod'
 
 const prisma = new PrismaClient().$extends(withAccelerate())
 
+type StrengthTrendDirection = 'up' | 'down' | 'flat'
+
+function parseDurationToStartDate(duration: string): Date | null {
+	const norm = duration.toLowerCase()
+	if (norm === 'all') return null
+
+	const now = new Date()
+	const start = new Date(now)
+
+	// Support 1w, 14d, 1m, 3m, 1y etc
+	if (norm === '1w') {
+		start.setDate(start.getDate() - 7)
+		return start
+	}
+
+	const unit = norm.slice(-1)
+	const val = parseInt(norm.slice(0, -1)) || 0
+
+	if (unit === 'd') {
+		start.setDate(start.getDate() - val)
+	} else if (unit === 'm') {
+		start.setMonth(start.getMonth() - val)
+	} else if (unit === 'y') {
+		start.setFullYear(start.getFullYear() - val)
+	} else {
+		// Default to 1 month if unknown
+		start.setMonth(start.getMonth() - 1)
+	}
+
+	return start
+}
+
+function average(values: number[]): number {
+	if (values.length === 0) return 0
+	return values.reduce((sum, v) => sum + v, 0) / values.length
+}
+
+function epleyEstimated1RM(weight: number, reps: number): number {
+	// Epley: 1RM = w * (1 + reps/30)
+	return weight * (1 + reps / 30)
+}
+
+function getSetScore(
+	exerciseType: 'repsOnly' | 'assisted' | 'weighted' | 'durationOnly',
+	set: { weight: unknown; reps: number | null; durationSeconds: number | null }
+): number | null {
+	switch (exerciseType) {
+		case 'weighted':
+		case 'assisted': {
+			const reps = set.reps ?? 0
+			const weight = set.weight ? Number(set.weight) : 0
+			if (reps <= 0 || weight <= 0) return null
+			return epleyEstimated1RM(weight, reps)
+		}
+		case 'repsOnly': {
+			const reps = set.reps ?? 0
+			return reps > 0 ? reps : null
+		}
+		case 'durationOnly': {
+			const duration = set.durationSeconds ?? 0
+			return duration > 0 ? duration : null
+		}
+		default:
+			return null
+	}
+}
+
+function getExerciseWorkoutScore(
+	exerciseType: 'repsOnly' | 'assisted' | 'weighted' | 'durationOnly',
+	sets: Array<{ weight: unknown; reps: number | null; durationSeconds: number | null }>
+): number | null {
+	let best: number | null = null
+	for (const set of sets) {
+		const score = getSetScore(exerciseType, set)
+		if (score === null) continue
+		if (best === null || score > best) best = score
+	}
+	return best
+}
+
 // Helper for buidling Measurment payload to return history and as well as latest and daily weight change
-async function buildMeasurementPayload(userId: string, limit = 30) {
+async function buildMeasurementPayload(userId: string, startDate?: Date | null) {
 	const measurementsHistory = await prisma.userMeasurement.findMany({
-		where: { userId },
+		where: {
+			userId,
+			...(startDate ? { date: { gte: startDate } } : {}),
+		},
 		orderBy: { date: 'desc' },
-		take: limit,
 	})
 
 	const latestValues: Partial<MeasurementFields> = {}
@@ -345,9 +426,11 @@ type MeasurementFields = Omit<UserMeasurement, 'id' | 'userId' | 'date' | 'creat
 
 export const getMeasurements = asyncHandler(async (req, res) => {
 	const userId = req.params.id
-	const limit = parseInt(req.query.limit as string) || 30
+	const duration = (req.query.duration as string) || '3m'
 
-	const payload = await buildMeasurementPayload(userId, limit)
+	const startDate = parseDurationToStartDate(duration)
+
+	const payload = await buildMeasurementPayload(userId, startDate)
 
 	return res.status(200).json(new ApiResponse(200, payload, 'Measurements fetched successfully'))
 })
@@ -478,6 +561,10 @@ export const getUserAnalytics = asyncHandler(async (req: Request<{ id: string }>
 	let workoutsThisWeek = 0
 	let weeklyVolume = 0
 	let lastWeekVolume = 0
+	let weeklyDuration = 0
+	let lastWeekDuration = 0
+	let weeklyReps = 0
+	let lastWeekReps = 0
 
 	workoutLogs.forEach(workout => {
 		if (!workout.startTime) return
@@ -491,9 +578,19 @@ export const getUserAnalytics = asyncHandler(async (req: Request<{ id: string }>
 		if (isThisWeek) workoutsThisWeek++
 
 		let workoutTonnage = 0
+		let workoutDuration = 0
+		let workoutReps = 0
+
+		if (workout.startTime && workout.endTime) {
+			workoutDuration = Math.floor(
+				(new Date(workout.endTime).getTime() - new Date(workout.startTime).getTime()) / 1000
+			)
+		}
+
 		workout.exercises.forEach(ex => {
 			const type = ex.exercise.exerciseType
 			ex.sets.forEach(set => {
+				// Volume (Tonnage) - only for resistance exercises
 				if (type === 'weighted' || type === 'assisted') {
 					const weight = set.weight ? Number(set.weight) : 0
 					const reps = set.reps ?? 0
@@ -501,11 +598,23 @@ export const getUserAnalytics = asyncHandler(async (req: Request<{ id: string }>
 						workoutTonnage += weight * reps
 					}
 				}
+				// Reps - any set with reps
+				if (set.reps) {
+					workoutReps += set.reps
+				}
 			})
 		})
 
-		if (isThisWeek) weeklyVolume += workoutTonnage
-		if (isLastWeek) lastWeekVolume += workoutTonnage
+		if (isThisWeek) {
+			weeklyVolume += workoutTonnage
+			weeklyDuration += workoutDuration
+			weeklyReps += workoutReps
+		}
+		if (isLastWeek) {
+			lastWeekVolume += workoutTonnage
+			lastWeekDuration += workoutDuration
+			lastWeekReps += workoutReps
+		}
 	})
 
 	logDebug('Fetched user analytics', { action: 'getUserAnalytics', userId })
@@ -519,9 +628,250 @@ export const getUserAnalytics = asyncHandler(async (req: Request<{ id: string }>
 				daysSinceLastWorkout,
 				weeklyVolume,
 				lastWeekVolume,
+				weeklyDuration,
+				lastWeekDuration,
+				weeklyReps,
+				lastWeekReps,
 				workoutDates: Array.from(workoutDates),
 			},
 			'User analytics fetched successfully'
+		)
+	)
+})
+
+export const getTrainingAnalytics = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
+	const userId = req.params.id
+	const duration = (req.query.duration as string) || '1m'
+	const startDate = parseDurationToStartDate(duration)
+
+	const workoutLogs = await prisma.workoutLog.findMany({
+		where: {
+			userId,
+			deletedAt: null,
+			...(startDate ? { startTime: { gte: startDate } } : {}),
+		},
+		include: {
+			exercises: {
+				include: {
+					exercise: {
+						select: { exerciseType: true },
+					},
+					sets: {
+						where: { setType: { not: 'warmup' } },
+					},
+				},
+			},
+		},
+		orderBy: { startTime: 'asc' },
+	})
+
+	const volumeMap = new Map<string, number>()
+	const durationMap = new Map<string, number>()
+	const repsMap = new Map<string, number>()
+
+	const toDateKey = (date: Date) => date.toISOString().split('T')[0]
+
+	workoutLogs.forEach(workout => {
+		if (!workout.startTime) return
+		const dateKey = toDateKey(workout.startTime)
+
+		let workoutVolume = 0
+		let workoutReps = 0
+		let workoutDuration = 0
+
+		if (workout.startTime && workout.endTime) {
+			workoutDuration = Math.floor(
+				(new Date(workout.endTime).getTime() - new Date(workout.startTime).getTime()) / 1000
+			)
+		}
+
+		workout.exercises.forEach(ex => {
+			const type = ex.exercise.exerciseType
+			ex.sets.forEach(set => {
+				if (type === 'weighted' || type === 'assisted') {
+					const weight = set.weight ? Number(set.weight) : 0
+					const reps = set.reps ?? 0
+					if (weight > 0 && reps > 0) {
+						workoutVolume += weight * reps
+					}
+				}
+				if (set.reps) {
+					workoutReps += set.reps
+				}
+			})
+		})
+
+		volumeMap.set(dateKey, (volumeMap.get(dateKey) || 0) + workoutVolume)
+		durationMap.set(dateKey, (durationMap.get(dateKey) || 0) + workoutDuration)
+		repsMap.set(dateKey, (repsMap.get(dateKey) || 0) + workoutReps)
+	})
+
+	// Format as arrays of {date, value}
+	const format = (map: Map<string, number>) =>
+		Array.from(map.entries())
+			.map(([date, value]) => ({ date, value }))
+			.sort((a, b) => a.date.localeCompare(b.date))
+
+	return res.status(200).json(
+		new ApiResponse(
+			200,
+			{
+				volume: format(volumeMap),
+				duration: format(durationMap),
+				reps: format(repsMap),
+			},
+			'Training metrics fetched successfully'
+		)
+	)
+})
+
+// Not used yet in the frontend
+export const getStrengthTrend = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
+	const userId = req.params.id
+	const duration = (req.query.duration ?? '1m') as string
+	const top = (req.query.top ?? 4) as 'all' | number | string
+
+	const startDate = parseDurationToStartDate(duration)
+	const plateauThresholdPct = 2
+
+	const workouts = await prisma.workoutLog.findMany({
+		where: {
+			userId,
+			deletedAt: null,
+			startTime: {
+				not: null,
+				...(startDate ? { gte: startDate } : {}),
+			},
+		},
+		select: {
+			id: true,
+			startTime: true,
+			createdAt: true,
+			exercises: {
+				select: {
+					workoutId: true,
+					exerciseId: true,
+					exercise: {
+						select: {
+							title: true,
+							exerciseType: true,
+						},
+					},
+					sets: {
+						where: { setType: { not: 'warmup' } },
+						select: {
+							weight: true,
+							reps: true,
+							durationSeconds: true,
+						},
+					},
+				},
+			},
+		},
+		orderBy: { startTime: 'asc' },
+	})
+
+	type Point = { ts: number; score: number }
+	type ExerciseTrend = {
+		exerciseId: string
+		title: string
+		trend: StrengthTrendDirection
+		changePct: number
+	}
+
+	const exerciseToWorkoutPoints = new Map<
+		string,
+		{
+			title: string
+			exerciseType: 'repsOnly' | 'assisted' | 'weighted' | 'durationOnly'
+			byWorkoutId: Map<string, Point>
+		}
+	>()
+
+	for (const workout of workouts) {
+		const workoutDate = workout.startTime ?? workout.createdAt
+		const ts = workoutDate.getTime()
+
+		for (const wEx of workout.exercises) {
+			const exerciseType = wEx.exercise.exerciseType
+			const score = getExerciseWorkoutScore(exerciseType, wEx.sets)
+			if (score === null) continue
+
+			const existing = exerciseToWorkoutPoints.get(wEx.exerciseId)
+			if (!existing) {
+				exerciseToWorkoutPoints.set(wEx.exerciseId, {
+					title: wEx.exercise.title,
+					exerciseType,
+					byWorkoutId: new Map([[workout.id, { ts, score }]]),
+				})
+				continue
+			}
+
+			const current = existing.byWorkoutId.get(workout.id)
+			if (!current || score > current.score) {
+				existing.byWorkoutId.set(workout.id, { ts, score })
+			}
+		}
+	}
+
+	const gaining: ExerciseTrend[] = []
+	const losing: ExerciseTrend[] = []
+	const plateauing: ExerciseTrend[] = []
+
+	for (const [exerciseId, entry] of exerciseToWorkoutPoints.entries()) {
+		const points = Array.from(entry.byWorkoutId.values()).sort((a, b) => a.ts - b.ts)
+		const scores = points.map(p => p.score)
+
+		const windowSize = scores.length >= 6 ? 3 : scores.length >= 4 ? 2 : 1
+		const baselineAvg = average(scores.slice(0, windowSize))
+		const recentAvg = average(scores.slice(-windowSize))
+
+		const rawChangePct = baselineAvg > 0 ? ((recentAvg - baselineAvg) / baselineAvg) * 100 : 0
+		const changePct = Number(rawChangePct.toFixed(2))
+
+		let trend: StrengthTrendDirection = 'flat'
+		if (Math.abs(changePct) >= plateauThresholdPct) trend = changePct > 0 ? 'up' : 'down'
+
+		const item: ExerciseTrend = {
+			exerciseId,
+			title: entry.title,
+			trend,
+			changePct,
+		}
+
+		if (trend === 'up') gaining.push(item)
+		else if (trend === 'down') losing.push(item)
+		else plateauing.push(item)
+	}
+
+	gaining.sort((a, b) => b.changePct - a.changePct)
+	losing.sort((a, b) => a.changePct - b.changePct)
+	plateauing.sort((a, b) => Math.abs(a.changePct) - Math.abs(b.changePct))
+
+	const topLimit =
+		top === 'all' ? null : typeof top === 'number' ? top : Number.isFinite(Number(top)) ? Number(top) : 4
+
+	const limitedGaining = topLimit ? gaining.slice(0, topLimit) : gaining
+	const limitedLosing = topLimit ? losing.slice(0, topLimit) : losing
+	const limitedPlateauing = topLimit ? plateauing.slice(0, topLimit) : plateauing
+
+	logDebug('Fetched strength trend', { action: 'getStrengthTrend', userId, duration })
+
+	return res.status(200).json(
+		new ApiResponse(
+			200,
+			{
+				gaining: limitedGaining,
+				losing: limitedLosing,
+				plateauing: limitedPlateauing,
+				meta: {
+					duration,
+					startDate: startDate ? startDate.toISOString() : null,
+					plateauThresholdPct,
+					top: topLimit ?? 'all',
+				},
+			},
+			'Strength trend fetched successfully'
 		)
 	)
 })
