@@ -506,7 +506,6 @@ export const getWorkoutById = asyncHandler(async (req: Request<{ id: string }>, 
 		workout = await prisma.workoutLog.findFirst({
 			where: {
 				id: workoutId,
-				userId,
 			},
 			select: workoutSelect,
 		})

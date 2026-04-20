@@ -5,6 +5,7 @@ import { ApiError } from '../../common/utils/ApiError.js'
 import { ApiResponse } from '../../common/utils/ApiResponse.js'
 import { asyncHandler } from '../../common/utils/asyncHandler.js'
 import { logDebug, logInfo, logWarn } from '../../common/utils/logger.js'
+import { NotificationService } from '../../common/services/notification.service.js'
 
 const prisma = new PrismaClient().$extends(withAccelerate())
 
@@ -26,6 +27,11 @@ export const followUser = asyncHandler(async (req: Request<{ id: string }, {}, {
 		logWarn('User does not exist', { action: 'followUser', userId: targetUserId }, req)
 		throw new ApiError(404, 'User does not exist')
 	}
+
+	const currentUser = await prisma.user.findUnique({
+		where: { id: currentUserId },
+		select: { firstName: true, lastName: true },
+	})
 
 	const existingFollow = await prisma.follow.findUnique({
 		where: {
@@ -61,6 +67,16 @@ export const followUser = asyncHandler(async (req: Request<{ id: string }, {}, {
 	])
 
 	logDebug('Following', { result }, req)
+
+	if (currentUser) {
+		NotificationService.sendPushToUsers(
+			[targetUserId],
+			'New Follower!',
+			`${currentUser.firstName} ${currentUser.lastName} started following you.`,
+			{ type: 'new_follower', userId: currentUserId }
+		).catch(err => logWarn('Failed to send follow notification', { err }, req))
+	}
+
 	return res.status(200).json(new ApiResponse(200, result, "You're now following"))
 })
 
@@ -233,6 +249,7 @@ export const createComment = asyncHandler(
 			throw new ApiError(404, 'Workout does not exist')
 		}
 
+		let parentCommentUserId: string | null = null
 		if (parentId) {
 			const existingCommnet = await prisma.workoutComment.findUnique({
 				where: { id: parentId },
@@ -251,6 +268,7 @@ export const createComment = asyncHandler(
 				)
 				throw new ApiError(403, 'This comment does not belong to this workout')
 			}
+			parentCommentUserId = existingCommnet.userId
 		}
 
 		const comment = await prisma.$transaction([
@@ -293,6 +311,25 @@ export const createComment = asyncHandler(
 		])
 
 		logInfo('Comment created successfully', { action: 'createComment', workoutId, parentId }, req)
+
+		if (existingUser) {
+			if (parentId && parentCommentUserId && parentCommentUserId !== userId) {
+				NotificationService.sendPushToUsers(
+					[parentCommentUserId],
+					'New Reply!',
+					`${existingUser.firstName} ${existingUser.lastName} replied to your comment.`,
+					{ type: 'comment_reply', workoutId, commentId: comment[0].id, parentId, userId }
+				).catch(err => logWarn('Failed to send comment reply notification', { err }, req))
+			} else if (!parentId && existingWorkout.userId !== userId) {
+				NotificationService.sendPushToUsers(
+					[existingWorkout.userId],
+					'New Comment!',
+					`${existingUser.firstName} ${existingUser.lastName} commented on your workout.`,
+					{ type: 'workout_comment', workoutId, commentId: comment[0].id, userId }
+				).catch(err => logWarn('Failed to send workout comment notification', { err }, req))
+			}
+		}
+
 		return res.status(200).json(new ApiResponse(200, comment[0], 'Comment created successfully'))
 	}
 )
@@ -601,6 +638,16 @@ export const createCommentLike = asyncHandler(async (req: Request<{ id: string }
 	])
 
 	logInfo('Comment like created successfully', { action: 'createCommentLike', commentId }, req)
+
+	if (existingUser && existingComment.userId !== userId) {
+		NotificationService.sendPushToUsers(
+			[existingComment.userId],
+			'New Comment Like!',
+			`${existingUser.firstName} ${existingUser.lastName} liked your comment.`,
+			{ type: 'comment_like', workoutId: existingComment.workoutId, commentId, userId }
+		).catch(err => logWarn('Failed to send comment like notification', { err }, req))
+	}
+
 	return res.status(200).json(new ApiResponse(200, commentLike[0], 'Comment like created successfully'))
 })
 
@@ -839,6 +886,16 @@ export const createWorkoutLike = asyncHandler(async (req: Request<{ id: string }
 	])
 
 	logInfo('Workout like created successfully', { action: 'createWorkoutLike', workoutId }, req)
+
+	if (existingUser && existingWorkout.userId !== userId) {
+		NotificationService.sendPushToUsers(
+			[existingWorkout.userId],
+			'New Workout Like!',
+			`${existingUser.firstName} ${existingUser.lastName} liked your workout.`,
+			{ type: 'workout_like', workoutId, userId }
+		).catch(err => logWarn('Failed to send workout like notification', { err }, req))
+	}
+
 	return res.status(200).json(new ApiResponse(200, workoutLike[0], 'Workout like created successfully'))
 })
 

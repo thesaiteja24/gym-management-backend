@@ -5,6 +5,7 @@ import {
 	deleteWorkout,
 	getAllWorkouts,
 	getDiscoverWorkouts,
+	getWorkoutById,
 	getWorkoutByShareId,
 	updateWorkout,
 } from './workout.controller.js'
@@ -12,11 +13,11 @@ import { createWorkoutSchema, updateWorkoutSchema } from './workout.validators.j
 
 const router = Router()
 
-router.route('/').get(getAllWorkouts)
+router.route('/').get(getAllWorkouts).post(validateResource(createWorkoutSchema), createWorkout)
+
 router.route('/discover').get(getDiscoverWorkouts)
 router.route('/share/:id').get(getWorkoutByShareId)
-router.route('/').post(validateResource(createWorkoutSchema), createWorkout)
-router.route('/:id').put(validateResource(updateWorkoutSchema), updateWorkout)
-router.route('/:id').delete(deleteWorkout)
+
+router.route('/:id').get(getWorkoutById).put(validateResource(updateWorkoutSchema), updateWorkout).delete(deleteWorkout)
 
 export const workoutRoutes = router
