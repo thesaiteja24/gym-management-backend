@@ -17,7 +17,7 @@
 	"scripts": {
 		"test": "echo \"Error: no test specified\" && exit 1",
 		"dev": "nodemon",
-		"build": "tsc",
+		"build": "node --max-old-space-size=2048 ./node_modules/typescript/bin/tsc",
 		"start": "node --env-file=.env dist/server.js",
 		"typecheck": "tsc --noEmit",
 		"format": "prettier --write \"**/*.{ts,js,json,md}\""
