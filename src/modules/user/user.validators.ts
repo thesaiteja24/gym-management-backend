@@ -22,12 +22,6 @@ export const updateProfilePicSchema = z.object({
 	}),
 })
 
-export const searchUsersSchema = z.object({
-	query: z.object({
-		query: z.string().min(3, 'Search query must be at least 3 characters long'),
-	}),
-})
-
 export const followUserSchema = z.object({
 	params: z.object({
 		id: z.uuid('Invalid User ID'),

@@ -57,3 +57,18 @@ export const LikesSchema = z.object({
 		})
 		.strict(),
 })
+
+export const getUserFollowSchema = z.object({
+	params: z
+		.object({
+			userId: z.uuid('Invalid User ID'),
+		})
+		.strict(),
+})
+
+export const searchUsersSchema = z.object({
+	query: z.object({
+		query: z.string().min(3, 'Search query must be at least 3 characters long'),
+	}),
+})
+

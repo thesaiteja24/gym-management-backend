@@ -13,12 +13,21 @@ import {
 	followUser,
 	getCommentLikes,
 	getComments,
+	getSuggestedUsers,
 	getUserFollowers,
 	getUserFollowing,
 	getWorkoutLikes,
+	searchUsers,
 	unFollowUser,
 } from './engagement.controller.js'
-import { createCommentSchema, editCommentSchema, getCommentsSchema, LikesSchema } from './engagement.validators.js'
+import {
+	createCommentSchema,
+	editCommentSchema,
+	getCommentsSchema,
+	getUserFollowSchema,
+	LikesSchema,
+	searchUsersSchema,
+} from './engagement.validators.js'
 
 const router = Router()
 
@@ -27,8 +36,25 @@ router
 	.post(authorize('systemAdmin', 'gymAdmin', 'trainer', 'member'), validateResource(followUserSchema), followUser)
 	.delete(authorize('systemAdmin', 'gymAdmin', 'trainer', 'member'), validateResource(followUserSchema), unFollowUser)
 
-router.get('/:id/followers', authorize('systemAdmin', 'gymAdmin', 'trainer', 'member'), getUserFollowers)
-router.get('/:id/following', authorize('systemAdmin', 'gymAdmin', 'trainer', 'member'), getUserFollowing)
+router.get(
+	'/:userId/followers',
+	authorize('systemAdmin', 'gymAdmin', 'trainer', 'member'),
+	validateResource(getUserFollowSchema),
+	getUserFollowers
+)
+router.get(
+	'/:userId/following',
+	authorize('systemAdmin', 'gymAdmin', 'trainer', 'member'),
+	validateResource(getUserFollowSchema),
+	getUserFollowing
+)
+
+router
+	.route('/search')
+	.get(validateResource(searchUsersSchema), authorize('systemAdmin', 'gymAdmin', 'trainer', 'member'), searchUsers)
+
+router.route('/suggestions').get(authorize('systemAdmin', 'gymAdmin', 'trainer', 'member'), getSuggestedUsers)
+
 
 router
 	.route('/:id/comments')

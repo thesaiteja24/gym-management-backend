@@ -44,7 +44,7 @@ export const followUser = asyncHandler(async (req: Request<{ id: string }, {}, {
 
 	if (existingFollow) {
 		logDebug('Already following', { existingFollow }, req)
-		return res.status(200).json(new ApiResponse(200, existingFollow, 'You are already following this user'))
+		return res.status(200).json(new ApiResponse(200, null, 'You are already following this user'))
 	}
 
 	const result = await prisma.$transaction([
@@ -77,7 +77,42 @@ export const followUser = asyncHandler(async (req: Request<{ id: string }, {}, {
 		).catch(err => logWarn('Failed to send follow notification', { err }, req))
 	}
 
-	return res.status(200).json(new ApiResponse(200, result, "You're now following"))
+	const targetUser = await prisma.user.findUnique({
+		where: { id: targetUserId },
+		select: {
+			id: true,
+			profilePicUrl: true,
+			firstName: true,
+			lastName: true,
+			isPro: true,
+			proSubscriptionType: true,
+			followers: {
+				where: {
+					followerId: currentUserId,
+				},
+				select: {
+					followerId: true,
+				},
+			},
+		},
+	})
+
+	if (!targetUser) {
+		logWarn('Target user no longer exists', { action: 'followUser', targetUserId }, req)
+		throw new ApiError(404, 'User no longer exists')
+	}
+
+	const formattedUser = {
+		id: targetUser.id,
+		firstName: targetUser.firstName || '',
+		lastName: targetUser.lastName || '',
+		profilePicUrl: targetUser.profilePicUrl || '',
+		isFollowing: (targetUser.followers?.length || 0) > 0,
+		isPro: targetUser.isPro,
+		proSubscriptionType: targetUser.proSubscriptionType || '',
+	}
+
+	return res.status(200).json(new ApiResponse(200, formattedUser, "You're now following"))
 })
 
 export const unFollowUser = asyncHandler(async (req: Request<{ id: string }, {}, {}>, res: Response) => {
@@ -135,22 +170,58 @@ export const unFollowUser = asyncHandler(async (req: Request<{ id: string }, {},
 	])
 
 	logDebug('Following', { result }, req)
-	return res.status(200).json(new ApiResponse(200, result, "You've unfollowed"))
+
+	const targetUser = await prisma.user.findUnique({
+		where: { id: targetUserId },
+		select: {
+			id: true,
+			profilePicUrl: true,
+			firstName: true,
+			lastName: true,
+			isPro: true,
+			proSubscriptionType: true,
+			followers: {
+				where: {
+					followerId: currentUserId,
+				},
+				select: {
+					followerId: true,
+				},
+			},
+		},
+	})
+
+	if (!targetUser) {
+		logWarn('Target user no longer exists', { action: 'unfollowUser', targetUserId }, req)
+		throw new ApiError(404, 'User no longer exists')
+	}
+
+	const formattedUser = {
+		id: targetUser.id,
+		firstName: targetUser.firstName || '',
+		lastName: targetUser.lastName || '',
+		profilePicUrl: targetUser.profilePicUrl || '',
+		isFollowing: (targetUser.followers?.length || 0) > 0,
+		isPro: targetUser.isPro,
+		proSubscriptionType: targetUser.proSubscriptionType || '',
+	}
+
+	return res.status(200).json(new ApiResponse(200, formattedUser, "You've unfollowed"))
 })
 
-export const getUserFollowing = asyncHandler(async (req: Request<{ id: string }, {}, {}>, res: Response) => {
-	const userId = req.params.id
+export const getUserFollowing = asyncHandler(async (req: Request<{ userId: string }, {}, {}>, res: Response) => {
+	const userId = req.params.userId
 	const user = await prisma.user.findUnique({
 		where: { id: userId },
 		select: { id: true },
 	})
 
 	if (!user) {
-		logWarn('User does not exist', { action: 'getUserFollowers', userId }, req)
+		logWarn('User does not exist', { action: 'getUserFollowing', userId }, req)
 		throw new ApiError(404, 'User does not exist')
 	}
 
-	const followers = await prisma.follow.findMany({
+	const following = await prisma.follow.findMany({
 		where: { followerId: userId },
 		select: {
 			following: {
@@ -159,6 +230,8 @@ export const getUserFollowing = asyncHandler(async (req: Request<{ id: string },
 					firstName: true,
 					lastName: true,
 					profilePicUrl: true,
+					isPro: true,
+					proSubscriptionType: true,
 					followers: {
 						where: {
 							followerId: userId,
@@ -172,17 +245,29 @@ export const getUserFollowing = asyncHandler(async (req: Request<{ id: string },
 		},
 	})
 
-	const result = followers.map(follower => ({
-		...follower.following,
-		isFollowing: follower.following.followers.length > 0,
-	}))
+	const result = following.map(item => {
+		const followedUser = item.following as any
+		return {
+			id: followedUser.id,
+			firstName: followedUser.firstName || '',
+			lastName: followedUser.lastName || '',
+			profilePicUrl: followedUser.profilePicUrl || '',
+			isFollowing: (followedUser.followers?.length || 0) > 0,
+			isPro: followedUser.isPro,
+			proSubscriptionType: followedUser.proSubscriptionType || '',
+		}
+	})
 
-	logDebug('User followers fetched successfully', { action: 'getUserFollowers', user: userId, result: result }, req)
-	return res.status(200).json(new ApiResponse(200, result, 'User followers fetched successfully'))
+	logDebug(
+		'User following fetched successfully',
+		{ action: 'getUserFollowing', user: userId, resultCount: result.length },
+		req
+	)
+	return res.status(200).json(new ApiResponse(200, result, 'User following fetched successfully'))
 })
 
-export const getUserFollowers = asyncHandler(async (req: Request<{ id: string }, {}, {}>, res: Response) => {
-	const userId = req.params.id
+export const getUserFollowers = asyncHandler(async (req: Request<{ userId: string }, {}, {}>, res: Response) => {
+	const userId = req.params.userId
 	const user = await prisma.user.findUnique({
 		where: { id: userId },
 		select: { id: true },
@@ -202,6 +287,8 @@ export const getUserFollowers = asyncHandler(async (req: Request<{ id: string },
 					firstName: true,
 					lastName: true,
 					profilePicUrl: true,
+					isPro: true,
+					proSubscriptionType: true,
 					followers: {
 						where: {
 							followerId: userId,
@@ -215,13 +302,125 @@ export const getUserFollowers = asyncHandler(async (req: Request<{ id: string },
 		},
 	})
 
-	const result = followers.map(follower => ({
-		...follower.follower,
-		isFollowing: follower.follower.followers.length > 0,
+	const result = followers.map(item => {
+		const followerUser = item.follower as any
+		return {
+			id: followerUser.id,
+			firstName: followerUser.firstName || '',
+			lastName: followerUser.lastName || '',
+			profilePicUrl: followerUser.profilePicUrl || '',
+			isFollowing: (followerUser.followers?.length || 0) > 0,
+			isPro: followerUser.isPro,
+			proSubscriptionType: followerUser.proSubscriptionType || '',
+		}
+	})
+
+	logDebug(
+		'User followers fetched successfully',
+		{ action: 'getUserFollowers', user: userId, resultCount: result.length },
+		req
+	)
+	return res.status(200).json(new ApiResponse(200, result, 'User followers fetched successfully'))
+})
+
+export const searchUsers = asyncHandler(async (req: Request, res: Response) => {
+	const query = req.query.query as string
+
+	if (!query) {
+		logWarn('No query provided', { action: 'searchUsers' }, req)
+		throw new ApiError(400, 'No query provided')
+	}
+	logDebug('Query', { action: 'searchUsers', query }, req)
+
+	const currentUserId = req.user?.id
+	const results = await prisma.user.findMany({
+		where: {
+			OR: [
+				{
+					firstName: {
+						startsWith: query,
+						mode: 'insensitive',
+					},
+				},
+				{
+					lastName: {
+						startsWith: query,
+						mode: 'insensitive',
+					},
+				},
+			],
+		},
+		take: 20,
+		select: {
+			id: true,
+			profilePicUrl: true,
+			firstName: true,
+			lastName: true,
+			isPro: true,
+			proSubscriptionType: true,
+			followers: {
+				where: {
+					followerId: currentUserId,
+				},
+				select: {
+					followerId: true,
+				},
+			},
+		},
+	})
+
+	const formattedResults = results.map((user: any) => ({
+		id: user.id,
+		firstName: user.firstName || '',
+		lastName: user.lastName || '',
+		profilePicUrl: user.profilePicUrl || '',
+		isFollowing: (user.followers?.length || 0) > 0,
+		isPro: user.isPro,
+		proSubscriptionType: user.proSubscriptionType || '',
 	}))
 
-	logDebug('User followers fetched successfully', { action: 'getUserFollowers', user: userId, result: result }, req)
-	return res.status(200).json(new ApiResponse(200, result, 'User followers fetched successfully'))
+	return res.status(200).json(new ApiResponse(200, formattedResults, 'Users fetched successfully'))
+})
+
+export const getSuggestedUsers = asyncHandler(async (req: Request, res: Response) => {
+	const currentUserId = req.user?.id
+	logWarn('currentUserId', { action: 'getSuggestedUsers', currentUserId: currentUserId }, req)
+	const users = await prisma.user.findMany({
+		where: {
+			id: {
+				not: currentUserId,
+			},
+		},
+		select: {
+			id: true,
+			profilePicUrl: true,
+			firstName: true,
+			lastName: true,
+			isPro: true,
+			proSubscriptionType: true,
+			followers: {
+				where: {
+					followerId: currentUserId,
+				},
+				select: {
+					followerId: true,
+				},
+			},
+		},
+		take: 20,
+	})
+
+	const result = users.map((user: any) => ({
+		id: user.id,
+		firstName: user.firstName || '',
+		lastName: user.lastName || '',
+		profilePicUrl: user.profilePicUrl || '',
+		isFollowing: (user.followers?.length || 0) > 0,
+		isPro: user.isPro,
+		proSubscriptionType: user.proSubscriptionType || '',
+	}))
+
+	return res.status(200).json(new ApiResponse(200, result, 'Users fetched successfully'))
 })
 
 // Post related

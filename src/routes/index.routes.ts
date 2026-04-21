@@ -4,7 +4,6 @@ import { analyticRoutes } from '../modules/analytics/analytics.routes.js'
 import { authRoutes } from '../modules/auth/auth.routes.js'
 import { coachRoutes } from '../modules/coach/coach.routes.js'
 import { configRoutes } from '../modules/config/config.routes.js'
-import { discoverRoutes } from '../modules/discover/discover.routes.js'
 import { engagementRoutes } from '../modules/engagement/engagement.routes.js'
 import { equipmentRoutes } from '../modules/equipment/equipment.routes.js'
 import { exerciseRoutes } from '../modules/exercise/exercise.routes.js'
@@ -30,7 +29,6 @@ router.get('/workouts/share/:id', getWorkoutByShareId)
 router.use('/workouts', authenticate, workoutRoutes)
 router.use('/templates', authenticate, templateRoutes)
 router.use('/coach', authenticate, coachRoutes)
-router.use('/discover', authenticate, discoverRoutes)
 router.use('/engagement', authenticate, engagementRoutes)
 router.use('/config', configRoutes)
 router.use('/analytics', authenticate, analyticRoutes)
