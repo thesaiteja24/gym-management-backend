@@ -20,7 +20,10 @@ import {
 const router = Router()
 
 // single user
-router.route('/:id').get(getUser).patch(validateResource(updateUserSchema), authorizeSelfOrAdmin(), updateUser)
+router
+	.route('/:userId')
+	.get(getUser)
+	.patch(validateResource(updateUserSchema), authorizeSelfOrAdmin('userId'), updateUser)
 
 // profile picture
 router

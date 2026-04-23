@@ -18,6 +18,6 @@ export const verifyOTPSchema = z.object({
 
 export const refreshTokenSchema = z.object({
 	body: z.object({
-		userId: z.uuid({ message: 'Invalid User ID format' }),
+		refreshToken: z.string().min(1, 'Refresh token is required'),
 	}),
 })

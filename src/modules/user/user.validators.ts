@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 export const updateUserSchema = z.object({
 	params: z.object({
-		id: z.uuid('Invalid User ID'),
+		userId: z.uuid('Invalid User ID'),
 	}),
 	body: z.object({
 		firstName: z.string().min(1).optional(),

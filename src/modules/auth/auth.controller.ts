@@ -18,6 +18,7 @@ import { ApiResponse } from '../../common/utils/ApiResponse.js'
 import { asyncHandler } from '../../common/utils/asyncHandler.js'
 import { logDebug, logError, logInfo, logWarn } from '../../common/utils/logger.js'
 import { issueAccessToken, issueRefreshToken, verifyRefreshToken } from '../../common/utils/tokens.js'
+import { formatUserResponse, selfUserSelect } from '../user/user.controller.js'
 
 const OTP_TTL = process.env.OTP_TTL!
 const SALT_ROUNDS = Number(process.env.BCRYPT_SALT_ROUNDS)
@@ -150,16 +151,7 @@ export const verifyOTP = asyncHandler(async (req: Request<object, object, Verify
 	}
 
 	// External Interactions
-	let user: {
-		id: string
-		firstName: string | null
-		lastName: string | null
-		phoneE164: string | null
-		role: string
-		profilePicUrl: string | null
-		createdAt: Date
-		updatedAt: Date
-	}
+	let user: any
 	let accessToken: string
 	let refreshToken: string
 	try {
@@ -169,16 +161,7 @@ export const verifyOTP = asyncHandler(async (req: Request<object, object, Verify
 
 		// Find or create user
 		user = await prisma.user.upsert({
-			select: {
-				id: true,
-				firstName: true,
-				lastName: true,
-				phoneE164: true,
-				role: true,
-				profilePicUrl: true,
-				createdAt: true,
-				updatedAt: true,
-			},
+			select: selfUserSelect,
 			where: { phoneE164: phoneE164 },
 			create: {
 				countryCode: countryCode,
@@ -229,17 +212,9 @@ export const verifyOTP = asyncHandler(async (req: Request<object, object, Verify
 		new ApiResponse(
 			200,
 			{
-				user: {
-					userId: user.id,
-					phoneE164: user.phoneE164,
-					firstName: user.firstName,
-					lastName: user.lastName,
-					role: user.role,
-					profilePicUrl: user.profilePicUrl,
-					privacyPolicyAcceptedAt: (user as any).privacyPolicyAcceptedAt,
-					privacyPolicyVersion: (user as any).privacyPolicyVersion,
-				},
+				user: formatUserResponse(user),
 				accessToken,
+				refreshToken,
 			},
 			'OTP verified successfully'
 		)
@@ -247,84 +222,88 @@ export const verifyOTP = asyncHandler(async (req: Request<object, object, Verify
 })
 
 interface RefreshTokenBody {
-	userId: string
+	refreshToken: string
 }
 
-export const refreshToken = asyncHandler(async (req: Request<object, object, RefreshTokenBody>, res: Response) => {
-	const { userId } = req.body
+export const refreshToken = asyncHandler(
+	async (req: Request<object, object, RefreshTokenBody>, res: Response) => {
+		const { refreshToken: providedToken } = req.body
 
-	// Business Logic
-	let storedToken: string | null
-	try {
-		storedToken = await getRefreshToken(userId)
-		if (!storedToken) {
-			logWarn('No refresh token found', { action: 'getRefreshToken', userId }, req)
-			throw new Error('No refresh token found')
-		}
-		verifyRefreshToken(storedToken)
-	} catch (error) {
-		const err = error as Error
-		logWarn('Invalid refresh token', { action: 'verifyRefreshToken', userId }, req)
-		throw new ApiError(401, 'Invalid or expired refresh token, please login again', [err.message])
-	}
-
-	// External Interactions
-	let user: {
-		id: string
-		firstName: string | null
-		lastName: string | null
-		phoneE164: string | null
-		email: string | null
-		role: string
-		profilePicUrl: string | null
-	} | null
-	let newAccessToken: string
-	try {
-		// Fetch user
-		user = await prisma.user.findUnique({
-			where: { id: userId },
-			select: {
-				id: true,
-				firstName: true,
-				lastName: true,
-				phoneE164: true,
-				email: true,
-				role: true,
-				profilePicUrl: true,
-				privacyPolicyAcceptedAt: true,
-				privacyPolicyVersion: true,
-			},
-		})
-		if (!user) {
-			logError(`Failed refreshToken: User not found`, null, { action: 'findUser', userId }, req)
-			throw new Error('User not found')
+		if (!providedToken) {
+			throw new ApiError(400, 'Refresh token is required')
 		}
 
-		// Delete old refresh token
-		await deleteRefreshToken(userId)
-		logInfo('Old refresh token deleted', { action: 'deleteRefreshToken', userId }, req)
+		// Business Logic
+		let decoded: ReturnType<typeof verifyRefreshToken>
+		try {
+			decoded = verifyRefreshToken(providedToken)
+		} catch (error) {
+			const err = error as Error
+			logWarn('Invalid refresh token provided', { action: 'verifyRefreshToken', error: err.message }, req)
+			throw new ApiError(401, 'Invalid or expired refresh token, please login again', [err.message])
+		}
 
-		// Issue new tokens
-		newAccessToken = await issueAccessToken(user)
-		await issueRefreshToken(user) // Stores new refresh token in Redis
-		logInfo('Tokens refreshed', { action: 'refreshToken', userId }, req)
-	} catch (error) {
-		const err = error as Error
-		logError(`Failed refreshToken: ${err.message}`, err, { action: 'refreshToken', userId }, req)
-		throw new ApiError(401, 'Token refresh failed', [err.message])
-	}
+		const userId = decoded.id
+		let storedToken: string | null
+		try {
+			storedToken = await getRefreshToken(userId)
+			if (!storedToken || storedToken !== providedToken) {
+				logWarn('Refresh token mismatch or not found in storage', { action: 'getRefreshToken', userId }, req)
+				throw new Error('Invalid refresh token')
+			}
+		} catch (error) {
+			const err = error as Error
+			logWarn(
+				'Refresh token validation failed',
+				{ action: 'validateRefreshToken', userId, error: err.message },
+				req
+			)
+			throw new ApiError(401, 'Session expired, please login again', [err.message])
+		}
 
-	// Response
-	return res.status(200).json(
-		new ApiResponse(
-			200,
-			{
-				accessToken: newAccessToken,
-			},
-			'Token refreshed successfully'
+		// External Interactions
+		let user: any
+		let newAccessToken: string
+		let newRefreshToken: string
+		try {
+			// Fetch user with full details
+			user = await prisma.user.findUnique({
+				where: { id: userId },
+				select: selfUserSelect,
+			})
+			if (!user) {
+				logError(`Failed refreshToken: User not found`, null, { action: 'findUser', userId }, req)
+				throw new Error('User not found')
+			}
+
+			// Delete old refresh token
+			await deleteRefreshToken(userId)
+			logInfo('Old refresh token deleted', { action: 'deleteRefreshToken', userId }, req)
+
+			// Issue new tokens
+			newAccessToken = await issueAccessToken(user)
+			newRefreshToken = await issueRefreshToken(user) // Stores new refresh token in Redis
+			logInfo('Tokens refreshed successfully', { action: 'refreshToken', userId }, req)
+		} catch (error) {
+			const err = error as Error
+			logError(`Failed refreshToken: ${err.message}`, err, { action: 'refreshToken', userId }, req)
+			throw new ApiError(401, 'Token refresh failed', [err.message])
+		}
+
+		// Response
+		return res.status(200).json(
+			new ApiResponse(
+				200,
+				{
+					user: formatUserResponse(user),
+					accessToken: newAccessToken,
+					refreshToken: newRefreshToken,
+				},
+				'Token refreshed successfully'
+			)
 		)
-	)
-})
+	}
+)
 
 interface GoogleLoginBody {
 	idToken: string
@@ -364,24 +343,14 @@ export const googleLogin = asyncHandler(async (req: Request<object, object, Goog
 	// Business Logic & External Interactions
 	let user
 	let accessToken: string
+	let refreshToken: string
 	try {
 		// Find user by googleId or email
 		user = await prisma.user.findFirst({
 			where: {
 				OR: [{ googleId }, { email }],
 			},
-			select: {
-				id: true,
-				firstName: true,
-				lastName: true,
-				phoneE164: true,
-				role: true,
-				profilePicUrl: true,
-				email: true,
-				googleId: true,
-				privacyPolicyAcceptedAt: true,
-				privacyPolicyVersion: true,
-			},
+			select: selfUserSelect,
 		})
 
 		if (user) {
@@ -390,18 +359,7 @@ export const googleLogin = asyncHandler(async (req: Request<object, object, Goog
 				user = await prisma.user.update({
 					where: { id: user.id },
 					data: { googleId },
-					select: {
-						id: true,
-						firstName: true,
-						lastName: true,
-						phoneE164: true,
-						role: true,
-						profilePicUrl: true,
-						email: true,
-						googleId: true,
-						privacyPolicyAcceptedAt: true,
-						privacyPolicyVersion: true,
-					},
+					select: selfUserSelect,
 				})
 			}
 
@@ -413,18 +371,7 @@ export const googleLogin = asyncHandler(async (req: Request<object, object, Goog
 						privacyPolicyAcceptedAt: new Date(),
 						privacyPolicyVersion: privacyPolicyVersion,
 					},
-					select: {
-						id: true,
-						firstName: true,
-						lastName: true,
-						phoneE164: true,
-						role: true,
-						profilePicUrl: true,
-						email: true,
-						googleId: true,
-						privacyPolicyAcceptedAt: true,
-						privacyPolicyVersion: true,
-					},
+					select: selfUserSelect,
 				})
 			}
 		} else {
@@ -442,25 +389,14 @@ export const googleLogin = asyncHandler(async (req: Request<object, object, Goog
 						privacyPolicyVersion: privacyPolicyVersion,
 					}),
 				},
-				select: {
-					id: true,
-					firstName: true,
-					lastName: true,
-					phoneE164: true,
-					role: true,
-					profilePicUrl: true,
-					email: true,
-					googleId: true,
-					privacyPolicyAcceptedAt: true,
-					privacyPolicyVersion: true,
-				},
+				select: selfUserSelect,
 			})
 			logInfo('New user created via Google', { action: 'createUser', userId: user.id }, req)
 		}
 
 		// Issue JWTs
 		accessToken = await issueAccessToken(user)
-		await issueRefreshToken(user)
+		refreshToken = await issueRefreshToken(user)
 		logDebug('Tokens issued for Google login', { action: 'issueTokens', userId: user.id }, req)
 	} catch (error) {
 		const err = error as Error
@@ -473,18 +409,9 @@ export const googleLogin = asyncHandler(async (req: Request<object, object, Goog
 		new ApiResponse(
 			200,
 			{
-				user: {
-					userId: user.id,
-					phoneE164: user.phoneE164,
-					firstName: user.firstName,
-					lastName: user.lastName,
-					role: user.role,
-					profilePicUrl: user.profilePicUrl,
-					email: user.email,
-					privacyPolicyAcceptedAt: (user as any).privacyPolicyAcceptedAt,
-					privacyPolicyVersion: (user as any).privacyPolicyVersion,
-				},
+				user: formatUserResponse(user),
 				accessToken,
+				refreshToken,
 			},
 			'Google login successful'
 		)
