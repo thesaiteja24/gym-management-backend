@@ -9,64 +9,106 @@ import { NotificationService } from '../../common/services/notification.service.
 
 const prisma = new PrismaClient().$extends(withAccelerate())
 
+/**
+ * Standard user selection for engagement related queries
+ * Includes an optional check if the current user is following the returned user
+ */
+const getUserSelect = (currentUserId?: string) => ({
+	id: true,
+	firstName: true,
+	lastName: true,
+	profilePicUrl: true,
+	isPro: true,
+	proSubscriptionType: true,
+	followers: currentUserId
+		? {
+				where: { followerId: currentUserId },
+				select: { followerId: true },
+		  }
+		: false,
+})
+
+/**
+ * Maps a Prisma user object to the standard API response format
+ */
+const mapUserResponse = (user: any) => {
+	if (!user) return null
+	return {
+		id: user.id,
+		firstName: user.firstName || '',
+		lastName: user.lastName || '',
+		profilePicUrl: user.profilePicUrl || '',
+		isFollowing: Array.isArray(user.followers) ? user.followers.length > 0 : false,
+		isPro: user.isPro || false,
+		proSubscriptionType: user.proSubscriptionType || '',
+	}
+}
+
+/**
+ * Formats a comment object for the API response, handling deleted states and recursive replies
+ */
+const formatCommentResponse = (comment: any): any => {
+	const isDeleted = !!comment.deletedAt
+	return {
+		id: comment.id,
+		userId: comment.userId,
+		content: isDeleted ? '[This comment has been deleted]' : comment.content,
+		parentId: comment.parentId || '',
+		workoutId: comment.workoutId || '',
+		likesCount: comment.likesCount,
+		repliesCount: comment._count?.replies || 0,
+		createdAt: comment.createdAt,
+		updatedAt: comment.updatedAt,
+		deletedAt: comment.deletedAt,
+		user: {
+			id: isDeleted ? '' : comment.user?.id || '',
+			firstName: isDeleted ? 'Deleted' : comment.user?.firstName || '',
+			lastName: isDeleted ? 'User' : comment.user?.lastName || '',
+			profilePicUrl: isDeleted ? '' : comment.user?.profilePicUrl || '',
+		},
+		replies: comment.replies?.map((reply: any) => formatCommentResponse(reply)) || [],
+	}
+}
+
 export const followUser = asyncHandler(async (req: Request<{ id: string }, {}, {}>, res: Response) => {
 	const currentUserId = req.user?.id as string
 	const targetUserId = req.params.id
 
 	if (currentUserId === targetUserId) {
-		logWarn('You cannot follow yourself', { action: 'followUser' }, req)
 		throw new ApiError(400, 'You cannot follow yourself')
 	}
 
-	const user = await prisma.user.findUnique({
-		where: { id: targetUserId },
-		select: { id: true },
-	})
+	const [currentUser, targetUser] = await Promise.all([
+		prisma.user.findUnique({
+			where: { id: currentUserId },
+			select: { firstName: true, lastName: true },
+		}),
+		prisma.user.findUnique({
+			where: { id: targetUserId },
+			select: getUserSelect(currentUserId),
+		}),
+	])
 
-	if (!user) {
-		logWarn('User does not exist', { action: 'followUser', userId: targetUserId }, req)
-		throw new ApiError(404, 'User does not exist')
+	if (!targetUser) throw new ApiError(404, 'User does not exist')
+
+	const isAlreadyFollowing = (targetUser.followers?.length || 0) > 0
+	if (isAlreadyFollowing) {
+		return res.status(200).json(new ApiResponse(200, mapUserResponse(targetUser), 'Already following'))
 	}
 
-	const currentUser = await prisma.user.findUnique({
-		where: { id: currentUserId },
-		select: { firstName: true, lastName: true },
-	})
-
-	const existingFollow = await prisma.follow.findUnique({
-		where: {
-			followerId_followingId: {
-				followerId: currentUserId,
-				followingId: targetUserId,
-			},
-		},
-	})
-
-	if (existingFollow) {
-		logDebug('Already following', { existingFollow }, req)
-		return res.status(200).json(new ApiResponse(200, null, 'You are already following this user'))
-	}
-
-	const result = await prisma.$transaction([
+	await prisma.$transaction([
 		prisma.follow.create({
-			data: {
-				followerId: currentUserId,
-				followingId: targetUserId,
-			},
+			data: { followerId: currentUserId, followingId: targetUserId },
 		}),
 		prisma.user.update({
 			where: { id: currentUserId },
-			data: {
-				followingCount: { increment: 1 },
-			},
+			data: { followingCount: { increment: 1 } },
 		}),
 		prisma.user.update({
 			where: { id: targetUserId },
 			data: { followersCount: { increment: 1 } },
 		}),
 	])
-
-	logDebug('Following', { result }, req)
 
 	if (currentUser) {
 		NotificationService.sendPushToUsers(
@@ -77,42 +119,14 @@ export const followUser = asyncHandler(async (req: Request<{ id: string }, {}, {
 		).catch(err => logWarn('Failed to send follow notification', { err }, req))
 	}
 
-	const targetUser = await prisma.user.findUnique({
-		where: { id: targetUserId },
-		select: {
-			id: true,
-			profilePicUrl: true,
-			firstName: true,
-			lastName: true,
-			isPro: true,
-			proSubscriptionType: true,
-			followers: {
-				where: {
-					followerId: currentUserId,
-				},
-				select: {
-					followerId: true,
-				},
-			},
-		},
-	})
-
-	if (!targetUser) {
-		logWarn('Target user no longer exists', { action: 'followUser', targetUserId }, req)
-		throw new ApiError(404, 'User no longer exists')
-	}
-
-	const formattedUser = {
-		id: targetUser.id,
-		firstName: targetUser.firstName || '',
-		lastName: targetUser.lastName || '',
-		profilePicUrl: targetUser.profilePicUrl || '',
-		isFollowing: (targetUser.followers?.length || 0) > 0,
-		isPro: targetUser.isPro,
-		proSubscriptionType: targetUser.proSubscriptionType || '',
-	}
-
-	return res.status(200).json(new ApiResponse(200, formattedUser, "You're now following"))
+	logInfo('User followed successfully', { action: 'followUser', targetUserId }, req)
+	return res.status(200).json(
+		new ApiResponse(
+			200,
+			{ ...mapUserResponse(targetUser), isFollowing: true },
+			"You're now following"
+		)
+	)
 })
 
 export const unFollowUser = asyncHandler(async (req: Request<{ id: string }, {}, {}>, res: Response) => {
@@ -120,48 +134,30 @@ export const unFollowUser = asyncHandler(async (req: Request<{ id: string }, {},
 	const targetUserId = req.params.id
 
 	if (currentUserId === targetUserId) {
-		logWarn('You cannot unfollow yourself', { action: 'unfollowUser' }, req)
 		throw new ApiError(400, 'You cannot unfollow yourself')
 	}
 
-	const user = await prisma.user.findUnique({
+	const targetUser = await prisma.user.findUnique({
 		where: { id: targetUserId },
-		select: { id: true },
+		select: getUserSelect(currentUserId),
 	})
 
-	if (!user) {
-		logWarn('User does not exist', { action: 'unfollowUser', userId: targetUserId }, req)
-		throw new ApiError(404, 'User does not exist')
+	if (!targetUser) throw new ApiError(404, 'User does not exist')
+
+	const isFollowing = (targetUser.followers?.length || 0) > 0
+	if (!isFollowing) {
+		return res.status(200).json(new ApiResponse(200, mapUserResponse(targetUser), 'Not following this user'))
 	}
 
-	const existingFollow = await prisma.follow.findUnique({
-		where: {
-			followerId_followingId: {
-				followerId: currentUserId,
-				followingId: targetUserId,
-			},
-		},
-	})
-
-	if (!existingFollow) {
-		logDebug('Not following', { currentUserId, targetUserId }, req)
-		return res.status(200).json(new ApiResponse(200, null, 'You are not following this user'))
-	}
-
-	const result = await prisma.$transaction([
+	await prisma.$transaction([
 		prisma.follow.delete({
 			where: {
-				followerId_followingId: {
-					followerId: currentUserId,
-					followingId: targetUserId,
-				},
+				followerId_followingId: { followerId: currentUserId, followingId: targetUserId },
 			},
 		}),
 		prisma.user.update({
 			where: { id: currentUserId },
-			data: {
-				followingCount: { decrement: 1 },
-			},
+			data: { followingCount: { decrement: 1 } },
 		}),
 		prisma.user.update({
 			where: { id: targetUserId },
@@ -169,257 +165,103 @@ export const unFollowUser = asyncHandler(async (req: Request<{ id: string }, {},
 		}),
 	])
 
-	logDebug('Following', { result }, req)
-
-	const targetUser = await prisma.user.findUnique({
-		where: { id: targetUserId },
-		select: {
-			id: true,
-			profilePicUrl: true,
-			firstName: true,
-			lastName: true,
-			isPro: true,
-			proSubscriptionType: true,
-			followers: {
-				where: {
-					followerId: currentUserId,
-				},
-				select: {
-					followerId: true,
-				},
-			},
-		},
-	})
-
-	if (!targetUser) {
-		logWarn('Target user no longer exists', { action: 'unfollowUser', targetUserId }, req)
-		throw new ApiError(404, 'User no longer exists')
-	}
-
-	const formattedUser = {
-		id: targetUser.id,
-		firstName: targetUser.firstName || '',
-		lastName: targetUser.lastName || '',
-		profilePicUrl: targetUser.profilePicUrl || '',
-		isFollowing: (targetUser.followers?.length || 0) > 0,
-		isPro: targetUser.isPro,
-		proSubscriptionType: targetUser.proSubscriptionType || '',
-	}
-
-	return res.status(200).json(new ApiResponse(200, formattedUser, "You've unfollowed"))
+	logInfo('User unfollowed successfully', { action: 'unFollowUser', targetUserId }, req)
+	return res.status(200).json(
+		new ApiResponse(
+			200,
+			{ ...mapUserResponse(targetUser), isFollowing: false },
+			"You've unfollowed"
+		)
+	)
 })
 
 export const getUserFollowing = asyncHandler(async (req: Request<{ userId: string }, {}, {}>, res: Response) => {
-	const userId = req.params.userId
+	const { userId } = req.params
+	const currentUserId = req.user?.id
+
 	const user = await prisma.user.findUnique({
 		where: { id: userId },
 		select: { id: true },
 	})
 
-	if (!user) {
-		logWarn('User does not exist', { action: 'getUserFollowing', userId }, req)
-		throw new ApiError(404, 'User does not exist')
-	}
+	if (!user) throw new ApiError(404, 'User does not exist')
 
 	const following = await prisma.follow.findMany({
 		where: { followerId: userId },
 		select: {
 			following: {
-				select: {
-					id: true,
-					firstName: true,
-					lastName: true,
-					profilePicUrl: true,
-					isPro: true,
-					proSubscriptionType: true,
-					followers: {
-						where: {
-							followerId: userId,
-						},
-						select: {
-							followerId: true,
-						},
-					},
-				},
+				select: getUserSelect(currentUserId),
 			},
 		},
 	})
 
-	const result = following.map(item => {
-		const followedUser = item.following as any
-		return {
-			id: followedUser.id,
-			firstName: followedUser.firstName || '',
-			lastName: followedUser.lastName || '',
-			profilePicUrl: followedUser.profilePicUrl || '',
-			isFollowing: (followedUser.followers?.length || 0) > 0,
-			isPro: followedUser.isPro,
-			proSubscriptionType: followedUser.proSubscriptionType || '',
-		}
-	})
+	const result = following.map(item => mapUserResponse(item.following))
 
-	logDebug(
-		'User following fetched successfully',
-		{ action: 'getUserFollowing', user: userId, resultCount: result.length },
-		req
-	)
+	logInfo('User following fetched successfully', { action: 'getUserFollowing', userId, count: result.length }, req)
 	return res.status(200).json(new ApiResponse(200, result, 'User following fetched successfully'))
 })
 
 export const getUserFollowers = asyncHandler(async (req: Request<{ userId: string }, {}, {}>, res: Response) => {
-	const userId = req.params.userId
+	const { userId } = req.params
+	const currentUserId = req.user?.id
+
 	const user = await prisma.user.findUnique({
 		where: { id: userId },
 		select: { id: true },
 	})
 
-	if (!user) {
-		logWarn('User does not exist', { action: 'getUserFollowers', userId }, req)
-		throw new ApiError(404, 'User does not exist')
-	}
+	if (!user) throw new ApiError(404, 'User does not exist')
 
 	const followers = await prisma.follow.findMany({
 		where: { followingId: userId },
 		select: {
 			follower: {
-				select: {
-					id: true,
-					firstName: true,
-					lastName: true,
-					profilePicUrl: true,
-					isPro: true,
-					proSubscriptionType: true,
-					followers: {
-						where: {
-							followerId: userId,
-						},
-						select: {
-							followerId: true,
-						},
-					},
-				},
+				select: getUserSelect(currentUserId),
 			},
 		},
 	})
 
-	const result = followers.map(item => {
-		const followerUser = item.follower as any
-		return {
-			id: followerUser.id,
-			firstName: followerUser.firstName || '',
-			lastName: followerUser.lastName || '',
-			profilePicUrl: followerUser.profilePicUrl || '',
-			isFollowing: (followerUser.followers?.length || 0) > 0,
-			isPro: followerUser.isPro,
-			proSubscriptionType: followerUser.proSubscriptionType || '',
-		}
-	})
+	const result = followers.map(item => mapUserResponse(item.follower))
 
-	logDebug(
-		'User followers fetched successfully',
-		{ action: 'getUserFollowers', user: userId, resultCount: result.length },
-		req
-	)
+	logInfo('User followers fetched successfully', { action: 'getUserFollowers', userId, count: result.length }, req)
 	return res.status(200).json(new ApiResponse(200, result, 'User followers fetched successfully'))
 })
 
 export const searchUsers = asyncHandler(async (req: Request, res: Response) => {
 	const query = req.query.query as string
-
-	if (!query) {
-		logWarn('No query provided', { action: 'searchUsers' }, req)
-		throw new ApiError(400, 'No query provided')
-	}
-	logDebug('Query', { action: 'searchUsers', query }, req)
-
 	const currentUserId = req.user?.id
+
+	if (!query) throw new ApiError(400, 'No query provided')
+
 	const results = await prisma.user.findMany({
 		where: {
 			OR: [
-				{
-					firstName: {
-						startsWith: query,
-						mode: 'insensitive',
-					},
-				},
-				{
-					lastName: {
-						startsWith: query,
-						mode: 'insensitive',
-					},
-				},
+				{ firstName: { startsWith: query, mode: 'insensitive' } },
+				{ lastName: { startsWith: query, mode: 'insensitive' } },
 			],
 		},
 		take: 20,
-		select: {
-			id: true,
-			profilePicUrl: true,
-			firstName: true,
-			lastName: true,
-			isPro: true,
-			proSubscriptionType: true,
-			followers: {
-				where: {
-					followerId: currentUserId,
-				},
-				select: {
-					followerId: true,
-				},
-			},
-		},
+		select: getUserSelect(currentUserId),
 	})
 
-	const formattedResults = results.map((user: any) => ({
-		id: user.id,
-		firstName: user.firstName || '',
-		lastName: user.lastName || '',
-		profilePicUrl: user.profilePicUrl || '',
-		isFollowing: (user.followers?.length || 0) > 0,
-		isPro: user.isPro,
-		proSubscriptionType: user.proSubscriptionType || '',
-	}))
+	const formattedResults = results.map(user => mapUserResponse(user))
 
+	logInfo('Users search successful', { action: 'searchUsers', query, count: formattedResults.length }, req)
 	return res.status(200).json(new ApiResponse(200, formattedResults, 'Users fetched successfully'))
 })
 
 export const getSuggestedUsers = asyncHandler(async (req: Request, res: Response) => {
 	const currentUserId = req.user?.id
-	logWarn('currentUserId', { action: 'getSuggestedUsers', currentUserId: currentUserId }, req)
+
 	const users = await prisma.user.findMany({
-		where: {
-			id: {
-				not: currentUserId,
-			},
-		},
-		select: {
-			id: true,
-			profilePicUrl: true,
-			firstName: true,
-			lastName: true,
-			isPro: true,
-			proSubscriptionType: true,
-			followers: {
-				where: {
-					followerId: currentUserId,
-				},
-				select: {
-					followerId: true,
-				},
-			},
-		},
+		where: { id: { not: currentUserId } },
+		select: getUserSelect(currentUserId),
 		take: 20,
 	})
 
-	const result = users.map((user: any) => ({
-		id: user.id,
-		firstName: user.firstName || '',
-		lastName: user.lastName || '',
-		profilePicUrl: user.profilePicUrl || '',
-		isFollowing: (user.followers?.length || 0) > 0,
-		isPro: user.isPro,
-		proSubscriptionType: user.proSubscriptionType || '',
-	}))
+	const result = users.map(user => mapUserResponse(user))
 
+	logInfo('Suggested users fetched', { action: 'getSuggestedUsers', count: result.length }, req)
 	return res.status(200).json(new ApiResponse(200, result, 'Users fetched successfully'))
 })
 
@@ -430,54 +272,34 @@ export const createComment = asyncHandler(
 		const workoutId = req.params.id
 		const { content, parentId } = req.body
 
-		const existingUser = await prisma.user.findUnique({
-			where: { id: userId },
-		})
+		const [existingUser, workout] = await Promise.all([
+			prisma.user.findUnique({ where: { id: userId }, select: { firstName: true, lastName: true } }),
+			prisma.workoutLog.findUnique({
+				where: { id: workoutId },
+				select: { userId: true },
+			}),
+		])
 
-		if (!existingUser) {
-			logWarn(`User with the user id:${userId}`, { action: 'createComment', userId }, req)
-			throw new ApiError(404, 'User does not exist')
-		}
-
-		const existingWorkout = await prisma.workoutLog.findUnique({
-			where: { id: workoutId },
-		})
-
-		if (!existingWorkout) {
-			logWarn(`Workout with the workout id:${workoutId}`, { action: 'createComment', workoutId }, req)
-			throw new ApiError(404, 'Workout does not exist')
-		}
+		if (!existingUser) throw new ApiError(404, 'User does not exist')
+		if (!workout) throw new ApiError(404, 'Workout does not exist')
 
 		let parentCommentUserId: string | null = null
 		if (parentId) {
-			const existingCommnet = await prisma.workoutComment.findUnique({
+			const parentComment = await prisma.workoutComment.findUnique({
 				where: { id: parentId },
+				select: { userId: true, workoutId: true },
 			})
 
-			if (!existingCommnet) {
-				logWarn(`Comment with the comment id:${parentId}`, { action: 'createComment', parentId }, req)
-				throw new ApiError(404, 'Comment does not exist')
-			}
-
-			if (existingCommnet.workoutId !== workoutId) {
-				logWarn(
-					`Comment with the comment id:${parentId} is not the parent of the workout with the workout id:${workoutId}`,
-					{ action: 'createComment', parentId, workoutId },
-					req
-				)
+			if (!parentComment) throw new ApiError(404, 'Parent comment does not exist')
+			if (parentComment.workoutId !== workoutId) {
 				throw new ApiError(403, 'This comment does not belong to this workout')
 			}
-			parentCommentUserId = existingCommnet.userId
+			parentCommentUserId = parentComment.userId
 		}
 
-		const comment = await prisma.$transaction([
+		const [comment] = await prisma.$transaction([
 			prisma.workoutComment.create({
-				data: {
-					workoutId,
-					userId: userId!,
-					content,
-					parentId: parentId ?? null,
-				},
+				data: { workoutId, userId: userId!, content, parentId: parentId ?? null },
 				select: {
 					id: true,
 					workoutId: true,
@@ -488,48 +310,34 @@ export const createComment = asyncHandler(
 					createdAt: true,
 					updatedAt: true,
 					deletedAt: true,
-					user: {
-						select: {
-							id: true,
-							firstName: true,
-							lastName: true,
-							profilePicUrl: true,
-						},
-					},
-					_count: {
-						select: { replies: true }, // Get the total count of direct replies without loading them
-					},
+					user: { select: { id: true, firstName: true, lastName: true, profilePicUrl: true } },
+					_count: { select: { replies: true } },
 				},
 			}),
 			prisma.workoutLog.update({
 				where: { id: workoutId },
-				data: {
-					commentsCount: { increment: 1 },
-				},
+				data: { commentsCount: { increment: 1 } },
 			}),
 		])
 
-		logInfo('Comment created successfully', { action: 'createComment', workoutId, parentId }, req)
-
-		if (existingUser) {
-			if (parentId && parentCommentUserId && parentCommentUserId !== userId) {
-				NotificationService.sendPushToUsers(
-					[parentCommentUserId],
-					'New Reply!',
-					`${existingUser.firstName} ${existingUser.lastName} replied to your comment.`,
-					{ type: 'comment_reply', workoutId, commentId: comment[0].id, parentId, userId }
-				).catch(err => logWarn('Failed to send comment reply notification', { err }, req))
-			} else if (!parentId && existingWorkout.userId !== userId) {
-				NotificationService.sendPushToUsers(
-					[existingWorkout.userId],
-					'New Comment!',
-					`${existingUser.firstName} ${existingUser.lastName} commented on your workout.`,
-					{ type: 'workout_comment', workoutId, commentId: comment[0].id, userId }
-				).catch(err => logWarn('Failed to send workout comment notification', { err }, req))
-			}
+		if (parentId && parentCommentUserId && parentCommentUserId !== userId) {
+			NotificationService.sendPushToUsers(
+				[parentCommentUserId],
+				'New Reply!',
+				`${existingUser.firstName} ${existingUser.lastName} replied to your comment.`,
+				{ type: 'comment_reply', workoutId, commentId: comment.id, parentId, userId }
+			).catch(err => logWarn('Failed to send reply notification', { err }, req))
+		} else if (!parentId && workout.userId !== userId) {
+			NotificationService.sendPushToUsers(
+				[workout.userId],
+				'New Comment!',
+				`${existingUser.firstName} ${existingUser.lastName} commented on your workout.`,
+				{ type: 'workout_comment', workoutId, commentId: comment.id, userId }
+			).catch(err => logWarn('Failed to send comment notification', { err }, req))
 		}
 
-		return res.status(200).json(new ApiResponse(200, comment[0], 'Comment created successfully'))
+		logInfo('Comment created', { action: 'createComment', commentId: comment.id }, req)
+		return res.status(200).json(new ApiResponse(200, formatCommentResponse(comment), 'Comment created successfully'))
 	}
 )
 
@@ -538,20 +346,19 @@ export const getComments = asyncHandler(
 		req: Request<{ id: string }, object, object, { isReply?: string; limit?: string; cursor?: string }>,
 		res: Response
 	) => {
-		const id = req.params.id
+		const { id } = req.params
 		const isRepliesRoute = req.query.isReply === 'true'
-		const limit = parseInt((req.query.limit as string) || (isRepliesRoute ? '10' : '20'), 10)
-		const cursor = req.query.cursor as string
+		const limit = parseInt(req.query.limit || '10', 10)
+		const cursor = req.query.cursor
 
-		const whereClause = isRepliesRoute ? { parentId: id } : { workoutId: id, parentId: null }
-		const orderByClause = isRepliesRoute ? { createdAt: 'asc' as const } : { createdAt: 'desc' as const }
+		const where = isRepliesRoute ? { parentId: id } : { workoutId: id, parentId: null }
+		const orderBy = isRepliesRoute ? { createdAt: 'asc' as const } : { createdAt: 'desc' as const }
 
 		const items = await prisma.workoutComment.findMany({
-			where: whereClause,
-			take: limit + 1, // Fetch an extra item to check if there's a next page
+			where,
+			take: limit + 1,
 			cursor: cursor ? { id: cursor } : undefined,
-			skip: cursor ? 1 : undefined,
-			orderBy: orderByClause,
+			orderBy,
 			select: {
 				id: true,
 				workoutId: true,
@@ -562,131 +369,39 @@ export const getComments = asyncHandler(
 				createdAt: true,
 				updatedAt: true,
 				deletedAt: true,
-				user: {
-					select: {
-						id: true,
-						firstName: true,
-						lastName: true,
-						profilePicUrl: true,
-					},
-				},
-				_count: {
-					select: { replies: true },
-				},
-				replies: !isRepliesRoute // Prefetch first 3 nested replies for top-level comments; omit when fetching replies directly
-					? {
-							take: 3,
-							orderBy: { createdAt: 'asc' },
-							select: {
-								id: true,
-								workoutId: true,
-								userId: true,
-								content: true,
-								parentId: true,
-								likesCount: true,
-								createdAt: true,
-								updatedAt: true,
-								deletedAt: true,
-								user: {
-									select: {
-										id: true,
-										firstName: true,
-										lastName: true,
-										profilePicUrl: true,
-									},
-								},
-								_count: {
-									select: { replies: true },
-								},
-							},
-						}
-					: false,
+				user: { select: { id: true, firstName: true, lastName: true, profilePicUrl: true } },
+				_count: { select: { replies: true } },
 			},
 		})
 
 		let nextCursor: string | null = null
 		if (items.length > limit) {
-			const nextItem = items.pop() // Remove the extra item
+			const nextItem = items.pop()
 			nextCursor = nextItem!.id
 		}
 
-		// Dynamic select types from Prisma make strict typing difficult here
-		const formattedItems = (items as any[]).map(item => {
-			const isDeleted = !!item.deletedAt
+		const formattedItems = items.map(item => formatCommentResponse(item))
 
-			const formattedReplies =
-				item.replies?.map((reply: any) => {
-					const replyIsDeleted = !!reply.deletedAt
-					return {
-						...reply,
-						content: replyIsDeleted ? '[This comment has been deleted]' : reply.content,
-						user: replyIsDeleted ? null : reply.user,
-					}
-				}) || []
-
-			return {
-				...item,
-				content: isDeleted ? '[This comment has been deleted]' : item.content,
-				user: isDeleted ? null : item.user,
-				replies: formattedReplies,
-			}
-		})
-
-		logInfo(
-			isRepliesRoute ? 'Replies fetched successfully' : 'Comments fetched successfully',
-			{ action: 'getComments', id },
-			req
-		)
-
-		const responseData = isRepliesRoute
-			? { replies: formattedItems, nextCursor }
-			: { comments: formattedItems, nextCursor }
-
-		return res
-			.status(200)
-			.json(
-				new ApiResponse(
-					200,
-					responseData,
-					isRepliesRoute ? 'Replies fetched successfully' : 'Comments fetched successfully'
-				)
+		logInfo('Comments fetched', { action: 'getComments', id, count: items.length }, req)
+		return res.status(200).json(
+			new ApiResponse(
+				200,
+				{ [isRepliesRoute ? 'replies' : 'comments']: formattedItems, nextCursor },
+				'Comments fetched successfully'
 			)
+		)
 	}
 )
 
 export const editComment = asyncHandler(
-	async (req: Request<{ id: string }, {}, { content: string }>, res: Response) => {
-		const commentId = req.params.id
+	async (req: Request<{ commentId: string }, {}, { content: string }>, res: Response) => {
+		const { commentId } = req.params
 		const userId = req.user?.id
 		const { content } = req.body
 
-		const existingComment = await prisma.workoutComment.findUnique({
-			where: { id: commentId },
-		})
-
-		if (!existingComment) {
-			logWarn(
-				`Comment with the comment id:${commentId} does not exist`,
-				{ action: 'editComment', commentId },
-				req
-			)
-			throw new ApiError(404, 'Comment does not exist')
-		}
-
-		if (existingComment.userId !== userId) {
-			logWarn(
-				`Comment with the comment id:${commentId} does not belong to the user with the user id:${userId}`,
-				{ action: 'editComment', commentId, userId },
-				req
-			)
-			throw new ApiError(403, 'This comment does not belong to you')
-		}
-
 		const comment = await prisma.workoutComment.update({
-			where: { id: commentId },
-			data: {
-				content,
-			},
+			where: { id: commentId, userId },
+			data: { content },
 			select: {
 				id: true,
 				workoutId: true,
@@ -697,463 +412,135 @@ export const editComment = asyncHandler(
 				createdAt: true,
 				updatedAt: true,
 				deletedAt: true,
-				user: {
-					select: {
-						id: true,
-						firstName: true,
-						lastName: true,
-						profilePicUrl: true,
-					},
-				},
-				_count: {
-					select: { replies: true },
-				},
+				user: { select: { id: true, firstName: true, lastName: true, profilePicUrl: true } },
+				_count: { select: { replies: true } },
 			},
 		})
 
-		logInfo('Comment edited successfully', { action: 'editComment', commentId }, req)
-		return res.status(200).json(new ApiResponse(200, comment, 'Comment edited successfully'))
+		if (!comment) throw new ApiError(404, 'Comment not found or unauthorized')
+
+		logInfo('Comment edited', { action: 'editComment', commentId }, req)
+		return res.status(200).json(new ApiResponse(200, formatCommentResponse(comment), 'Comment edited successfully'))
 	}
 )
 
-export const deleteComment = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
-	const commentId = req.params.id
+export const deleteComment = asyncHandler(async (req: Request<{ commentId: string }>, res: Response) => {
+	const { commentId } = req.params
 	const userId = req.user?.id
 
-	const existingComment = await prisma.workoutComment.findUnique({
-		where: { id: commentId },
+	const comment = await prisma.workoutComment.update({
+		where: { id: commentId, userId },
+		data: { deletedAt: new Date() },
 	})
 
-	if (!existingComment) {
-		logWarn(`Comment with the comment id:${commentId} does not exist`, { action: 'deleteComment', commentId }, req)
-		throw new ApiError(404, 'Comment does not exist')
-	}
+	if (!comment) throw new ApiError(404, 'Comment not found or unauthorized')
 
-	if (existingComment.userId !== userId) {
-		logWarn(
-			`Comment with the comment id:${commentId} does not belong to the user with the user id:${userId}`,
-			{ action: 'deleteComment', commentId, userId },
-			req
-		)
-		throw new ApiError(403, "You're not authorized to delete this comment")
-	}
-
-	const comment = await prisma.$transaction([
-		prisma.workoutComment.update({
-			where: { id: commentId },
-			data: {
-				deletedAt: new Date(),
-			},
-		}),
-	])
-
-	logInfo('Comment deleted successfully', { action: 'deleteComment', commentId }, req)
-	return res.status(200).json(new ApiResponse(200, comment[0], 'Comment deleted successfully'))
+	logInfo('Comment deleted', { action: 'deleteComment', commentId }, req)
+	return res.status(200).json(new ApiResponse(200, comment, 'Comment deleted successfully'))
 })
 
-export const createCommentLike = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
-	const userId = req.user?.id
-	const commentId = req.params.id
+export const getLikes = asyncHandler(async (req: Request, res: Response) => {
+	const { id } = req.params
+	const type = req.query.type as 'workout' | 'comment'
 
-	const existingUser = await prisma.user.findUnique({
-		where: { id: userId },
-	})
+	const config = {
+		workout: { likeModel: prisma.workoutLike, parentModel: prisma.workoutLog, idKey: 'workoutId' },
+		comment: { likeModel: prisma.workoutCommentLike, parentModel: prisma.workoutComment, idKey: 'commentId' },
+	}[type]
 
-	if (!existingUser) {
-		logWarn(`User with the user id:${userId} does not exist`, { action: 'createCommentLike', userId }, req)
-		throw new ApiError(404, 'User does not exist')
-	}
+	if (!config) throw new ApiError(400, 'Invalid like type')
 
-	const existingComment = await prisma.workoutComment.findUnique({
-		where: { id: commentId },
-	})
+	const parent = await (config.parentModel as any).findUnique({ where: { id }, select: { id: true } })
+	if (!parent) throw new ApiError(404, `${type} not found`)
 
-	if (!existingComment) {
-		logWarn(
-			`Comment with the comment id:${commentId} does not exist`,
-			{ action: 'createCommentLike', commentId },
-			req
-		)
-		throw new ApiError(404, 'Comment does not exist')
-	}
-
-	const liked = await prisma.workoutCommentLike.findUnique({
-		where: {
-			userId_commentId: {
-				commentId,
-				userId: userId!,
-			},
-		},
+	const likes = await (config.likeModel as any).findMany({
+		where: { [config.idKey]: id },
 		select: {
-			commentId: true,
 			userId: true,
-			createdAt: true,
-			user: {
-				select: {
-					id: true,
-					firstName: true,
-					lastName: true,
-					profilePicUrl: true,
-				},
-			},
+			user: { select: { id: true, firstName: true, lastName: true, profilePicUrl: true } },
 		},
+	})
+
+	const mappedLikes = likes.map((like: any) => ({
+		id: `${like.userId}_${id}`,
+		userId: like.userId,
+		targetId: id,
+		targetType: type,
+		user: like.user,
+	}))
+
+	logInfo(`${type} likes fetched`, { action: 'getLikes', id, count: likes.length }, req)
+	return res.status(200).json(new ApiResponse(200, mappedLikes, `${type} likes fetched successfully`))
+})
+
+export const toggleLikeAction = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
+	const { id } = req.params
+	const type = req.query.type as 'workout' | 'comment'
+	const liked = req.query.liked
+	const userId = req.user?.id as string
+
+	const config = {
+		workout: {
+			likeModel: prisma.workoutLike,
+			parentModel: prisma.workoutLog,
+			idKey: 'workoutId',
+			notification: { title: 'New Workout Like!', message: (n: string) => `${n} liked your workout.`, type: 'workout_like' },
+		},
+		comment: {
+			likeModel: prisma.workoutCommentLike,
+			parentModel: prisma.workoutComment,
+			idKey: 'commentId',
+			notification: { title: 'New Comment Like!', message: (n: string) => `${n} liked your comment.`, type: 'comment_like' },
+		},
+	}[type]
+
+	if (!config) throw new ApiError(400, 'Invalid like type')
+
+	const [parent, user] = await Promise.all([
+		(config.parentModel as any).findUnique({ where: { id }, select: { userId: true, ...(type === 'comment' ? { workoutId: true } : {}) } }),
+		prisma.user.findUnique({ where: { id: userId }, select: { firstName: true, lastName: true } }),
+	])
+
+	if (!parent) throw new ApiError(404, `${type} not found`)
+
+	const existingLike = await (config.likeModel as any).findUnique({
+		where: { [`userId_${config.idKey}`]: { [config.idKey]: id, userId } },
+		include: { user: { select: { id: true, firstName: true, lastName: true, profilePicUrl: true } } },
 	})
 
 	if (liked) {
-		logWarn(
-			`Comment with the comment id:${commentId} is already liked by the user with the user id:${userId}`,
-			{ action: 'createCommentLike', commentId, userId },
-			req
-		)
-		return res.status(200).json(new ApiResponse(200, liked, 'Comment is already liked'))
+		if (existingLike) {
+			return res.status(200).json(new ApiResponse(200, { id: `${userId}_${id}`, userId, targetId: id, targetType: type, user: existingLike.user }, 'Already liked'))
+		}
+
+		const [newLike] = await prisma.$transaction([
+			(config.likeModel as any).create({
+				data: { [config.idKey]: id, userId },
+				include: { user: { select: { id: true, firstName: true, lastName: true, profilePicUrl: true } } },
+			}),
+			(config.parentModel as any).update({ where: { id }, data: { likesCount: { increment: 1 } } }),
+		])
+
+		if (user && parent.userId !== userId) {
+			NotificationService.sendPushToUsers(
+				[parent.userId],
+				config.notification.title,
+				config.notification.message(`${user.firstName} ${user.lastName}`),
+				{ type: config.notification.type, workoutId: type === 'workout' ? id : parent.workoutId, commentId: type === 'comment' ? id : undefined, userId }
+			).catch(err => logWarn('Failed to send notification', { err }, req))
+		}
+
+		logInfo(`${type} liked`, { action: 'toggleLike', id, userId }, req)
+		return res.status(200).json(new ApiResponse(200, { id: `${userId}_${id}`, userId, targetId: id, targetType: type, user: newLike.user }, `${type} liked successfully`))
+	} else {
+		if (!existingLike) return res.status(200).json(new ApiResponse(200, null, 'Not liked yet'))
+
+		await prisma.$transaction([
+			(config.likeModel as any).delete({ where: { [`userId_${config.idKey}`]: { [config.idKey]: id, userId } } }),
+			(config.parentModel as any).update({ where: { id }, data: { likesCount: { decrement: 1 } } }),
+		])
+
+		logInfo(`${type} unliked`, { action: 'toggleLike', id, userId }, req)
+		return res.status(200).json(new ApiResponse(200, null, `${type} unliked successfully`))
 	}
-
-	const commentLike = await prisma.$transaction([
-		prisma.workoutCommentLike.create({
-			data: {
-				commentId,
-				userId: userId!,
-			},
-			select: {
-				commentId: true,
-				userId: true,
-				createdAt: true,
-				user: {
-					select: {
-						id: true,
-						firstName: true,
-						lastName: true,
-						profilePicUrl: true,
-					},
-				},
-			},
-		}),
-		prisma.workoutComment.update({
-			where: { id: commentId },
-			data: {
-				likesCount: { increment: 1 },
-			},
-		}),
-	])
-
-	logInfo('Comment like created successfully', { action: 'createCommentLike', commentId }, req)
-
-	if (existingUser && existingComment.userId !== userId) {
-		NotificationService.sendPushToUsers(
-			[existingComment.userId],
-			'New Comment Like!',
-			`${existingUser.firstName} ${existingUser.lastName} liked your comment.`,
-			{ type: 'comment_like', workoutId: existingComment.workoutId, commentId, userId }
-		).catch(err => logWarn('Failed to send comment like notification', { err }, req))
-	}
-
-	return res.status(200).json(new ApiResponse(200, commentLike[0], 'Comment like created successfully'))
-})
-
-export const getCommentLikes = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
-	const commentId = req.params.id
-
-	const existingComment = await prisma.workoutComment.findUnique({
-		where: { id: commentId },
-	})
-
-	if (!existingComment) {
-		logWarn(
-			`Comment with the comment id:${commentId} does not exist`,
-			{ action: 'getCommentLikes', commentId },
-			req
-		)
-		throw new ApiError(404, 'Comment does not exist')
-	}
-
-	const commentLikes = await prisma.workoutCommentLike.findMany({
-		where: { commentId },
-		select: {
-			commentId: true,
-			userId: true,
-			createdAt: true,
-			user: {
-				select: {
-					id: true,
-					firstName: true,
-					lastName: true,
-					profilePicUrl: true,
-				},
-			},
-		},
-	})
-
-	logInfo('Comment likes fetched successfully', { action: 'getCommentLikes', commentId }, req)
-	return res.status(200).json(new ApiResponse(200, commentLikes, 'Comment likes fetched successfully'))
-})
-
-export const deleteCommentLike = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
-	const userId = req.user?.id
-	const commentId = req.params.id
-
-	const existingUser = await prisma.user.findUnique({
-		where: { id: userId },
-	})
-
-	if (!existingUser) {
-		logWarn(`User with the user id:${userId} does not exist`, { action: 'deleteCommentLike', userId }, req)
-		throw new ApiError(404, 'User does not exist')
-	}
-
-	const existingComment = await prisma.workoutComment.findUnique({
-		where: { id: commentId },
-	})
-
-	if (!existingComment) {
-		logWarn(
-			`Comment with the comment id:${commentId} does not exist`,
-			{ action: 'deleteCommentLike', commentId },
-			req
-		)
-		throw new ApiError(404, 'Comment does not exist')
-	}
-
-	const existingLike = await prisma.workoutCommentLike.findUnique({
-		where: {
-			userId_commentId: {
-				commentId,
-				userId: userId!,
-			},
-		},
-		select: {
-			commentId: true,
-			userId: true,
-			createdAt: true,
-			user: {
-				select: {
-					id: true,
-					firstName: true,
-					lastName: true,
-					profilePicUrl: true,
-				},
-			},
-		},
-	})
-
-	if (!existingLike) {
-		logDebug('Comment like does not exist', { action: 'deleteCommentLike', commentId, userId }, req)
-		return res.status(200).json(new ApiResponse(200, null, 'Comment is not liked'))
-	}
-
-	// Transaction result not captured; existingLike holds the data to return
-	await prisma.$transaction([
-		prisma.workoutCommentLike.delete({
-			where: {
-				userId_commentId: {
-					commentId,
-					userId: userId!,
-				},
-			},
-		}),
-		prisma.workoutComment.update({
-			where: { id: commentId },
-			data: {
-				likesCount: { decrement: 1 },
-			},
-		}),
-	])
-
-	logInfo('Comment like deleted successfully', { action: 'deleteCommentLike', commentId }, req)
-	return res.status(200).json(new ApiResponse(200, existingLike, 'Comment like deleted successfully'))
-})
-
-export const getWorkoutLikes = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
-	const workoutId = req.params.id
-
-	const existingWorkout = await prisma.workoutLog.findUnique({
-		where: { id: workoutId },
-	})
-
-	if (!existingWorkout) {
-		logWarn(
-			`Workout with the workout id:${workoutId} does not exist`,
-			{ action: 'getWorkoutLikes', workoutId },
-			req
-		)
-		throw new ApiError(404, 'Workout does not exist')
-	}
-
-	const workoutLikes = await prisma.workoutLike.findMany({
-		where: { workoutId },
-		select: {
-			workoutId: true,
-			userId: true,
-			createdAt: true,
-			user: {
-				select: {
-					id: true,
-					firstName: true,
-					lastName: true,
-					profilePicUrl: true,
-				},
-			},
-		},
-	})
-
-	logInfo('Workout likes fetched successfully', { action: 'getWorkoutLikes', workoutId }, req)
-	return res.status(200).json(new ApiResponse(200, workoutLikes, 'Workout likes fetched successfully'))
-})
-
-export const createWorkoutLike = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
-	const userId = req.user?.id
-	const workoutId = req.params.id
-
-	const existingUser = await prisma.user.findUnique({
-		where: { id: userId },
-	})
-
-	if (!existingUser) {
-		logWarn(`User with the user id:${userId} does not exist`, { action: 'createWorkoutLike', userId }, req)
-		throw new ApiError(404, 'User does not exist')
-	}
-
-	const existingWorkout = await prisma.workoutLog.findUnique({
-		where: { id: workoutId },
-	})
-
-	if (!existingWorkout) {
-		logWarn(
-			`Workout with the workout id:${workoutId} does not exist`,
-			{ action: 'createWorkoutLike', workoutId },
-			req
-		)
-		throw new ApiError(404, 'Workout does not exist')
-	}
-
-	const liked = await prisma.workoutLike.findUnique({
-		where: {
-			userId_workoutId: {
-				workoutId,
-				userId: userId!,
-			},
-		},
-		select: {
-			workoutId: true,
-			userId: true,
-			createdAt: true,
-			user: {
-				select: {
-					id: true,
-					firstName: true,
-					lastName: true,
-					profilePicUrl: true,
-				},
-			},
-		},
-	})
-
-	if (liked) {
-		logWarn(
-			`Workout with the workout id:${workoutId} is already liked by the user with the user id:${userId}`,
-			{ action: 'createWorkoutLike', workoutId, userId },
-			req
-		)
-		return res.status(200).json(new ApiResponse(200, liked, 'Workout is already liked'))
-	}
-
-	const workoutLike = await prisma.$transaction([
-		prisma.workoutLike.create({
-			data: {
-				workoutId,
-				userId: userId!,
-			},
-			select: {
-				workoutId: true,
-				userId: true,
-				createdAt: true,
-				user: {
-					select: {
-						id: true,
-						firstName: true,
-						lastName: true,
-						profilePicUrl: true,
-					},
-				},
-			},
-		}),
-		prisma.workoutLog.update({
-			where: { id: workoutId },
-			data: {
-				likesCount: { increment: 1 },
-			},
-		}),
-	])
-
-	logInfo('Workout like created successfully', { action: 'createWorkoutLike', workoutId }, req)
-
-	if (existingUser && existingWorkout.userId !== userId) {
-		NotificationService.sendPushToUsers(
-			[existingWorkout.userId],
-			'New Workout Like!',
-			`${existingUser.firstName} ${existingUser.lastName} liked your workout.`,
-			{ type: 'workout_like', workoutId, userId }
-		).catch(err => logWarn('Failed to send workout like notification', { err }, req))
-	}
-
-	return res.status(200).json(new ApiResponse(200, workoutLike[0], 'Workout like created successfully'))
-})
-
-export const deleteWorkoutLike = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
-	const userId = req.user?.id
-	const workoutId = req.params.id
-
-	const existingUser = await prisma.user.findUnique({
-		where: { id: userId },
-	})
-
-	if (!existingUser) {
-		logWarn(`User with the user id:${userId} does not exist`, { action: 'deleteWorkoutLike', userId }, req)
-		throw new ApiError(404, 'User does not exist')
-	}
-
-	const existingWorkout = await prisma.workoutLog.findUnique({
-		where: { id: workoutId },
-	})
-
-	if (!existingWorkout) {
-		logWarn(
-			`Workout with the workout id:${workoutId} does not exist`,
-			{ action: 'deleteWorkoutLike', workoutId },
-			req
-		)
-		throw new ApiError(404, 'Workout does not exist')
-	}
-
-	const workoutLike = await prisma.$transaction([
-		prisma.workoutLike.delete({
-			where: {
-				userId_workoutId: {
-					workoutId,
-					userId: userId!,
-				},
-			},
-			select: {
-				workoutId: true,
-				userId: true,
-				createdAt: true,
-				user: {
-					select: {
-						id: true,
-						firstName: true,
-						lastName: true,
-						profilePicUrl: true,
-					},
-				},
-			},
-		}),
-		prisma.workoutLog.update({
-			where: { id: workoutId },
-			data: {
-				likesCount: { decrement: 1 },
-			},
-		}),
-	])
-
-	logInfo('Workout like deleted successfully', { action: 'deleteWorkoutLike', workoutId }, req)
-	return res.status(200).json(new ApiResponse(200, workoutLike[0], 'Workout like deleted successfully'))
 })

@@ -32,12 +32,10 @@ export const getCommentsSchema = z.object({
 		.strict(),
 })
 
-export const getRepliesSchema = getCommentsSchema
-
 export const editCommentSchema = z.object({
 	params: z
 		.object({
-			id: z.uuid('Invalid Comment ID'),
+			commentId: z.uuid('Invalid Comment ID'),
 		})
 		.strict(),
 	body: z
@@ -50,10 +48,39 @@ export const editCommentSchema = z.object({
 		.strict(),
 })
 
-export const LikesSchema = z.object({
+export const deleteCommentSchema = z.object({
+	params: z
+		.object({
+			commentId: z.uuid('Invalid Comment ID'),
+		})
+		.strict(),
+})
+
+export const getRepliesSchema = getCommentsSchema
+
+export const toggleLikeSchema = z.object({
 	params: z
 		.object({
 			id: z.uuid('Invalid ID'),
+		})
+		.strict(),
+	query: z
+		.object({
+			type: z.enum(['workout', 'comment']),
+			liked: z.enum(['true', 'false']).transform(val => val === 'true'),
+		})
+		.strict(),
+})
+
+export const getLikesSchema = z.object({
+	params: z
+		.object({
+			id: z.uuid('Invalid ID'),
+		})
+		.strict(),
+	query: z
+		.object({
+			type: z.enum(['workout', 'comment']),
 		})
 		.strict(),
 })
@@ -71,4 +98,3 @@ export const searchUsersSchema = z.object({
 		query: z.string().min(3, 'Search query must be at least 3 characters long'),
 	}),
 })
-

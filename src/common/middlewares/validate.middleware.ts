@@ -17,8 +17,15 @@ export const validateResource =
 
 			// Assign parsed values back to request safely
 			if (parsed.body) req.body = parsed.body
-			if (parsed.query) Object.assign(req.query, parsed.query)
-			if (parsed.params) req.params = parsed.params
+			if (parsed.query) {
+				Object.defineProperty(req, 'query', {
+					value: parsed.query,
+					writable: true,
+					configurable: true,
+					enumerable: true,
+				})
+			}
+			if (parsed.params) req.params = parsed.params as any
 
 			next()
 		} catch (e: unknown) {

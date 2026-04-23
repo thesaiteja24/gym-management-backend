@@ -4,29 +4,27 @@ import { validateResource } from '../../common/middlewares/validate.middleware.j
 import { followUserSchema } from '../user/user.validators.js'
 import {
 	createComment,
-	createCommentLike,
-	createWorkoutLike,
 	deleteComment,
-	deleteCommentLike,
-	deleteWorkoutLike,
 	editComment,
 	followUser,
-	getCommentLikes,
 	getComments,
+	getLikes,
 	getSuggestedUsers,
 	getUserFollowers,
 	getUserFollowing,
-	getWorkoutLikes,
 	searchUsers,
+	toggleLikeAction,
 	unFollowUser,
 } from './engagement.controller.js'
 import {
 	createCommentSchema,
+	deleteCommentSchema,
 	editCommentSchema,
 	getCommentsSchema,
+	getLikesSchema,
 	getUserFollowSchema,
-	LikesSchema,
 	searchUsersSchema,
+	toggleLikeSchema,
 } from './engagement.validators.js'
 
 const router = Router()
@@ -55,27 +53,28 @@ router
 
 router.route('/suggestions').get(authorize('systemAdmin', 'gymAdmin', 'trainer', 'member'), getSuggestedUsers)
 
-
 router
 	.route('/:id/comments')
-	.post(validateResource(createCommentSchema), createComment)
 	.get(validateResource(getCommentsSchema), getComments)
+	.post(validateResource(createCommentSchema), createComment)
 
 router
-	.route('/comments/:id')
-	.delete(validateResource(getCommentsSchema), deleteComment)
+	.route('/comments/:commentId')
 	.put(validateResource(editCommentSchema), editComment)
+	.delete(validateResource(deleteCommentSchema), deleteComment)
 
-router
-	.route('/:id/like/workout')
-	.post(validateResource(LikesSchema), createWorkoutLike)
-	.get(validateResource(LikesSchema), getWorkoutLikes)
-	.delete(validateResource(LikesSchema), deleteWorkoutLike)
-
-router
-	.route('/:id/like/comment')
-	.post(validateResource(LikesSchema), createCommentLike)
-	.get(validateResource(LikesSchema), getCommentLikes)
-	.delete(validateResource(LikesSchema), deleteCommentLike)
+// Unified Like Routes
+router.put(
+	'/:id/like',
+	authorize('systemAdmin', 'gymAdmin', 'trainer', 'member'),
+	validateResource(toggleLikeSchema),
+	toggleLikeAction
+)
+router.get(
+	'/:id/likes',
+	authorize('systemAdmin', 'gymAdmin', 'trainer', 'member'),
+	validateResource(getLikesSchema),
+	getLikes
+)
 
 export const engagementRoutes = router
