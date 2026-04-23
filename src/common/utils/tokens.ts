@@ -4,7 +4,6 @@ import { setRefreshToken } from '../services/caching.service.js'
 import { ApiError } from './ApiError.js'
 import { logInfo, logError } from './logger.js'
 import { TokenPayload } from '../types/index.js'
-import { UserRole } from '@prisma/client'
 
 const refreshTokenSecret = process.env.REFRESH_TOKEN_SECRET!
 const refreshTokenExpiry = process.env.REFRESH_TOKEN_EXPIRY! as StringValue

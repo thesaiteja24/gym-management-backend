@@ -11,6 +11,7 @@ import {
 	getRefreshToken,
 	resendOTP,
 	setOTP,
+	setRefreshToken,
 } from '../../common/services/caching.service.js'
 import { createMessage } from '../../common/services/messaging.service.js'
 import { ApiError } from '../../common/utils/ApiError.js'
@@ -225,85 +226,75 @@ interface RefreshTokenBody {
 	refreshToken: string
 }
 
-export const refreshToken = asyncHandler(
-	async (req: Request<object, object, RefreshTokenBody>, res: Response) => {
-		const { refreshToken: providedToken } = req.body
+export const refreshToken = asyncHandler(async (req: Request<object, object, RefreshTokenBody>, res: Response) => {
+	const { refreshToken: providedToken } = req.body
 
-		if (!providedToken) {
-			throw new ApiError(400, 'Refresh token is required')
-		}
-
-		// Business Logic
-		let decoded: ReturnType<typeof verifyRefreshToken>
-		try {
-			decoded = verifyRefreshToken(providedToken)
-		} catch (error) {
-			const err = error as Error
-			logWarn('Invalid refresh token provided', { action: 'verifyRefreshToken', error: err.message }, req)
-			throw new ApiError(401, 'Invalid or expired refresh token, please login again', [err.message])
-		}
-
-		const userId = decoded.id
-		let storedToken: string | null
-		try {
-			storedToken = await getRefreshToken(userId)
-			if (!storedToken || storedToken !== providedToken) {
-				logWarn('Refresh token mismatch or not found in storage', { action: 'getRefreshToken', userId }, req)
-				throw new Error('Invalid refresh token')
-			}
-		} catch (error) {
-			const err = error as Error
-			logWarn(
-				'Refresh token validation failed',
-				{ action: 'validateRefreshToken', userId, error: err.message },
-				req
-			)
-			throw new ApiError(401, 'Session expired, please login again', [err.message])
-		}
-
-		// External Interactions
-		let user: any
-		let newAccessToken: string
-		let newRefreshToken: string
-		try {
-			// Fetch user with full details
-			user = await prisma.user.findUnique({
-				where: { id: userId },
-				select: selfUserSelect,
-			})
-			if (!user) {
-				logError(`Failed refreshToken: User not found`, null, { action: 'findUser', userId }, req)
-				throw new Error('User not found')
-			}
-
-			// Delete old refresh token
-			await deleteRefreshToken(userId)
-			logInfo('Old refresh token deleted', { action: 'deleteRefreshToken', userId }, req)
-
-			// Issue new tokens
-			newAccessToken = await issueAccessToken(user)
-			newRefreshToken = await issueRefreshToken(user) // Stores new refresh token in Redis
-			logInfo('Tokens refreshed successfully', { action: 'refreshToken', userId }, req)
-		} catch (error) {
-			const err = error as Error
-			logError(`Failed refreshToken: ${err.message}`, err, { action: 'refreshToken', userId }, req)
-			throw new ApiError(401, 'Token refresh failed', [err.message])
-		}
-
-		// Response
-		return res.status(200).json(
-			new ApiResponse(
-				200,
-				{
-					user: formatUserResponse(user),
-					accessToken: newAccessToken,
-					refreshToken: newRefreshToken,
-				},
-				'Token refreshed successfully'
-			)
-		)
+	if (!providedToken) {
+		throw new ApiError(400, 'Refresh token is required')
 	}
-)
+
+	// Business Logic
+	let decoded: ReturnType<typeof verifyRefreshToken>
+	try {
+		decoded = verifyRefreshToken(providedToken)
+	} catch (error) {
+		const err = error as Error
+		logWarn('Invalid refresh token provided', { action: 'verifyRefreshToken', error: err.message }, req)
+		throw new ApiError(401, 'Invalid or expired refresh token, please login again', [err.message])
+	}
+
+	const userId = decoded.id
+	let storedUserId: string | null
+	try {
+		const storedToken = await getRefreshToken(userId)
+		if (!providedToken || providedToken !== storedToken) {
+			logWarn('Refresh token mismatch or not found in storage', { action: 'getRefreshToken', userId }, req)
+			throw new Error('Invalid refresh token')
+		}
+	} catch (error) {
+		const err = error as Error
+		logWarn('Refresh token validation failed', { action: 'validateRefreshToken', userId, error: err.message }, req)
+		throw new ApiError(401, 'Session expired, please login again', [err.message])
+	}
+
+	// External Interactions
+	let user: any
+	let newAccessToken: string
+	let newRefreshToken: string
+	try {
+		// Fetch user with full details
+		user = await prisma.user.findUnique({
+			where: { id: userId },
+			select: selfUserSelect,
+		})
+		if (!user) {
+			logError(`Failed refreshToken: User not found`, null, { action: 'findUser', userId }, req)
+			throw new Error('User not found')
+		}
+
+		// Issue new tokens
+		newAccessToken = await issueAccessToken(user)
+		newRefreshToken = await issueRefreshToken(user) // Stores new refresh token in Redis
+		logInfo('Tokens refreshed successfully', { action: 'refreshToken', userId }, req)
+	} catch (error) {
+		const err = error as Error
+		logError(`Failed refreshToken: ${err.message}`, err, { action: 'refreshToken', userId }, req)
+		throw new ApiError(401, 'Token refresh failed', [err.message])
+	}
+
+	// Response
+	return res.status(200).json(
+		new ApiResponse(
+			200,
+			{
+				user: formatUserResponse(user),
+				accessToken: newAccessToken,
+				refreshToken: newRefreshToken,
+			},
+			'Token refreshed successfully'
+		)
+	)
+})
 
 interface GoogleLoginBody {
 	idToken: string

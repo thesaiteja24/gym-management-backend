@@ -1,9 +1,19 @@
 import { z } from 'zod'
 
-export const updateFitnessProfileSchema = z.object({
-	params: z.object({
-		id: z.uuid('Invalid User ID'),
+export const updateMeSchema = z.object({
+	body: z.object({
+		firstName: z.string().min(1).optional(),
+		lastName: z.string().min(1).optional(),
+		dateOfBirth: z.iso.datetime().optional(), // Expects ISO string
+		preferredWeightUnit: z.enum(['kg', 'lbs']).optional(),
+		preferredLengthUnit: z.enum(['cm', 'inches']).optional(),
+		height: z.number().positive().optional(),
+		weight: z.number().positive().optional(),
+		gender: z.enum(['male', 'female', 'other']).optional(),
 	}),
+})
+
+export const updateFitnessProfileSchema = z.object({
 	body: z.object({
 		fitnessGoal: z
 			.enum([
@@ -46,9 +56,6 @@ export const updateFitnessProfileSchema = z.object({
 })
 
 export const addDailyMeasurementSchema = z.object({
-	params: z.object({
-		id: z.uuid('Invalid User ID'),
-	}),
 	body: z.object({
 		date: z.iso.datetime(),
 		weight: z.coerce.number().positive().nullable().optional(),
@@ -73,9 +80,6 @@ export const addDailyMeasurementSchema = z.object({
 })
 
 export const updateNutritionPlanSchema = z.object({
-	params: z.object({
-		id: z.uuid('Invalid User ID'),
-	}),
 	body: z.object({
 		caloriesTarget: z.number().positive().nullable().optional(),
 		proteinTarget: z.number().positive().nullable().optional(),
@@ -88,27 +92,18 @@ export const updateNutritionPlanSchema = z.object({
 })
 
 export const getMeasurementsSchema = z.object({
-	params: z.object({
-		id: z.uuid('Invalid User ID'),
-	}),
 	query: z.object({
 		duration: z.enum(['1w', '1m', '3m', '6m', '1y', 'all']).default('1m'),
 	}),
 })
 
 export const getTrainingAnalyticsSchema = z.object({
-	params: z.object({
-		id: z.uuid('Invalid User ID'),
-	}),
 	query: z.object({
 		duration: z.enum(['1w', '1m', '3m', '6m', '1y', 'all']).default('1m'),
 	}),
 })
 
 export const getStrengthTrendSchema = z.object({
-	params: z.object({
-		id: z.uuid('Invalid User ID'),
-	}),
 	query: z.object({
 		duration: z.string().default('1M'),
 		top: z.union([z.literal('all'), z.coerce.number().positive()]).default(4),

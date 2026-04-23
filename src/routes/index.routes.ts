@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { authenticate } from '../common/middlewares/auth.middleware.js'
-import { analyticRoutes } from '../modules/analytics/analytics.routes.js'
+import { meRoutes } from '../modules/me/me.routes.js'
 import { authRoutes } from '../modules/auth/auth.routes.js'
 import { coachRoutes } from '../modules/coach/coach.routes.js'
 import { configRoutes } from '../modules/config/config.routes.js'
@@ -21,6 +21,7 @@ const router = Router()
 
 router.use('/health', healthCheckRoutes)
 router.use('/auth', authRoutes)
+router.use('/me', authenticate, meRoutes)
 router.use('/users', authenticate, userRoutes)
 router.use('/equipment', equipmentRoutes)
 router.use('/muscle-groups', muscleGroupRoutes)
@@ -31,7 +32,6 @@ router.use('/templates', authenticate, templateRoutes)
 router.use('/coach', authenticate, coachRoutes)
 router.use('/engagement', authenticate, engagementRoutes)
 router.use('/config', configRoutes)
-router.use('/analytics', authenticate, analyticRoutes)
 router.use('/habits', authenticate, habitRoutes)
 router.use('/programs', authenticate, programRoutes)
 
