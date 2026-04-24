@@ -1,18 +1,52 @@
 import { Request, Response } from 'express'
 import { withAccelerate } from '@prisma/extension-accelerate'
-import { PrismaClient } from '@prisma/client'
+import { EquipmentType, PrismaClient } from '@prisma/client'
 import { asyncHandler } from '../../common/utils/asyncHandler.js'
 import { ApiError } from '../../common/utils/ApiError.js'
 import { ApiResponse } from '../../common/utils/ApiResponse.js'
-import { deleteMediaByKey, extractS3KeyFromUrl, uploadMedia, UploadedFile } from '../../common/services/media.service.js'
+import {
+	deleteMediaByKey,
+	extractS3KeyFromUrl,
+	uploadMedia,
+	UploadedFile,
+} from '../../common/services/media.service.js'
 import { logError, logInfo, logWarn } from '../../common/utils/logger.js'
 import { titleizeString } from '../../common/utils/helpers.js'
 import { randomUUID } from 'crypto'
 
 const prisma = new PrismaClient().$extends(withAccelerate())
 
+export const getAllEquipment = asyncHandler(async (req: Request, res: Response) => {
+	const equipmentList = await prisma.equipment.findMany({
+		orderBy: { title: 'asc' },
+	})
+
+	logInfo('Equipment list fetched', { action: 'getAllEquipment', count: equipmentList.length }, req)
+	return res.json(new ApiResponse(200, equipmentList, 'Equipment list fetched successfully'))
+})
+
+export const getEquipmentById = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
+	const { id } = req.params
+
+	// ID check handled by schema if we apply it to GetById too, but params usually validated.
+	// Wait, getById doesn't accept body, so we likely validate params with a schema.
+	// I already made updateEquipmentSchema which has params.id. I should probably make a generic id schema or just rely on the route param.
+	// For now, I'll assume we validate params in routes.
+
+	const equipment = await prisma.equipment.findUnique({ where: { id } })
+
+	if (!equipment) {
+		logWarn('Equipment not found', { action: 'getEquipmentById', equipmentId: id }, req)
+		throw new ApiError(404, 'No equipment exists with the provided ID')
+	}
+
+	logInfo('Equipment fetched', { action: 'getEquipmentById', equipmentId: id }, req)
+	return res.json(new ApiResponse(200, equipment, 'Equipment fetched successfully'))
+})
+
 interface CreateEquipmentBody {
 	title: string
+	type?: EquipmentType
 }
 
 export const createEquipment = asyncHandler(
@@ -48,6 +82,7 @@ export const createEquipment = asyncHandler(
 				data: {
 					title: titleizeString(title),
 					thumbnailUrl,
+					type: req.body.type || null,
 				},
 			})
 
@@ -76,41 +111,9 @@ export const createEquipment = asyncHandler(
 	}
 )
 
-export const getAllEquipment = asyncHandler(async (req: Request, res: Response) => {
-	const equipmentList = await prisma.equipment.findMany({
-		orderBy: { title: 'asc' },
-	})
-
-	if (equipmentList.length === 0) {
-		logWarn('No Equipment found', { action: 'getAllEquipment' }, req)
-		throw new ApiError(404, 'No Equipment found')
-	}
-
-	logInfo('Equipment list fetched', { action: 'getAllEquipment', count: equipmentList.length }, req)
-	return res.json(new ApiResponse(200, equipmentList, 'Equipment list fetched successfully'))
-})
-
-export const getEquipmentById = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
-	const { id } = req.params
-
-	// ID check handled by schema if we apply it to GetById too, but params usually validated.
-	// Wait, getById doesn't accept body, so we likely validate params with a schema.
-	// I already made updateEquipmentSchema which has params.id. I should probably make a generic id schema or just rely on the route param.
-	// For now, I'll assume we validate params in routes.
-
-	const equipment = await prisma.equipment.findUnique({ where: { id } })
-
-	if (!equipment) {
-		logWarn('Equipment not found', { action: 'getEquipmentById', equipmentId: id }, req)
-		throw new ApiError(404, 'No equipment exists with the provided ID')
-	}
-
-	logInfo('Equipment fetched', { action: 'getEquipmentById', equipmentId: id }, req)
-	return res.json(new ApiResponse(200, equipment, 'Equipment fetched successfully'))
-})
-
 interface UpdateEquipmentBody {
 	title?: string
+	type?: EquipmentType
 }
 
 export const updateEquipment = asyncHandler(
@@ -150,7 +153,6 @@ export const updateEquipment = asyncHandler(
 				throw new ApiError(500, 'Failed to upload Equipment image')
 			}
 		}
-
 		let updatedEquipment
 		try {
 			updatedEquipment = await prisma.equipment.update({
@@ -158,6 +160,7 @@ export const updateEquipment = asyncHandler(
 				data: {
 					...(title && { title: titleizeString(title) }),
 					...(newThumbnailUrl && { thumbnailUrl: newThumbnailUrl }),
+					...(req.body.type !== undefined && { type: req.body.type }),
 				},
 			})
 		} catch (error) {
