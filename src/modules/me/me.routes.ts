@@ -29,15 +29,9 @@ import {
 const router = Router()
 
 // Profile
-router
-	.route('/')
-	.get(getMe)
-	.patch(validateResource(updateMeSchema), updateMe)
+router.route('/').get(getMe).patch(validateResource(updateMeSchema), updateMe)
 
-router
-	.route('/profile-picture')
-	.patch(upload.single('profilePic'), updateMyProfilePic)
-	.delete(deleteMyProfilePic)
+router.route('/profile-picture').patch(upload.single('profilePic'), updateMyProfilePic).delete(deleteMyProfilePic)
 
 // Fitness Profile
 router
@@ -48,11 +42,7 @@ router
 // Measurements
 router
 	.route('/measurements')
-	.post(
-		upload.array('progressPics', 10),
-		validateResource(addDailyMeasurementSchema),
-		addMeasurements
-	)
+	.put(upload.array('progressPics', 10), validateResource(addDailyMeasurementSchema), addMeasurements)
 	.get(validateResource(getMeasurementsSchema), getMeasurements)
 
 // Nutrition Plan
@@ -64,12 +54,8 @@ router
 // Analytics
 router.route('/analytics').get(getUserAnalytics)
 
-router
-	.route('/analytics/training')
-	.get(validateResource(getTrainingAnalyticsSchema), getTrainingAnalytics)
+router.route('/analytics/training').get(validateResource(getTrainingAnalyticsSchema), getTrainingAnalytics)
 
-router
-	.route('/analytics/strength-trend')
-	.get(validateResource(getStrengthTrendSchema), getStrengthTrend)
+router.route('/analytics/strength-trend').get(validateResource(getStrengthTrendSchema), getStrengthTrend)
 
 export const meRoutes = router

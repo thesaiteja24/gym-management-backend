@@ -179,32 +179,75 @@ async function buildMeasurementPayload(userId: string, startDate?: Date | null) 
 		orderBy: { date: 'desc' },
 	})
 
-	const latestValues: Partial<MeasurementFields> = {}
+	type Measurement = (typeof measurementsHistory)[number]
 
-	for (const entry of measurementsHistory) {
-		const { id, userId: _, date, createdAt, updatedAt, ...measurementFields } = entry
+	// ---------- helpers ----------
+	const isSpecialKey = (key: keyof Measurement) => key === 'id' || key === 'date' || key === 'progressPicUrls'
 
-		for (const key in measurementFields) {
-			const typedKey = key as keyof MeasurementFields
-
-			if (measurementFields[typedKey] !== null && latestValues[typedKey] === undefined) {
-				// @ts-expect-error
-				latestValues[typedKey] = measurementFields[typedKey]
-			}
-		}
+	const toNumberOrNull = (value: unknown) => {
+		if (value === null || value === undefined) return null
+		const num = Number(value)
+		return isNaN(num) ? null : num
 	}
 
-	let dailyWeightChange: {
-		diff: number
-		isPositive: boolean
-	} | null = null
+	const formatEntry = (entry: Measurement) => {
+		const { userId, createdAt, updatedAt, ...rest } = entry
 
-	const weightEntries = measurementsHistory.filter(m => m.weight !== null)
+		const transformed: Partial<Record<keyof Measurement, any>> = {}
 
-	if (weightEntries.length >= 2) {
-		const latestWeight = Number(weightEntries[0].weight)
-		const previousWeight = Number(weightEntries[1].weight)
+		for (const key of Object.keys(rest) as (keyof typeof rest)[]) {
+			const value = rest[key]
 
+			if (isSpecialKey(key)) {
+				transformed[key] = value
+			} else {
+				transformed[key] = toNumberOrNull(value)
+			}
+		}
+
+		return transformed
+	}
+
+	// ---------- main processing ----------
+	const latestValues: Partial<Record<keyof MeasurementFields, number | null | string[]>> = {}
+
+	let latestWeight: number | null = null
+	let previousWeight: number | null = null
+
+	const formattedHistory = measurementsHistory.map((entry, index) => {
+		const formatted = formatEntry(entry)
+
+		// ---------- latest values (first non-null per field) ----------
+		for (const key of Object.keys(formatted) as (keyof typeof formatted)[]) {
+			if (key === 'id' || key === 'date') continue
+
+			if (latestValues[key as keyof MeasurementFields] === undefined) {
+				const value = formatted[key]
+
+				if (value !== null) {
+					latestValues[key as keyof MeasurementFields] = value as any
+				}
+			}
+		}
+
+		// ---------- weight tracking ----------
+		if (entry.weight !== null) {
+			const weight = Number(entry.weight)
+
+			if (latestWeight === null) {
+				latestWeight = weight
+			} else if (previousWeight === null) {
+				previousWeight = weight
+			}
+		}
+
+		return formatted
+	})
+
+	// ---------- daily weight change ----------
+	let dailyWeightChange: { diff: number; isPositive: boolean } | null = null
+
+	if (latestWeight !== null && previousWeight !== null) {
 		const diff = Math.abs(latestWeight - previousWeight)
 
 		dailyWeightChange = {
@@ -214,7 +257,7 @@ async function buildMeasurementPayload(userId: string, startDate?: Date | null) 
 	}
 
 	return {
-		history: measurementsHistory,
+		history: formattedHistory,
 		latestValues,
 		dailyWeightChange,
 	}
@@ -244,9 +287,28 @@ export const getFitnessProfile = asyncHandler(async (req: Request, res: Response
 	const userId = req.user!.id
 	const fitnessProfile = await prisma.userFitnessProfile.findUnique({
 		where: { userId },
+		select: {
+			fitnessGoal: true,
+			fitnessLevel: true,
+			activityLevel: true,
+			targetType: true,
+			targetWeight: true,
+			targetBodyFat: true,
+			weeklyWeightChange: true,
+			targetDate: true,
+			injuries: true,
+			availableEquipment: true,
+			updatedAt: true,
+		},
 	})
+	const formattedResponse = {
+		...fitnessProfile,
+		targetWeight: fitnessProfile?.targetWeight?.toNumber?.() || null,
+		targetBodyFat: fitnessProfile?.targetBodyFat?.toNumber?.() || null,
+		weeklyWeightChange: fitnessProfile?.weeklyWeightChange?.toNumber?.() || null,
+	}
 	logDebug('Fetched user fitness profile', { action: 'getUserFitnessProfile', userId })
-	return res.status(200).json(new ApiResponse(200, fitnessProfile, 'User fitness profile fetched successfully'))
+	return res.status(200).json(new ApiResponse(200, formattedResponse, 'User fitness profile fetched successfully'))
 })
 
 export const getMeasurements = asyncHandler(async (req, res) => {
@@ -863,6 +925,19 @@ export const updateFitnessProfile = asyncHandler(
 					injuries: updates.injuries ?? null,
 					availableEquipment: updates.availableEquipment ?? [],
 				},
+				select: {
+					fitnessGoal: true,
+					fitnessLevel: true,
+					activityLevel: true,
+					targetType: true,
+					targetWeight: true,
+					targetBodyFat: true,
+					weeklyWeightChange: true,
+					targetDate: true,
+					injuries: true,
+					availableEquipment: true,
+					updatedAt: true,
+				},
 			})
 		)
 
@@ -870,16 +945,16 @@ export const updateFitnessProfile = asyncHandler(
 
 		const updatedFitnessProfile = results[0]
 
+		const formattedResponse = {
+			...updatedFitnessProfile,
+			targetWeight: updatedFitnessProfile?.targetWeight?.toNumber?.() || null,
+			targetBodyFat: updatedFitnessProfile?.targetBodyFat?.toNumber?.() || null,
+			weeklyWeightChange: updatedFitnessProfile?.weeklyWeightChange?.toNumber?.() || null,
+		}
 		logDebug('User fitness profile updated successfully', { action: 'updateUserFitnessProfile', user: userId })
 		return res
 			.status(200)
-			.json(
-				new ApiResponse(
-					200,
-					{ ...(updatedFitnessProfile ?? null) },
-					'User fitness profile updated successfully '
-				)
-			)
+			.json(new ApiResponse(200, formattedResponse, 'User fitness profile updated successfully '))
 	}
 )
 
