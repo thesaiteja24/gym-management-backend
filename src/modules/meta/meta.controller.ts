@@ -3,6 +3,7 @@ import { PrismaClient, EquipmentType } from '@prisma/client'
 import { withAccelerate } from '@prisma/extension-accelerate'
 import { randomUUID } from 'crypto'
 import { asyncHandler } from '../../common/utils/asyncHandler.js'
+import { getCache, setCache, deleteCache } from '../../common/services/caching.service.js'
 import { ApiError } from '../../common/utils/ApiError.js'
 import { ApiResponse } from '../../common/utils/ApiResponse.js'
 import {
@@ -17,6 +18,9 @@ import { titleizeString } from '../../common/utils/helpers.js'
 const prisma = new PrismaClient().$extends(withAccelerate())
 
 type MetaResource = 'equipment' | 'muscle-groups'
+
+const META_CACHE_TTL = '365d'
+const getMetaCacheKey = (resource: MetaResource) => `meta:${resource}:all`
 
 const RESOURCE_CONFIG: Record<
 	MetaResource,
@@ -41,10 +45,19 @@ const RESOURCE_CONFIG: Record<
 export const getAllMeta = asyncHandler(async (req: Request, res: Response) => {
 	const { resource } = req.params as { resource: MetaResource }
 	const config = RESOURCE_CONFIG[resource]
+	const cacheKey = getMetaCacheKey(resource)
+
+	const cachedData = await getCache<any[]>(cacheKey)
+	if (cachedData) {
+		logInfo(`${config.label} list fetched from cache`, { action: 'getAllMeta', resource, count: cachedData.length }, req)
+		return res.json(new ApiResponse(200, cachedData, `${config.label} list fetched successfully`))
+	}
 
 	const data = await config.model.findMany({
 		orderBy: { title: 'asc' },
 	})
+
+	await setCache(cacheKey, data, META_CACHE_TTL)
 
 	logInfo(`${config.label} list fetched`, { action: 'getAllMeta', resource, count: data.length }, req)
 	return res.json(new ApiResponse(200, data, `${config.label} list fetched successfully`))
@@ -124,6 +137,9 @@ export const upsertMeta = asyncHandler(async (req: Request, res: Response) => {
 			}
 		}
 
+		// Invalidate cache
+		await deleteCache(getMetaCacheKey(resource))
+
 		logInfo(`${config.label} ${id ? 'updated' : 'created'}`, { action: 'upsertMeta', resource, id: result.id }, req)
 		return res.json(new ApiResponse(200, result, `${config.label} saved successfully`))
 	} catch (error) {
@@ -152,6 +168,9 @@ export const deleteMeta = asyncHandler(async (req: Request, res: Response) => {
 			const key = extractS3KeyFromUrl(existingItem.thumbnailUrl)
 			if (key) await deleteMediaByKey({ key, userId: req.user!.id, reason: `${resource} deleted` })
 		}
+
+		// Invalidate cache
+		await deleteCache(getMetaCacheKey(resource))
 
 		logInfo(`${config.label} deleted`, { action: 'deleteMeta', resource, id }, req)
 		return res.json(new ApiResponse(200, deletedItem, `${config.label} deleted successfully`))

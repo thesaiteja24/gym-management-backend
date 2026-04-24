@@ -18,25 +18,20 @@ import { deleteCache, getCache, setCache } from '../../common/services/caching.s
 const prisma = new PrismaClient().$extends(withAccelerate())
 
 const GET_ALL_EXERCISES_CACHE_KEY = 'exercises:all'
-const EXERCISES_CACHE_TTL = '24hr'
+const EXERCISES_CACHE_TTL = '365d'
 
 interface CreateExerciseBody {
 	title: string
-	instructions?: string
-	primaryMuscleGroupId?: string
-	equipmentId?: string
+	instructions: string
+	primaryMuscleGroupId: string
+	equipmentId: string
 	exerciseType: ExerciseType
 	otherMuscleGroupIds?: string[]
 }
 
 export const createExercise = asyncHandler(async (req: Request<object, object, CreateExerciseBody>, res: Response) => {
 	const { title, instructions, primaryMuscleGroupId, equipmentId, exerciseType, otherMuscleGroupIds } = req.body
-	const video = req.file as UploadedFile | undefined
-
-	if (!video) {
-		logWarn('Video is required to create Exercise', { action: 'createExercise' }, req)
-		throw new ApiError(400, 'Exercise video is required')
-	}
+	const video = req.file as UploadedFile
 
 	const filePath = `gym-sass/exercises/${randomUUID()}`
 	let uploaded: Awaited<ReturnType<typeof uploadExerciseVideo>>
@@ -73,13 +68,27 @@ export const createExercise = asyncHandler(async (req: Request<object, object, C
 					},
 				}),
 			},
+			include: {
+				primaryMuscleGroup: true,
+				equipment: true,
+				otherMuscleGroups: {
+					select: {
+						muscleGroup: true,
+					},
+				},
+			},
 		})
+
+		const flattenedExercise = {
+			...exercise,
+			otherMuscleGroups: exercise.otherMuscleGroups.map(omg => omg.muscleGroup),
+		}
 
 		// invalidate cache
 		await deleteCache(GET_ALL_EXERCISES_CACHE_KEY)
 
 		logInfo('Exercise created', { action: 'createExercise', exerciseId: exercise.id }, req)
-		return res.json(new ApiResponse(200, exercise, 'Exercise created successfully'))
+		return res.json(new ApiResponse(200, flattenedExercise, 'Exercise created successfully'))
 	} catch (error) {
 		const err = error as Error
 		await deleteMediaByKey({
@@ -149,7 +158,11 @@ export const getExerciseById = asyncHandler(async (req: Request<{ id: string }>,
 		include: {
 			primaryMuscleGroup: true,
 			equipment: true,
-			otherMuscleGroups: true,
+			otherMuscleGroups: {
+				select: {
+					muscleGroup: true,
+				},
+			},
 		},
 	})
 
@@ -158,8 +171,13 @@ export const getExerciseById = asyncHandler(async (req: Request<{ id: string }>,
 		throw new ApiError(404, 'No exercise exists with the provided ID')
 	}
 
+	const flattenedExercise = {
+		...exercise,
+		otherMuscleGroups: exercise.otherMuscleGroups.map(omg => omg.muscleGroup),
+	}
+
 	logInfo('Exercise fetched', { action: 'getExerciseById', exerciseId: id }, req)
-	return res.json(new ApiResponse(200, exercise, 'Exercise fetched successfully'))
+	return res.json(new ApiResponse(200, flattenedExercise, 'Exercise fetched successfully'))
 })
 
 interface UpdateExerciseBody {
@@ -267,8 +285,58 @@ export const updateExercise = asyncHandler(
 				}
 			}
 
-			const results = await prisma.$transaction(operations)
-			updatedExercise = results[0] as Exercise
+			await prisma.$transaction(operations)
+
+			// Fetch the final state after transaction to ensure all relations (especially otherMuscleGroups) are updated and included correctly
+			const finalExercise = await prisma.exercise.findUnique({
+				where: { id },
+				include: {
+					primaryMuscleGroup: true,
+					equipment: true,
+					otherMuscleGroups: {
+						select: {
+							muscleGroup: true,
+						},
+					},
+				},
+			})
+
+			if (!finalExercise) throw new ApiError(404, 'Exercise not found after update')
+
+			const flattenedExercise = {
+				...finalExercise,
+				otherMuscleGroups: finalExercise.otherMuscleGroups.map(omg => omg.muscleGroup),
+			}
+
+			// ───────────────── CLEAN UP OLD MEDIA ─────────────────
+			if (video) {
+				if (existingExercise.videoUrl) {
+					const oldVideoKey = extractS3KeyFromUrl(existingExercise.videoUrl)
+					if (oldVideoKey) {
+						await deleteMediaByKey({
+							key: oldVideoKey,
+							userId: req.user!.id,
+							reason: 'exercise video replaced',
+						})
+					}
+				}
+				if (existingExercise.thumbnailUrl) {
+					const oldThumbnailKey = extractS3KeyFromUrl(existingExercise.thumbnailUrl)
+					if (oldThumbnailKey) {
+						await deleteMediaByKey({
+							key: oldThumbnailKey,
+							userId: req.user!.id,
+							reason: 'exercise thumbnail replaced',
+						})
+					}
+				}
+			}
+
+			// Invalidate cache
+			await deleteCache(GET_ALL_EXERCISES_CACHE_KEY)
+
+			logInfo('Exercise updated', { action: 'updateExercise', exerciseId: id }, req)
+			return res.json(new ApiResponse(200, flattenedExercise, 'Exercise updated successfully'))
 		} catch (error) {
 			const err = error as Error
 
@@ -297,35 +365,6 @@ export const updateExercise = asyncHandler(
 			)
 			throw new ApiError(500, 'Failed to update Exercise', [err.message])
 		}
-
-		// ───────────────── CLEAN UP OLD MEDIA ─────────────────
-		if (video && existingExercise.videoUrl) {
-			const oldVideoKey = extractS3KeyFromUrl(existingExercise.videoUrl)
-			if (oldVideoKey) {
-				await deleteMediaByKey({
-					key: oldVideoKey,
-					userId: req.user!.id,
-					reason: 'exercise video replaced',
-				})
-			}
-		}
-
-		if (video && existingExercise.thumbnailUrl) {
-			const oldThumbnailKey = extractS3KeyFromUrl(existingExercise.thumbnailUrl)
-			if (oldThumbnailKey) {
-				await deleteMediaByKey({
-					key: oldThumbnailKey,
-					userId: req.user!.id,
-					reason: 'exercise thumbnail replaced',
-				})
-			}
-		}
-
-		// ───────────────── CACHE ─────────────────
-		await deleteCache(GET_ALL_EXERCISES_CACHE_KEY)
-
-		logInfo('Exercise updated', { action: 'updateExercise', exerciseId: id }, req)
-		return res.json(new ApiResponse(200, updatedExercise, 'Exercise updated successfully'))
 	}
 )
 

@@ -6,13 +6,14 @@ const stringOrArrayToArray = z.union([z.uuid(), z.array(z.uuid())]).transform(va
 export const createExerciseSchema = z.object({
 	body: z.object({
 		title: z.string().min(1, 'Title is required'),
-		instructions: z.string().optional(),
-		primaryMuscleGroupId: z.string().uuid('Invalid Muscle Group ID'),
-		equipmentId: z.string().uuid('Invalid Equipment ID'),
+		instructions: z.string().min(1, 'Instructions are required'),
+		primaryMuscleGroupId: z.uuid('Invalid Muscle Group ID'),
+		equipmentId: z.uuid('Invalid Equipment ID'),
 		exerciseType: z.enum(ExerciseType),
 
 		otherMuscleGroupIds: stringOrArrayToArray.optional(),
 	}),
+	file: z.any().refine(file => !!file, 'Exercise video is required'),
 })
 
 export const updateExerciseSchema = z.object({
@@ -22,8 +23,8 @@ export const updateExerciseSchema = z.object({
 	body: z.object({
 		title: z.string().min(1, 'Title cannot be empty').optional(),
 		instructions: z.string().optional(),
-		primaryMuscleGroupId: z.string().uuid('Invalid Muscle Group ID').optional(),
-		equipmentId: z.string().uuid('Invalid Equipment ID').optional(),
+		primaryMuscleGroupId: z.uuid('Invalid Muscle Group ID').optional(),
+		equipmentId: z.uuid('Invalid Equipment ID').optional(),
 		exerciseType: z.enum(ExerciseType).optional(),
 
 		otherMuscleGroupIds: stringOrArrayToArray.optional(),

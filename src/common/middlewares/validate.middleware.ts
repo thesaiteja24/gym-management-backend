@@ -13,6 +13,8 @@ export const validateResource =
 				body: req.body,
 				query: req.query,
 				params: req.params,
+				file: req.file,
+				files: req.files,
 			})
 
 			// Assign parsed values back to request safely
