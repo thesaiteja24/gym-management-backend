@@ -5,10 +5,9 @@ import { authRoutes } from '../modules/auth/auth.routes.js'
 import { coachRoutes } from '../modules/coach/coach.routes.js'
 import { configRoutes } from '../modules/config/config.routes.js'
 import { engagementRoutes } from '../modules/engagement/engagement.routes.js'
-import { equipmentRoutes } from '../modules/equipment/equipment.routes.js'
+import { metaRoutes } from '../modules/meta/meta.routes.js'
 import { exerciseRoutes } from '../modules/exercise/exercise.routes.js'
 import { healthCheckRoutes } from '../modules/healthCheck/healthCheck.routes.js'
-import { muscleGroupRoutes } from '../modules/muscleGroup/muscleGroup.routes.js'
 import { templateRoutes } from '../modules/template/template.routes.js'
 import { userRoutes } from '../modules/user/user.routes.js'
 import { getWorkoutByShareId } from '../modules/workout/workout.controller.js'
@@ -23,8 +22,7 @@ router.use('/health', healthCheckRoutes)
 router.use('/auth', authRoutes)
 router.use('/me', authenticate, meRoutes)
 router.use('/users', authenticate, userRoutes)
-router.use('/equipment', equipmentRoutes)
-router.use('/muscle-groups', muscleGroupRoutes)
+router.use('/meta', metaRoutes)
 router.use('/exercises', exerciseRoutes)
 router.get('/workouts/share/:id', getWorkoutByShareId)
 router.use('/workouts', authenticate, workoutRoutes)
