@@ -5,11 +5,12 @@ import { authenticate } from '../../middlewares/auth.middleware.js'
 import { authorize } from '../../middlewares/authorize.middleware.js'
 import { upload } from '../../middlewares/upload.middleware.js'
 import { validateResource } from '../../middlewares/validate.middleware.js'
-
-import { deleteMeta, getAllMeta, getMetaById, upsertMeta } from './meta.controller.js'
-import { getMetaSchema, metaSchema } from './meta.validators.js'
+import { deleteMeta, getAllMeta, getMetaById, upsertMeta } from './controller.js'
+import { getMetaSchema, metaSchema } from './validators.js'
 
 const router = Router()
+
+// LIST & CREATE
 
 router
   .route('/:resource')
@@ -22,6 +23,8 @@ router
     upsertMeta,
   )
 
+// GET, UPDATE & DELETE
+
 router
   .route('/:resource/:id')
   .get(validateResource(getMetaSchema), getMetaById)
@@ -32,6 +35,11 @@ router
     validateResource(metaSchema),
     upsertMeta,
   )
-  .delete(authenticate, authorize(roles.systemAdmin), validateResource(getMetaSchema), deleteMeta)
+  .delete(
+    authenticate,
+    authorize(roles.systemAdmin),
+    validateResource(getMetaSchema),
+    deleteMeta,
+  )
 
 export const metaRoutes = router

@@ -1,5 +1,3 @@
-import type { PublicUser } from '../user/types.js'
-
 // MAIN
 
 export interface EngagementUser {
