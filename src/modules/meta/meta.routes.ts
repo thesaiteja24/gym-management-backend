@@ -1,10 +1,10 @@
 import { Router } from 'express'
 
-import { ROLES as roles } from '../../common/constants/roles.js'
-import { authenticate } from '../../common/middlewares/auth.middleware.js'
-import { authorize } from '../../common/middlewares/authorize.middleware.js'
-import { upload } from '../../common/middlewares/upload.middleware.js'
-import { validateResource } from '../../common/middlewares/validate.middleware.js'
+import { ROLES as roles } from '../../constants/roles.js'
+import { authenticate } from '../../middlewares/auth.middleware.js'
+import { authorize } from '../../middlewares/authorize.middleware.js'
+import { upload } from '../../middlewares/upload.middleware.js'
+import { validateResource } from '../../middlewares/validate.middleware.js'
 
 import { deleteMeta, getAllMeta, getMetaById, upsertMeta } from './meta.controller.js'
 import { getMetaSchema, metaSchema } from './meta.validators.js'

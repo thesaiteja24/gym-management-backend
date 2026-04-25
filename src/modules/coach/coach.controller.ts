@@ -6,11 +6,11 @@ import type { Request, Response } from 'express'
 import NodeCache from 'node-cache'
 import type { ChatCompletionMessageParam } from 'openai/resources'
 
-import { getCache, setCache } from '../../common/services/caching.service.js'
-import { ApiError } from '../../common/utils/ApiError.js'
-import { ApiResponse } from '../../common/utils/ApiResponse.js'
-import { asyncHandler } from '../../common/utils/asyncHandler.js'
-import prompts from '../../common/utils/coachPrompts.js'
+import { getCache, setCache } from '../../service/caching.service.js'
+import { ApiError } from '../../utils/ApiError.js'
+import { ApiResponse } from '../../utils/ApiResponse.js'
+import { asyncHandler } from '../../utils/asyncHandler.js'
+import prompts from '../../utils/coachPrompts.js'
 
 import {
   applyProfileUpdates,
@@ -126,7 +126,7 @@ export const transcribeMessage = asyncHandler(async (req: Request, res: Response
 })
 
 export const sendMessage = asyncHandler(async (req: Request, res: Response) => {
-  const userId = req.params.id
+  const userId = req.params.id as string
   const { question } = req.body
 
   if (req.user?.id !== userId) {

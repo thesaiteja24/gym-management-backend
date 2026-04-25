@@ -1,8 +1,8 @@
 import { Router } from 'express'
 
-import { authorize } from '../../common/middlewares/authorize.middleware.js'
-import { validateResource } from '../../common/middlewares/validate.middleware.js'
-import { followUserSchema } from '../user/user.validators.js'
+import { authorize } from '../../middlewares/authorize.middleware.js'
+import { validateResource } from '../../middlewares/validate.middleware.js'
+import { followUserSchema } from '../user/validators.js'
 
 import {
   createComment,
@@ -17,7 +17,7 @@ import {
   searchUsers,
   toggleLikeAction,
   unFollowUser,
-} from './engagement.controller.js'
+} from './controller.js'
 import {
   createCommentSchema,
   deleteCommentSchema,
@@ -27,7 +27,7 @@ import {
   getUserFollowSchema,
   searchUsersSchema,
   toggleLikeSchema,
-} from './engagement.validators.js'
+} from './validators.js'
 
 const router = Router()
 

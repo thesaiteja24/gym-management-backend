@@ -2,25 +2,25 @@ import type { SignOptions } from 'jsonwebtoken'
 import jwt from 'jsonwebtoken'
 import type { StringValue } from 'ms'
 
-import { setRefreshToken } from '../services/caching.service.js'
-import type { TokenPayload } from '../types/index.js'
+import { setRefreshToken } from '../../../service/caching.service.js'
 
-import { ApiError } from './ApiError.js'
+import { ApiError } from '../../../utils/ApiError.js'
+import type { TokenPayload, UserForToken } from '../types.js'
 
+// CONSTANTS
 const refreshTokenSecret = process.env.REFRESH_TOKEN_SECRET!
 const refreshTokenExpiry = process.env.REFRESH_TOKEN_EXPIRY! as StringValue
 const accessTokenSecret = process.env.ACCESS_TOKEN_SECRET!
 const accessTokenExpiry = process.env.ACCESS_TOKEN_EXPIRY! as StringValue
 
-interface UserForToken {
-  id: string
-  role: string
-  phoneE164?: string | null
-  email?: string | null
-}
+// FUNCTIONS
 
+/**
+ * Issues a new refresh token for a user and stores it in the cache.
+ * @param user User data for token payload
+ * @returns Signed refresh token
+ */
 export const issueRefreshToken = async (user: UserForToken): Promise<string> => {
-  // Input Validation
   if (!user?.id || !user?.role) {
     throw new ApiError(400, 'Invalid user data', [])
   }
@@ -29,7 +29,6 @@ export const issueRefreshToken = async (user: UserForToken): Promise<string> => 
     throw new ApiError(400, 'User must have phone or email', [])
   }
 
-  // Business Logic
   const payload: TokenPayload = {
     id: user.id,
     phoneE164: user.phoneE164 || null,
@@ -37,9 +36,9 @@ export const issueRefreshToken = async (user: UserForToken): Promise<string> => 
     role: user.role as TokenPayload['role'],
   }
   const options: SignOptions = { expiresIn: refreshTokenExpiry }
-  let refreshToken: string
+
   try {
-    refreshToken = jwt.sign(payload, refreshTokenSecret, options)
+    const refreshToken = jwt.sign(payload, refreshTokenSecret, options)
     await setRefreshToken(user.id, refreshToken, refreshTokenExpiry, true)
     return refreshToken
   } catch (error) {
@@ -48,8 +47,12 @@ export const issueRefreshToken = async (user: UserForToken): Promise<string> => 
   }
 }
 
+/**
+ * Issues a new access token for a user.
+ * @param user User data for token payload
+ * @returns Signed access token
+ */
 export const issueAccessToken = async (user: UserForToken): Promise<string> => {
-  // Input Validation
   if (!user?.id || !user?.role) {
     throw new ApiError(400, 'Invalid user data', [])
   }
@@ -58,7 +61,6 @@ export const issueAccessToken = async (user: UserForToken): Promise<string> => {
     throw new ApiError(400, 'User must have phone or email', [])
   }
 
-  // Business Logic
   const payload: TokenPayload = {
     id: user.id,
     phoneE164: user.phoneE164 || null,
@@ -66,6 +68,7 @@ export const issueAccessToken = async (user: UserForToken): Promise<string> => {
     role: user.role as TokenPayload['role'],
   }
   const options: SignOptions = { expiresIn: accessTokenExpiry }
+
   try {
     const accessToken = jwt.sign(payload, accessTokenSecret, options)
     return accessToken
@@ -75,6 +78,11 @@ export const issueAccessToken = async (user: UserForToken): Promise<string> => {
   }
 }
 
+/**
+ * Verifies an access token and returns its payload.
+ * @param token JWT access token
+ * @returns Decoded token payload
+ */
 export const verifyAccessToken = (token: string): TokenPayload => {
   if (!token) throw new ApiError(401, 'No token provided', [])
   try {
@@ -85,6 +93,11 @@ export const verifyAccessToken = (token: string): TokenPayload => {
   }
 }
 
+/**
+ * Verifies a refresh token and returns its payload.
+ * @param token JWT refresh token
+ * @returns Decoded token payload
+ */
 export const verifyRefreshToken = (token: string): TokenPayload => {
   if (!token) throw new ApiError(401, 'No refresh token', [])
   try {

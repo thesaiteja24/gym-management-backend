@@ -1,6 +1,6 @@
 import { Router } from 'express'
 
-import { validateResource } from '../../common/middlewares/validate.middleware.js'
+import { validateResource } from '../../middlewares/validate.middleware.js'
 import {
   getActiveUserProgram,
   getUserProgramById,
@@ -14,7 +14,7 @@ import {
   startProgramSchema,
 } from '../programs/programs.validators.js'
 
-import { getUser } from './user.controller.js'
+import { getUser } from './controller.js'
 
 const router = Router()
 

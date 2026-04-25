@@ -23,7 +23,9 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write \"**/*.{ts,js,json,md}\"",
-    "format:check": "prettier --check \"**/*.{ts,js,json,md}\""
+    "format:check": "prettier --check \"**/*.{ts,js,json,md}\"",
+    "clean": "rm -rf dist",
+    "reset": "rm -rf node_modules dist && npm install"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.911.0",

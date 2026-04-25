@@ -5,8 +5,8 @@ import { OpenAI } from 'openai'
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions'
 import { toFile } from 'openai/uploads.js'
 
-import prompts from '../../common/utils/coachPrompts.js'
-import { calculateAge, formatTimeAgo } from '../../common/utils/helpers.js'
+import prompts from '../../utils/coachPrompts.js'
+import { calculateAge, formatTimeAgo } from '../../utils/helpers.js'
 
 const prisma = new PrismaClient().$extends(withAccelerate())
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })

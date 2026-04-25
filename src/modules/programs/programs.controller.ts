@@ -2,10 +2,10 @@ import { PrismaClient } from '@prisma/client'
 import { withAccelerate } from '@prisma/extension-accelerate'
 import type { Request, Response } from 'express'
 
-import { ApiError } from '../../common/utils/ApiError.js'
-import { ApiResponse } from '../../common/utils/ApiResponse.js'
-import { asyncHandler } from '../../common/utils/asyncHandler.js'
-import { formatCompactNumber } from '../../common/utils/helpers.js'
+import { ApiError } from '../../utils/ApiError.js'
+import { ApiResponse } from '../../utils/ApiResponse.js'
+import { asyncHandler } from '../../utils/asyncHandler.js'
+import { formatCompactNumber } from '../../utils/helpers.js'
 
 import * as programService from './programs.service.js'
 

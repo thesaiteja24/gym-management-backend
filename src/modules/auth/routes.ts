@@ -1,9 +1,9 @@
 import { Router } from 'express'
 
-import { validateResource } from '../../common/middlewares/validate.middleware.js'
+import { validateResource } from '../../middlewares/validate.middleware.js'
 
-import { googleLogin, refreshToken } from './auth.controller.js'
-import { refreshTokenSchema } from './auth.validators.js'
+import { googleLogin, refreshToken } from './controller.js'
+import { refreshTokenSchema } from './validators.js'
 
 const router = Router()
 

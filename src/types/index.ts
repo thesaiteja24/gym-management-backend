@@ -1,27 +1,12 @@
 import type { Request, Response, NextFunction } from 'express'
+import { TokenPayload } from '../modules/auth/types.js'
 
 // User role enum (mirrors Prisma enum)
 export type UserRole = 'systemAdmin' | 'gymAdmin' | 'trainer' | 'member'
 
-// JWT Token Payload
-export interface TokenPayload {
-  id: string
-  role: UserRole
-  email: string | null
-  phoneE164: string | null
-}
-
-// Authenticated User (attached to req.user by auth middleware)
-export interface AuthUser {
-  id: string
-  phoneE164: string | null
-  email: string | null
-  role: UserRole
-}
-
 // Express Request with authenticated user
 export interface AuthenticatedRequest extends Request {
-  user: AuthUser
+  user: TokenPayload
 }
 
 // Async controller handler type

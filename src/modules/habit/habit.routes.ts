@@ -1,7 +1,7 @@
 import { Router } from 'express'
 
-import { authorizeSelfOrAdmin } from '../../common/middlewares/authorize.middleware.js'
-import { validateResource } from '../../common/middlewares/validate.middleware.js'
+import { authorizeSelfOrAdmin } from '../../middlewares/authorize.middleware.js'
+import { validateResource } from '../../middlewares/validate.middleware.js'
 
 import {
   createHabit,

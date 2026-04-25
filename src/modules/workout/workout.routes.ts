@@ -1,6 +1,6 @@
 import { Router } from 'express'
 
-import { validateResource } from '../../common/middlewares/validate.middleware.js'
+import { validateResource } from '../../middlewares/validate.middleware.js'
 
 import {
   createWorkout,

@@ -3,7 +3,7 @@ import { withAccelerate } from '@prisma/extension-accelerate'
 import type { Request, Response, NextFunction } from 'express'
 
 import { ApiError } from '../utils/ApiError.js'
-import { verifyAccessToken } from '../utils/tokens.js'
+import { verifyAccessToken } from '../modules/auth/providers/token.provider.js'
 
 const prisma = new PrismaClient().$extends(withAccelerate())
 

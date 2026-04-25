@@ -1,19 +1,12 @@
 import type { Request, Response } from 'express'
 
-import { ApiResponse } from '../../common/utils/ApiResponse.js'
-import { asyncHandler } from '../../common/utils/asyncHandler.js'
-import { formatUserResponse } from '../user/user.controller.js'
+import { ApiResponse } from '../../utils/ApiResponse.js'
+import { asyncHandler } from '../../utils/asyncHandler.js'
 
-import * as authService from './auth.service.js'
+import * as authService from './service.js'
+import type { GoogleLoginBody, RefreshTokenBody } from './types.js'
 
-interface RefreshTokenBody {
-  refreshToken: string
-}
-interface GoogleLoginBody {
-  idToken: string
-  privacyAccepted?: boolean
-  privacyPolicyVersion?: string
-}
+// FUNCTIONS
 
 export const refreshToken = asyncHandler(
   async (req: Request<object, object, RefreshTokenBody>, res: Response) => {
@@ -29,7 +22,7 @@ export const refreshToken = asyncHandler(
       .json(
         new ApiResponse(
           200,
-          { user: formatUserResponse(user), accessToken, refreshToken: newRefreshToken },
+          { user, accessToken, refreshToken: newRefreshToken },
           'Token refreshed successfully',
         ),
       )
@@ -50,7 +43,7 @@ export const googleLogin = asyncHandler(
       .json(
         new ApiResponse(
           200,
-          { user: formatUserResponse(user), accessToken, refreshToken },
+          { user, accessToken, refreshToken },
           'Google login successful',
         ),
       )

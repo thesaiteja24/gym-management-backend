@@ -1,7 +1,7 @@
 import { Router } from 'express'
 
-import { authenticate } from '../../common/middlewares/auth.middleware.js'
-import { upload } from '../../common/middlewares/upload.middleware.js'
+import { authenticate } from '../../middlewares/auth.middleware.js'
+import { upload } from '../../middlewares/upload.middleware.js'
 
 import {
   getActiveConversation,

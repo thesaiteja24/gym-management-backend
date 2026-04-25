@@ -1,24 +1,40 @@
 import { PrismaClient } from '@prisma/client'
 import { withAccelerate } from '@prisma/extension-accelerate'
-import { OAuth2Client } from 'google-auth-library'
 
-import { getRefreshToken } from '../../common/services/caching.service.js'
-import { ApiError } from '../../common/utils/ApiError.js'
+import { getRefreshToken } from '../../service/caching.service.js'
+import { ApiError } from '../../utils/ApiError.js'
+import { formatSelfUser, selfUserSelect } from '../me/service.js'
+import { verifyGoogleToken } from './providers/google.provider.js'
 import {
   issueAccessToken,
   issueRefreshToken,
   verifyRefreshToken,
-} from '../../common/utils/tokens.js'
-import { selfUserSelect } from '../user/user.controller.js'
+} from './providers/token.provider.js'
+import type { AuthResponse } from './types.js'
 
+// CONSTANTS
 const prisma = new PrismaClient().$extends(withAccelerate())
 
-const googleClientId = process.env.GOOGLE_WEB_CLIENT_ID
-const googleAndroidClientId = process.env.GOOGLE_ANDROID_CLIENT_ID
-const googleIosClientId = process.env.GOOGLE_IOS_CLIENT_ID
-const googleClient = new OAuth2Client(googleClientId)
+// QUERY HELPERS
+/**
+ * Internal select for Auth logic that includes fields needed for 
+ * account linking and subscription checks, but aren't necessarily in the public profile.
+ */
+const authUserSelect = {
+  ...selfUserSelect,
+  googleId: true,
+  proExpirationDate: true,
+  proSubscriptionId: true,
+}
 
-export async function processRefreshToken(providedToken: string) {
+// FUNCTIONS
+
+/**
+ * Process token refresh by verifying the provided token and issuing new ones.
+ * @param providedToken The refresh token provided by the client
+ * @returns Object containing the user data and new access/refresh tokens
+ */
+export async function processRefreshToken(providedToken: string): Promise<AuthResponse> {
   let decoded: any
   try {
     decoded = verifyRefreshToken(providedToken)
@@ -33,40 +49,40 @@ export async function processRefreshToken(providedToken: string) {
 
   const user = await prisma.user.findUnique({
     where: { id: decoded.id },
-    select: selfUserSelect,
+    select: authUserSelect,
   })
   if (!user) throw new ApiError(401, 'User not found')
 
   const accessToken = await issueAccessToken(user)
   const refreshToken = await issueRefreshToken(user)
-  return { user, accessToken, refreshToken }
+
+  return {
+    user: formatSelfUser(user),
+    accessToken,
+    refreshToken,
+  }
 }
 
+/**
+ * Process Google OAuth login, creating or updating the user as needed.
+ * @param idToken Google ID token from the client
+ * @param privacyAccepted Whether the user accepted the privacy policy
+ * @param privacyPolicyVersion Version of the privacy policy accepted
+ * @returns Object containing the user data and new access/refresh tokens
+ */
 export async function processGoogleLogin(
   idToken: string,
   privacyAccepted?: boolean,
   privacyPolicyVersion?: string,
-) {
-  let payload: any
-  try {
-    const ticket = await googleClient.verifyIdToken({
-      idToken,
-      audience: [googleClientId, googleAndroidClientId, googleIosClientId].filter(
-        Boolean,
-      ) as string[],
-    })
-    payload = ticket.getPayload()
-  } catch (_error) {
-    throw new ApiError(401, 'Invalid Google Token')
-  }
+): Promise<AuthResponse> {
+  const payload = await verifyGoogleToken(idToken)
 
-  if (!payload) throw new ApiError(401, 'Invalid Google payload')
   const { sub: googleId, email, given_name, family_name, picture } = payload
   if (!email) throw new ApiError(400, 'Invalid Google account')
 
   let user = await prisma.user.findFirst({
     where: { OR: [{ googleId }, { email }] },
-    select: selfUserSelect,
+    select: authUserSelect,
   })
 
   if (user) {
@@ -80,7 +96,7 @@ export async function processGoogleLogin(
       user = await prisma.user.update({
         where: { id: user.id },
         data: updateData,
-        select: selfUserSelect,
+        select: authUserSelect,
       })
     }
   } else {
@@ -94,7 +110,7 @@ export async function processGoogleLogin(
         role: 'member',
         ...(privacyAccepted && { privacyPolicyAcceptedAt: new Date(), privacyPolicyVersion }),
       },
-      select: selfUserSelect,
+      select: authUserSelect,
     })
   }
 
@@ -102,5 +118,10 @@ export async function processGoogleLogin(
 
   const accessToken = await issueAccessToken(user)
   const refreshToken = await issueRefreshToken(user)
-  return { user, accessToken, refreshToken }
+
+  return {
+    user: formatSelfUser(user),
+    accessToken,
+    refreshToken,
+  }
 }

@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from 'express'
 
-import { ApiError } from '../../common/utils/ApiError.js'
+import { ApiError } from '../../utils/ApiError.js'
 
 import { RevenueCatService } from './revenuecat.service.js'
 

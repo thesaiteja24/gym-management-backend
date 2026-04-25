@@ -1,7 +1,7 @@
 import { Router } from 'express'
 
-import { upload } from '../../common/middlewares/upload.middleware.js'
-import { validateResource } from '../../common/middlewares/validate.middleware.js'
+import { upload } from '../../middlewares/upload.middleware.js'
+import { validateResource } from '../../middlewares/validate.middleware.js'
 
 import {
   addMeasurements,
@@ -17,7 +17,7 @@ import {
   updateMe,
   updateMyProfilePic,
   updateNutritionPlan,
-} from './me.controller.js'
+} from './controller.js'
 import {
   addDailyMeasurementSchema,
   getMeasurementsSchema,
@@ -26,7 +26,7 @@ import {
   updateFitnessProfileSchema,
   updateMeSchema,
   updateNutritionPlanSchema,
-} from './me.validators.js'
+} from './validators.js'
 
 const router = Router()
 

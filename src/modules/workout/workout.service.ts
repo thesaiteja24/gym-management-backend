@@ -1,8 +1,8 @@
 import type { ExerciseGroupType, WorkoutLogVisibility } from '@prisma/client'
 
-import { ApiError } from '../../common/utils/ApiError.js'
-import type { WorkoutSet } from '../../common/utils/workoutValidation.js'
-import { isValidCompletedSet } from '../../common/utils/workoutValidation.js'
+import { ApiError } from '../../utils/ApiError.js'
+import type { WorkoutSet } from '../../utils/workoutValidation.js'
+import { isValidCompletedSet } from '../../utils/workoutValidation.js'
 
 export const workoutSelect = {
   id: true,
