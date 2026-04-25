@@ -2,7 +2,6 @@ import { Router } from 'express'
 
 import { authorizeSelfOrAdmin } from '../../middlewares/authorize.middleware.js'
 import { validateResource } from '../../middlewares/validate.middleware.js'
-
 import {
   createHabit,
   deleteHabit,
@@ -10,34 +9,52 @@ import {
   getHabits,
   logHabit,
   updateHabit,
-} from './habit.controller.js'
+} from './controller.js'
 import {
   createHabitSchema,
   getHabitLogsSchema,
   logHabitSchema,
   updateHabitSchema,
-} from './habit.validators.js'
+} from './validators.js'
 
 const router = Router()
 
-// Habits CRUD
+// HABITS CRUD
+
 router
   .route('/:userId')
   .get(authorizeSelfOrAdmin('userId'), getHabits)
-  .post(validateResource(createHabitSchema), authorizeSelfOrAdmin('userId'), createHabit)
+  .post(
+    authorizeSelfOrAdmin('userId'),
+    validateResource(createHabitSchema),
+    createHabit,
+  )
 
 router
   .route('/:userId/:id')
-  .put(validateResource(updateHabitSchema), authorizeSelfOrAdmin('userId'), updateHabit)
+  .put(
+    authorizeSelfOrAdmin('userId'),
+    validateResource(updateHabitSchema),
+    updateHabit,
+  )
   .delete(authorizeSelfOrAdmin('userId'), deleteHabit)
 
-// Logging
+// LOGGING
+
 router
   .route('/:userId/:id/log')
-  .post(validateResource(logHabitSchema), authorizeSelfOrAdmin('userId'), logHabit)
+  .post(
+    authorizeSelfOrAdmin('userId'),
+    validateResource(logHabitSchema),
+    logHabit,
+  )
 
 router
   .route('/:userId/logs')
-  .get(validateResource(getHabitLogsSchema), authorizeSelfOrAdmin('userId'), getHabitLogs)
+  .get(
+    authorizeSelfOrAdmin('userId'),
+    validateResource(getHabitLogsSchema),
+    getHabitLogs,
+  )
 
 export const habitRoutes = router

@@ -1,4 +1,7 @@
+import { HabitFooterType, HabitSource, HabitTrackingType } from '@prisma/client'
 import { z } from 'zod'
+
+// SCHEMAS
 
 export const createHabitSchema = z.object({
   params: z.object({
@@ -7,11 +10,11 @@ export const createHabitSchema = z.object({
   body: z.object({
     title: z.string().min(1).max(16, 'Title must be 16 characters or less'),
     colorScheme: z.string(),
-    trackingType: z.enum(['streak', 'quantity']),
+    trackingType: z.nativeEnum(HabitTrackingType),
     targetValue: z.number().positive().optional().nullable(),
     unit: z.string().optional().nullable(),
-    footerType: z.enum(['weeklyStreak', 'weeklyCount']).default('weeklyStreak'),
-    source: z.enum(['manual', 'internal']).default('manual'),
+    footerType: z.nativeEnum(HabitFooterType).default(HabitFooterType.weeklyStreak),
+    source: z.nativeEnum(HabitSource).default(HabitSource.manual),
     internalMetricId: z.string().optional().nullable(),
   }),
 })
@@ -24,11 +27,11 @@ export const updateHabitSchema = z.object({
   body: z.object({
     title: z.string().min(1).max(16).optional(),
     colorScheme: z.string().optional(),
-    trackingType: z.enum(['streak', 'quantity']).optional(),
+    trackingType: z.nativeEnum(HabitTrackingType).optional(),
     targetValue: z.number().positive().optional().nullable(),
     unit: z.string().optional().nullable(),
-    footerType: z.enum(['weeklyStreak', 'weeklyCount']).optional(),
-    source: z.enum(['manual', 'internal']).optional(),
+    footerType: z.nativeEnum(HabitFooterType).optional(),
+    source: z.nativeEnum(HabitSource).optional(),
     internalMetricId: z.string().optional().nullable(),
   }),
 })
