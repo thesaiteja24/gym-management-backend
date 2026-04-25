@@ -1,20 +1,22 @@
 import { Router } from 'express'
+
 import { authenticate } from '../common/middlewares/auth.middleware.js'
-import { meRoutes } from '../modules/me/me.routes.js'
 import { authRoutes } from '../modules/auth/auth.routes.js'
 import { coachRoutes } from '../modules/coach/coach.routes.js'
 import { configRoutes } from '../modules/config/config.routes.js'
 import { engagementRoutes } from '../modules/engagement/engagement.routes.js'
-import { metaRoutes } from '../modules/meta/meta.routes.js'
 import { exerciseRoutes } from '../modules/exercise/exercise.routes.js'
+import { habitRoutes } from '../modules/habit/habit.routes.js'
 import { healthCheckRoutes } from '../modules/healthCheck/healthCheck.routes.js'
+import { meRoutes } from '../modules/me/me.routes.js'
+import { metaRoutes } from '../modules/meta/meta.routes.js'
+import { programRoutes } from '../modules/programs/programs.routes.js'
 import { templateRoutes } from '../modules/template/template.routes.js'
 import { userRoutes } from '../modules/user/user.routes.js'
 import { getWorkoutByShareId } from '../modules/workout/workout.controller.js'
 import { workoutRoutes } from '../modules/workout/workout.routes.js'
-import { habitRoutes } from '../modules/habit/habit.routes.js'
+
 import { webhookRoutes } from './webhook.routes.js'
-import { programRoutes } from '../modules/programs/programs.routes.js'
 
 const router = Router()
 

@@ -4,38 +4,38 @@
  * @returns Capitalized string
  */
 export const titleizeString = (str: string | null | undefined): string => {
-	if (!str || typeof str !== 'string') {
-		return ''
-	}
+  if (!str || typeof str !== 'string') {
+    return ''
+  }
 
-	// Trim whitespace and handle empty string
-	const trimmed = str.trim()
-	if (trimmed.length === 0) {
-		return ''
-	}
+  // Trim whitespace and handle empty string
+  const trimmed = str.trim()
+  if (trimmed.length === 0) {
+    return ''
+  }
 
-	// Split by words and capitalize first letter of each word
-	const words = trimmed.split(/\s+/)
+  // Split by words and capitalize first letter of each word
+  const words = trimmed.split(/\s+/)
 
-	let result = ''
+  let result = ''
 
-	for (let i = 0; i < words.length; i++) {
-		const part = words[i]
+  for (let i = 0; i < words.length; i++) {
+    const part = words[i]
 
-		// Check if it's a sentence terminator
-		if (/^[.!?]\s+$/.test(part)) {
-			result += part
-		} else if (part.length > 0) {
-			// Capitalize first letter of the word
-			result += part.charAt(0).toUpperCase() + part.slice(1)
-			// Add space between words except for the last word
-			if (i < words.length - 1) {
-				result += ' '
-			}
-		}
-	}
+    // Check if it's a sentence terminator
+    if (/^[.!?]\s+$/.test(part)) {
+      result += part
+    } else if (part.length > 0) {
+      // Capitalize first letter of the word
+      result += part.charAt(0).toUpperCase() + part.slice(1)
+      // Add space between words except for the last word
+      if (i < words.length - 1) {
+        result += ' '
+      }
+    }
+  }
 
-	return result
+  return result
 }
 
 import { randomBytes } from 'crypto'
@@ -56,37 +56,37 @@ import { randomBytes } from 'crypto'
  * @returns {string} A URL-safe secure token (~22 characters).
  */
 export const generateSecureToken = (): string => {
-	return randomBytes(16).toString('base64url')
+  return randomBytes(16).toString('base64url')
 }
 
 export const calculateAge = (dateOfBirth: Date): number => {
-	const today = new Date()
-	const diff = today.getTime() - dateOfBirth.getTime()
-	const ageDate = new Date(diff)
-	return Math.abs(ageDate.getUTCFullYear() - 1970)
+  const today = new Date()
+  const diff = today.getTime() - dateOfBirth.getTime()
+  const ageDate = new Date(diff)
+  return Math.abs(ageDate.getUTCFullYear() - 1970)
 }
 
 export const formatTimeAgo = (date: Date, daysOnly: boolean = false): string => {
-	const now = new Date()
-	const diffMs = now.getTime() - date.getTime()
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
 
-	const seconds = Math.floor(diffMs / 1000)
-	const minutes = Math.floor(seconds / 60)
-	const hours = Math.floor(minutes / 60)
-	const days = Math.floor(hours / 24)
+  const seconds = Math.floor(diffMs / 1000)
+  const minutes = Math.floor(seconds / 60)
+  const hours = Math.floor(minutes / 60)
+  const days = Math.floor(hours / 24)
 
-	if (days <= 0) return 'Today'
-	if (days === 1) return 'Yesterday'
-	if (days < 7) return `${days} days ago`
+  if (days <= 0) return 'Today'
+  if (days === 1) return 'Yesterday'
+  if (days < 7) return `${days} days ago`
 
-	if (daysOnly) return `${days} days ago`
+  if (daysOnly) return `${days} days ago`
 
-	const weeks = Math.floor(days / 7)
-	if (weeks < 4) return `${weeks} week${weeks > 1 ? 's' : ''} ago`
+  const weeks = Math.floor(days / 7)
+  if (weeks < 4) return `${weeks} week${weeks > 1 ? 's' : ''} ago`
 
-	const months = Math.floor(days / 30)
-	if (months < 12) return `${months} month${months > 1 ? 's' : ''} ago`
+  const months = Math.floor(days / 30)
+  if (months < 12) return `${months} month${months > 1 ? 's' : ''} ago`
 
-	const years = Math.floor(days / 365)
-	return `${years} year${years > 1 ? 's' : ''} ago`
+  const years = Math.floor(days / 365)
+  return `${years} year${years > 1 ? 's' : ''} ago`
 }

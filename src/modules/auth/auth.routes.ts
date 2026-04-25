@@ -1,6 +1,8 @@
 import { Router } from 'express'
-import { googleLogin, refreshToken, sendOTP, verifyOTP } from './auth.controller.js'
+
 import { validateResource } from '../../common/middlewares/validate.middleware.js'
+
+import { googleLogin, refreshToken, sendOTP, verifyOTP } from './auth.controller.js'
 import { refreshTokenSchema, sendOTPSchema, verifyOTPSchema } from './auth.validators.js'
 
 const router = Router()

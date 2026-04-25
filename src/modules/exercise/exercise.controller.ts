@@ -1,19 +1,22 @@
-import { Request, Response } from 'express'
+import { randomUUID } from 'crypto'
+
+import type { ExerciseType, Exercise, PrismaPromise } from '@prisma/client'
+import { PrismaClient } from '@prisma/client'
 import { withAccelerate } from '@prisma/extension-accelerate'
-import { PrismaClient, ExerciseType, Exercise, PrismaPromise } from '@prisma/client'
-import { asyncHandler } from '../../common/utils/asyncHandler.js'
+import type { Request, Response } from 'express'
+
+import { deleteCache, getCache, setCache } from '../../common/services/caching.service.js'
+import type { UploadedFile } from '../../common/services/media.service.js'
+import {
+  deleteMediaByKey,
+  extractS3KeyFromUrl,
+  uploadExerciseVideo,
+} from '../../common/services/media.service.js'
 import { ApiError } from '../../common/utils/ApiError.js'
 import { ApiResponse } from '../../common/utils/ApiResponse.js'
-import {
-	deleteMediaByKey,
-	extractS3KeyFromUrl,
-	uploadExerciseVideo,
-	UploadedFile,
-} from '../../common/services/media.service.js'
-import { logError, logInfo, logWarn } from '../../common/utils/logger.js'
+import { asyncHandler } from '../../common/utils/asyncHandler.js'
 import { titleizeString } from '../../common/utils/helpers.js'
-import { randomUUID } from 'crypto'
-import { deleteCache, getCache, setCache } from '../../common/services/caching.service.js'
+import { logError, logInfo, logWarn } from '../../common/utils/logger.js'
 
 const prisma = new PrismaClient().$extends(withAccelerate())
 
@@ -21,398 +24,441 @@ const GET_ALL_EXERCISES_CACHE_KEY = 'exercises:all'
 const EXERCISES_CACHE_TTL = '365d'
 
 interface CreateExerciseBody {
-	title: string
-	instructions: string
-	primaryMuscleGroupId: string
-	equipmentId: string
-	exerciseType: ExerciseType
-	otherMuscleGroupIds?: string[]
+  title: string
+  instructions: string
+  primaryMuscleGroupId: string
+  equipmentId: string
+  exerciseType: ExerciseType
+  otherMuscleGroupIds?: string[]
 }
 
-export const createExercise = asyncHandler(async (req: Request<object, object, CreateExerciseBody>, res: Response) => {
-	const { title, instructions, primaryMuscleGroupId, equipmentId, exerciseType, otherMuscleGroupIds } = req.body
-	const video = req.file as UploadedFile
+export const createExercise = asyncHandler(
+  async (req: Request<object, object, CreateExerciseBody>, res: Response) => {
+    const {
+      title,
+      instructions,
+      primaryMuscleGroupId,
+      equipmentId,
+      exerciseType,
+      otherMuscleGroupIds,
+    } = req.body
+    const video = req.file as UploadedFile
 
-	const filePath = `gym-sass/exercises/${randomUUID()}`
-	let uploaded: Awaited<ReturnType<typeof uploadExerciseVideo>>
+    const filePath = `gym-sass/exercises/${randomUUID()}`
+    let uploaded: Awaited<ReturnType<typeof uploadExerciseVideo>>
 
-	try {
-		uploaded = await uploadExerciseVideo({
-			file: video,
-			filePath,
-			userId: req.user!.id,
-		})
-	} catch (error) {
-		const err = error as Error
-		logError('Failed to upload Exercise media', err, { action: 'createExercise', error: err.message }, req)
-		throw new ApiError(500, 'Failed to upload exercise media')
-	}
+    try {
+      uploaded = await uploadExerciseVideo({
+        file: video,
+        filePath,
+        userId: req.user!.id,
+      })
+    } catch (error) {
+      const err = error as Error
+      logError(
+        'Failed to upload Exercise media',
+        err,
+        { action: 'createExercise', error: err.message },
+        req,
+      )
+      throw new ApiError(500, 'Failed to upload exercise media')
+    }
 
-	try {
-		const exercise = await prisma.exercise.create({
-			data: {
-				title: titleizeString(title),
-				instructions,
-				primaryMuscleGroupId,
-				equipmentId,
-				exerciseType,
-				videoUrl: uploaded.videoUrl,
-				thumbnailUrl: uploaded.thumbnailUrl,
-				...(otherMuscleGroupIds?.length && {
-					otherMuscleGroups: {
-						createMany: {
-							data: otherMuscleGroupIds.map(muscleGroupId => ({
-								muscleGroupId,
-							})),
-						},
-					},
-				}),
-			},
-			include: {
-				primaryMuscleGroup: true,
-				equipment: true,
-				otherMuscleGroups: {
-					select: {
-						muscleGroup: true,
-					},
-				},
-			},
-		})
+    try {
+      const exercise = await prisma.exercise.create({
+        data: {
+          title: titleizeString(title),
+          instructions,
+          primaryMuscleGroupId,
+          equipmentId,
+          exerciseType,
+          videoUrl: uploaded.videoUrl,
+          thumbnailUrl: uploaded.thumbnailUrl,
+          ...(otherMuscleGroupIds?.length && {
+            otherMuscleGroups: {
+              createMany: {
+                data: otherMuscleGroupIds.map((muscleGroupId) => ({
+                  muscleGroupId,
+                })),
+              },
+            },
+          }),
+        },
+        include: {
+          primaryMuscleGroup: true,
+          equipment: true,
+          otherMuscleGroups: {
+            select: {
+              muscleGroup: true,
+            },
+          },
+        },
+      })
 
-		const flattenedExercise = {
-			...exercise,
-			otherMuscleGroups: exercise.otherMuscleGroups.map(omg => omg.muscleGroup),
-		}
+      const flattenedExercise = {
+        ...exercise,
+        otherMuscleGroups: exercise.otherMuscleGroups.map((omg) => omg.muscleGroup),
+      }
 
-		// invalidate cache
-		await deleteCache(GET_ALL_EXERCISES_CACHE_KEY)
+      // invalidate cache
+      await deleteCache(GET_ALL_EXERCISES_CACHE_KEY)
 
-		logInfo('Exercise created', { action: 'createExercise', exerciseId: exercise.id }, req)
-		return res.json(new ApiResponse(200, flattenedExercise, 'Exercise created successfully'))
-	} catch (error) {
-		const err = error as Error
-		await deleteMediaByKey({
-			key: uploaded.videoKey,
-			userId: req.user!.id,
-			reason: 'exercise create db failure',
-		})
+      logInfo('Exercise created', { action: 'createExercise', exerciseId: exercise.id }, req)
+      return res.json(new ApiResponse(200, flattenedExercise, 'Exercise created successfully'))
+    } catch (error) {
+      const err = error as Error
+      await deleteMediaByKey({
+        key: uploaded.videoKey,
+        userId: req.user!.id,
+        reason: 'exercise create db failure',
+      })
 
-		await deleteMediaByKey({
-			key: uploaded.thumbnailKey,
-			userId: req.user!.id,
-			reason: 'exercise create db failure',
-		})
+      await deleteMediaByKey({
+        key: uploaded.thumbnailKey,
+        userId: req.user!.id,
+        reason: 'exercise create db failure',
+      })
 
-		logError('Failed to create Exercise in DB', err, { action: 'createExercise', error: err.message }, req)
-		throw new ApiError(500, 'Failed to create exercise')
-	}
-})
+      logError(
+        'Failed to create Exercise in DB',
+        err,
+        { action: 'createExercise', error: err.message },
+        req,
+      )
+      throw new ApiError(500, 'Failed to create exercise')
+    }
+  },
+)
 
 export const getAllExercises = asyncHandler(async (req: Request, res: Response) => {
-	const cachedExerciseList = await getCache<unknown[]>(GET_ALL_EXERCISES_CACHE_KEY)
+  const cachedExerciseList = await getCache<unknown[]>(GET_ALL_EXERCISES_CACHE_KEY)
 
-	if (cachedExerciseList) {
-		logInfo('Exercises fetched from cache', { action: 'getAllExercises', count: cachedExerciseList.length }, req)
-		return res.json(new ApiResponse(200, cachedExerciseList, 'Exercises list fetched successfully '))
-	}
+  if (cachedExerciseList) {
+    logInfo(
+      'Exercises fetched from cache',
+      { action: 'getAllExercises', count: cachedExerciseList.length },
+      req,
+    )
+    return res.json(
+      new ApiResponse(200, cachedExerciseList, 'Exercises list fetched successfully '),
+    )
+  }
 
-	const exerciseList = await prisma.exercise.findMany({
-		orderBy: { title: 'asc' },
-		include: {
-			primaryMuscleGroup: true,
-			equipment: true,
-			otherMuscleGroups: {
-				select: {
-					muscleGroup: true,
-				},
-			},
-		},
-	})
+  const exerciseList = await prisma.exercise.findMany({
+    orderBy: { title: 'asc' },
+    include: {
+      primaryMuscleGroup: true,
+      equipment: true,
+      otherMuscleGroups: {
+        select: {
+          muscleGroup: true,
+        },
+      },
+    },
+  })
 
-	if (exerciseList.length === 0) {
-		logWarn('No exercises found', { action: 'getAllExercises' }, req)
-		throw new ApiError(404, 'No exercises found')
-	}
+  if (exerciseList.length === 0) {
+    logWarn('No exercises found', { action: 'getAllExercises' }, req)
+    throw new ApiError(404, 'No exercises found')
+  }
 
-	const flattenedExerciseList = exerciseList.map(exercise => ({
-		...exercise,
-		otherMuscleGroups: exercise.otherMuscleGroups.map(omg => omg.muscleGroup),
-	}))
+  const flattenedExerciseList = exerciseList.map((exercise) => ({
+    ...exercise,
+    otherMuscleGroups: exercise.otherMuscleGroups.map((omg) => omg.muscleGroup),
+  }))
 
-	try {
-		await setCache(GET_ALL_EXERCISES_CACHE_KEY, flattenedExerciseList, EXERCISES_CACHE_TTL)
-	} catch (error) {
-		const err = error as Error
-		logError('Failed to cache exercises list', err, { action: 'getAllExercises', error: err.message }, req)
-	}
+  try {
+    await setCache(GET_ALL_EXERCISES_CACHE_KEY, flattenedExerciseList, EXERCISES_CACHE_TTL)
+  } catch (error) {
+    const err = error as Error
+    logError(
+      'Failed to cache exercises list',
+      err,
+      { action: 'getAllExercises', error: err.message },
+      req,
+    )
+  }
 
-	logInfo('Exercises fetched', { action: 'getAllExercises', count: flattenedExerciseList.length }, req)
-	return res.json(new ApiResponse(200, flattenedExerciseList, 'Exercises list fetched successfully'))
+  logInfo(
+    'Exercises fetched',
+    { action: 'getAllExercises', count: flattenedExerciseList.length },
+    req,
+  )
+  return res.json(
+    new ApiResponse(200, flattenedExerciseList, 'Exercises list fetched successfully'),
+  )
 })
 
 export const getExerciseById = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
-	const { id } = req.params
+  const { id } = req.params
 
-	const exercise = await prisma.exercise.findUnique({
-		where: { id },
-		include: {
-			primaryMuscleGroup: true,
-			equipment: true,
-			otherMuscleGroups: {
-				select: {
-					muscleGroup: true,
-				},
-			},
-		},
-	})
+  const exercise = await prisma.exercise.findUnique({
+    where: { id },
+    include: {
+      primaryMuscleGroup: true,
+      equipment: true,
+      otherMuscleGroups: {
+        select: {
+          muscleGroup: true,
+        },
+      },
+    },
+  })
 
-	if (!exercise) {
-		logWarn('Exercise not found', { action: 'getExerciseById', exerciseId: id }, req)
-		throw new ApiError(404, 'No exercise exists with the provided ID')
-	}
+  if (!exercise) {
+    logWarn('Exercise not found', { action: 'getExerciseById', exerciseId: id }, req)
+    throw new ApiError(404, 'No exercise exists with the provided ID')
+  }
 
-	const flattenedExercise = {
-		...exercise,
-		otherMuscleGroups: exercise.otherMuscleGroups.map(omg => omg.muscleGroup),
-	}
+  const flattenedExercise = {
+    ...exercise,
+    otherMuscleGroups: exercise.otherMuscleGroups.map((omg) => omg.muscleGroup),
+  }
 
-	logInfo('Exercise fetched', { action: 'getExerciseById', exerciseId: id }, req)
-	return res.json(new ApiResponse(200, flattenedExercise, 'Exercise fetched successfully'))
+  logInfo('Exercise fetched', { action: 'getExerciseById', exerciseId: id }, req)
+  return res.json(new ApiResponse(200, flattenedExercise, 'Exercise fetched successfully'))
 })
 
 interface UpdateExerciseBody {
-	title?: string
-	instructions?: string
-	primaryMuscleGroupId?: string
-	equipmentId?: string
-	exerciseType?: ExerciseType
-	otherMuscleGroupIds?: string[]
+  title?: string
+  instructions?: string
+  primaryMuscleGroupId?: string
+  equipmentId?: string
+  exerciseType?: ExerciseType
+  otherMuscleGroupIds?: string[]
 }
 
 export const updateExercise = asyncHandler(
-	async (req: Request<{ id: string }, object, UpdateExerciseBody>, res: Response) => {
-		const { id } = req.params
-		const { title, instructions, primaryMuscleGroupId, equipmentId, exerciseType, otherMuscleGroupIds } = req.body
+  async (req: Request<{ id: string }, object, UpdateExerciseBody>, res: Response) => {
+    const { id } = req.params
+    const {
+      title,
+      instructions,
+      primaryMuscleGroupId,
+      equipmentId,
+      exerciseType,
+      otherMuscleGroupIds,
+    } = req.body
 
-		const video = req.file as UploadedFile | undefined
+    const video = req.file as UploadedFile | undefined
 
-		const existingExercise = await prisma.exercise.findUnique({
-			where: { id },
-		})
+    const existingExercise = await prisma.exercise.findUnique({
+      where: { id },
+    })
 
-		if (!existingExercise) {
-			logWarn('Exercise not found for update', { action: 'updateExercise', exerciseId: id }, req)
-			throw new ApiError(404, 'No exercise exists with the provided ID')
-		}
+    if (!existingExercise) {
+      logWarn('Exercise not found for update', { action: 'updateExercise', exerciseId: id }, req)
+      throw new ApiError(404, 'No exercise exists with the provided ID')
+    }
 
-		let newVideoUrl: string | null = null
-		let newThumbnailUrl: string | null = null
-		let newVideoKey: string | null = null
-		let newThumbnailKey: string | null = null
+    let newVideoUrl: string | null = null
+    let newThumbnailUrl: string | null = null
+    let newVideoKey: string | null = null
+    let newThumbnailKey: string | null = null
 
-		// ───────────────── MEDIA UPLOAD ─────────────────
-		if (video) {
-			const filePath = `gym-sass/exercises/${randomUUID()}`
-			try {
-				const uploaded = await uploadExerciseVideo({
-					file: video,
-					filePath,
-					userId: req.user!.id,
-				})
+    // ───────────────── MEDIA UPLOAD ─────────────────
+    if (video) {
+      const filePath = `gym-sass/exercises/${randomUUID()}`
+      try {
+        const uploaded = await uploadExerciseVideo({
+          file: video,
+          filePath,
+          userId: req.user!.id,
+        })
 
-				newVideoUrl = uploaded.videoUrl
-				newThumbnailUrl = uploaded.thumbnailUrl
-				newVideoKey = uploaded.videoKey
-				newThumbnailKey = uploaded.thumbnailKey
-			} catch (error) {
-				const err = error as Error
-				logError(
-					'Failed to upload new Exercise video',
-					err,
-					{ action: 'updateExercise', exerciseId: id, error: err.message },
-					req
-				)
-				throw new ApiError(500, 'Failed to upload Exercise video')
-			}
-		}
+        newVideoUrl = uploaded.videoUrl
+        newThumbnailUrl = uploaded.thumbnailUrl
+        newVideoKey = uploaded.videoKey
+        newThumbnailKey = uploaded.thumbnailKey
+      } catch (error) {
+        const err = error as Error
+        logError(
+          'Failed to upload new Exercise video',
+          err,
+          { action: 'updateExercise', exerciseId: id, error: err.message },
+          req,
+        )
+        throw new ApiError(500, 'Failed to upload Exercise video')
+      }
+    }
 
-		// ───────────────── TRANSACTION ─────────────────
-		let updatedExercise: Exercise
-		try {
-			const operations: PrismaPromise<any>[] = []
+    // ───────────────── TRANSACTION ─────────────────
+    let updatedExercise: Exercise
+    try {
+      const operations: PrismaPromise<any>[] = []
 
-			operations.push(
-				prisma.exercise.update({
-					where: { id },
-					data: {
-						...(title && { title: titleizeString(title) }),
-						...(instructions !== undefined && { instructions }),
-						...(primaryMuscleGroupId && { primaryMuscleGroupId }),
-						...(equipmentId && { equipmentId }),
-						...(exerciseType && { exerciseType }),
-						...(newVideoUrl && { videoUrl: newVideoUrl }),
-						...(newThumbnailUrl && { thumbnailUrl: newThumbnailUrl }),
-					},
-					include: {
-						primaryMuscleGroup: true,
-						equipment: true,
-						otherMuscleGroups: {
-							include: {
-								muscleGroup: true,
-							},
-						},
-					},
-				})
-			)
+      operations.push(
+        prisma.exercise.update({
+          where: { id },
+          data: {
+            ...(title && { title: titleizeString(title) }),
+            ...(instructions !== undefined && { instructions }),
+            ...(primaryMuscleGroupId && { primaryMuscleGroupId }),
+            ...(equipmentId && { equipmentId }),
+            ...(exerciseType && { exerciseType }),
+            ...(newVideoUrl && { videoUrl: newVideoUrl }),
+            ...(newThumbnailUrl && { thumbnailUrl: newThumbnailUrl }),
+          },
+          include: {
+            primaryMuscleGroup: true,
+            equipment: true,
+            otherMuscleGroups: {
+              include: {
+                muscleGroup: true,
+              },
+            },
+          },
+        }),
+      )
 
-			// Replace other muscle groups (authoritative set)
-			if (otherMuscleGroupIds) {
-				operations.push(
-					prisma.exerciseMuscleGroup.deleteMany({
-						where: { exerciseId: id },
-					})
-				)
-				if (otherMuscleGroupIds.length > 0) {
-					operations.push(
-						prisma.exerciseMuscleGroup.createMany({
-							data: otherMuscleGroupIds.map(muscleGroupId => ({
-								exerciseId: id,
-								muscleGroupId,
-							})),
-							skipDuplicates: true,
-						})
-					)
-				}
-			}
+      // Replace other muscle groups (authoritative set)
+      if (otherMuscleGroupIds) {
+        operations.push(
+          prisma.exerciseMuscleGroup.deleteMany({
+            where: { exerciseId: id },
+          }),
+        )
+        if (otherMuscleGroupIds.length > 0) {
+          operations.push(
+            prisma.exerciseMuscleGroup.createMany({
+              data: otherMuscleGroupIds.map((muscleGroupId) => ({
+                exerciseId: id,
+                muscleGroupId,
+              })),
+              skipDuplicates: true,
+            }),
+          )
+        }
+      }
 
-			await prisma.$transaction(operations)
+      await prisma.$transaction(operations)
 
-			// Fetch the final state after transaction to ensure all relations (especially otherMuscleGroups) are updated and included correctly
-			const finalExercise = await prisma.exercise.findUnique({
-				where: { id },
-				include: {
-					primaryMuscleGroup: true,
-					equipment: true,
-					otherMuscleGroups: {
-						select: {
-							muscleGroup: true,
-						},
-					},
-				},
-			})
+      // Fetch the final state after transaction to ensure all relations (especially otherMuscleGroups) are updated and included correctly
+      const finalExercise = await prisma.exercise.findUnique({
+        where: { id },
+        include: {
+          primaryMuscleGroup: true,
+          equipment: true,
+          otherMuscleGroups: {
+            select: {
+              muscleGroup: true,
+            },
+          },
+        },
+      })
 
-			if (!finalExercise) throw new ApiError(404, 'Exercise not found after update')
+      if (!finalExercise) throw new ApiError(404, 'Exercise not found after update')
 
-			const flattenedExercise = {
-				...finalExercise,
-				otherMuscleGroups: finalExercise.otherMuscleGroups.map(omg => omg.muscleGroup),
-			}
+      const flattenedExercise = {
+        ...finalExercise,
+        otherMuscleGroups: finalExercise.otherMuscleGroups.map((omg) => omg.muscleGroup),
+      }
 
-			// ───────────────── CLEAN UP OLD MEDIA ─────────────────
-			if (video) {
-				if (existingExercise.videoUrl) {
-					const oldVideoKey = extractS3KeyFromUrl(existingExercise.videoUrl)
-					if (oldVideoKey) {
-						await deleteMediaByKey({
-							key: oldVideoKey,
-							userId: req.user!.id,
-							reason: 'exercise video replaced',
-						})
-					}
-				}
-				if (existingExercise.thumbnailUrl) {
-					const oldThumbnailKey = extractS3KeyFromUrl(existingExercise.thumbnailUrl)
-					if (oldThumbnailKey) {
-						await deleteMediaByKey({
-							key: oldThumbnailKey,
-							userId: req.user!.id,
-							reason: 'exercise thumbnail replaced',
-						})
-					}
-				}
-			}
+      // ───────────────── CLEAN UP OLD MEDIA ─────────────────
+      if (video) {
+        if (existingExercise.videoUrl) {
+          const oldVideoKey = extractS3KeyFromUrl(existingExercise.videoUrl)
+          if (oldVideoKey) {
+            await deleteMediaByKey({
+              key: oldVideoKey,
+              userId: req.user!.id,
+              reason: 'exercise video replaced',
+            })
+          }
+        }
+        if (existingExercise.thumbnailUrl) {
+          const oldThumbnailKey = extractS3KeyFromUrl(existingExercise.thumbnailUrl)
+          if (oldThumbnailKey) {
+            await deleteMediaByKey({
+              key: oldThumbnailKey,
+              userId: req.user!.id,
+              reason: 'exercise thumbnail replaced',
+            })
+          }
+        }
+      }
 
-			// Invalidate cache
-			await deleteCache(GET_ALL_EXERCISES_CACHE_KEY)
+      // Invalidate cache
+      await deleteCache(GET_ALL_EXERCISES_CACHE_KEY)
 
-			logInfo('Exercise updated', { action: 'updateExercise', exerciseId: id }, req)
-			return res.json(new ApiResponse(200, flattenedExercise, 'Exercise updated successfully'))
-		} catch (error) {
-			const err = error as Error
+      logInfo('Exercise updated', { action: 'updateExercise', exerciseId: id }, req)
+      return res.json(new ApiResponse(200, flattenedExercise, 'Exercise updated successfully'))
+    } catch (error) {
+      const err = error as Error
 
-			// Roll back newly uploaded media if DB failed
-			if (newVideoKey) {
-				await deleteMediaByKey({
-					key: newVideoKey,
-					userId: req.user!.id,
-					reason: 'exercise update db failure',
-				})
-			}
+      // Roll back newly uploaded media if DB failed
+      if (newVideoKey) {
+        await deleteMediaByKey({
+          key: newVideoKey,
+          userId: req.user!.id,
+          reason: 'exercise update db failure',
+        })
+      }
 
-			if (newThumbnailKey) {
-				await deleteMediaByKey({
-					key: newThumbnailKey,
-					userId: req.user!.id,
-					reason: 'exercise update db failure',
-				})
-			}
+      if (newThumbnailKey) {
+        await deleteMediaByKey({
+          key: newThumbnailKey,
+          userId: req.user!.id,
+          reason: 'exercise update db failure',
+        })
+      }
 
-			logError(
-				'Failed to update Exercise in DB',
-				err,
-				{ action: 'updateExercise', exerciseId: id, error: err.message },
-				req
-			)
-			throw new ApiError(500, 'Failed to update Exercise', [err.message])
-		}
-	}
+      logError(
+        'Failed to update Exercise in DB',
+        err,
+        { action: 'updateExercise', exerciseId: id, error: err.message },
+        req,
+      )
+      throw new ApiError(500, 'Failed to update Exercise', [err.message])
+    }
+  },
 )
 
 export const deleteExercise = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
-	const { id } = req.params
+  const { id } = req.params
 
-	const existingExercise = await prisma.exercise.findUnique({ where: { id } })
+  const existingExercise = await prisma.exercise.findUnique({ where: { id } })
 
-	if (!existingExercise) {
-		logWarn('Exercise not found for deletion', { action: 'deleteExercise', exerciseId: id }, req)
-		throw new ApiError(404, 'No exercise exists with the provided ID')
-	}
+  if (!existingExercise) {
+    logWarn('Exercise not found for deletion', { action: 'deleteExercise', exerciseId: id }, req)
+    throw new ApiError(404, 'No exercise exists with the provided ID')
+  }
 
-	try {
-		const deletedExercise = await prisma.exercise.delete({ where: { id } })
+  try {
+    const deletedExercise = await prisma.exercise.delete({ where: { id } })
 
-		const videoKey = extractS3KeyFromUrl(existingExercise.videoUrl)
-		const thumbnailKey = extractS3KeyFromUrl(existingExercise.thumbnailUrl)
+    const videoKey = extractS3KeyFromUrl(existingExercise.videoUrl)
+    const thumbnailKey = extractS3KeyFromUrl(existingExercise.thumbnailUrl)
 
-		if (videoKey) {
-			await deleteMediaByKey({
-				key: videoKey,
-				userId: req.user!.id,
-				reason: 'exercise deleted',
-			})
-		}
+    if (videoKey) {
+      await deleteMediaByKey({
+        key: videoKey,
+        userId: req.user!.id,
+        reason: 'exercise deleted',
+      })
+    }
 
-		if (thumbnailKey) {
-			await deleteMediaByKey({
-				key: thumbnailKey,
-				userId: req.user!.id,
-				reason: 'exercise deleted',
-			})
-		}
+    if (thumbnailKey) {
+      await deleteMediaByKey({
+        key: thumbnailKey,
+        userId: req.user!.id,
+        reason: 'exercise deleted',
+      })
+    }
 
-		// invalidate cache
-		await deleteCache(GET_ALL_EXERCISES_CACHE_KEY)
+    // invalidate cache
+    await deleteCache(GET_ALL_EXERCISES_CACHE_KEY)
 
-		logInfo('Exercise deleted', { action: 'deleteExercise', exerciseId: id }, req)
-		return res.json(new ApiResponse(200, deletedExercise, 'Exercise deleted successfully'))
-	} catch (error) {
-		const err = error as Error
-		logError(
-			'Failed to delete Exercise',
-			err,
-			{ action: 'deleteExercise', exerciseId: id, error: err.message },
-			req
-		)
-		throw new ApiError(500, 'Failed to delete exercise')
-	}
+    logInfo('Exercise deleted', { action: 'deleteExercise', exerciseId: id }, req)
+    return res.json(new ApiResponse(200, deletedExercise, 'Exercise deleted successfully'))
+  } catch (error) {
+    const err = error as Error
+    logError(
+      'Failed to delete Exercise',
+      err,
+      { action: 'deleteExercise', exerciseId: id, error: err.message },
+      req,
+    )
+    throw new ApiError(500, 'Failed to delete exercise')
+  }
 })

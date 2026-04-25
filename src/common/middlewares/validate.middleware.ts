@@ -1,68 +1,70 @@
-import { NextFunction, Request, Response } from 'express'
-import { z, ZodObject, ZodError } from 'zod'
+import type { NextFunction, Request, Response } from 'express'
+import type { z, ZodObject } from 'zod'
+import { ZodError } from 'zod'
+
 import { ApiError } from '../utils/ApiError.js'
 import { logWarn } from '../utils/logger.js'
 
 // Generic types for typed middleware
 export const validateResource =
-	<T extends ZodObject<any, any>>(schema: T) =>
-	(req: Request<any, any, any>, res: Response, next: NextFunction) => {
-		try {
-			// Parse and transform
-			const parsed = schema.parse({
-				body: req.body,
-				query: req.query,
-				params: req.params,
-				file: req.file,
-				files: req.files,
-			})
+  <T extends ZodObject<any, any>>(schema: T) =>
+  (req: Request<any, any, any>, res: Response, next: NextFunction) => {
+    try {
+      // Parse and transform
+      const parsed = schema.parse({
+        body: req.body,
+        query: req.query,
+        params: req.params,
+        file: req.file,
+        files: req.files,
+      })
 
-			// Assign parsed values back to request safely
-			if (parsed.body) req.body = parsed.body
-			if (parsed.query) {
-				Object.defineProperty(req, 'query', {
-					value: parsed.query,
-					writable: true,
-					configurable: true,
-					enumerable: true,
-				})
-			}
-			if (parsed.params) req.params = parsed.params as any
+      // Assign parsed values back to request safely
+      if (parsed.body) req.body = parsed.body
+      if (parsed.query) {
+        Object.defineProperty(req, 'query', {
+          value: parsed.query,
+          writable: true,
+          configurable: true,
+          enumerable: true,
+        })
+      }
+      if (parsed.params) req.params = parsed.params as any
 
-			next()
-		} catch (e: unknown) {
-			if (e instanceof ZodError) {
-				const errorDetails = e.issues.map(iss => ({
-					field: iss.path.join('.'),
-					message: iss.message,
-					received: (iss as any).received ?? undefined,
-				}))
+      next()
+    } catch (e: unknown) {
+      if (e instanceof ZodError) {
+        const errorDetails = e.issues.map((iss) => ({
+          field: iss.path.join('.'),
+          message: iss.message,
+          received: (iss as any).received ?? undefined,
+        }))
 
-				logWarn(
-					'Validation failed',
-					{
-						action: 'validateResource',
-						errors: errorDetails,
-						input: {
-							body: req.body,
-							query: req.query,
-							params: req.params,
-						},
-					},
-					req
-				)
+        logWarn(
+          'Validation failed',
+          {
+            action: 'validateResource',
+            errors: errorDetails,
+            input: {
+              body: req.body,
+              query: req.query,
+              params: req.params,
+            },
+          },
+          req,
+        )
 
-				next(new ApiError(400, 'Validation failed: ' + errorDetails[0].message, errorDetails))
-			} else {
-				next(e)
-			}
-		}
-	}
+        next(new ApiError(400, 'Validation failed: ' + errorDetails[0].message, errorDetails))
+      } else {
+        next(e)
+      }
+    }
+  }
 
 // Helper type to extract validated type from a Zod schema
 export type ValidatedRequest<T extends ZodObject<any, any>> = Request<
-	z.infer<T>['params'],
-	any,
-	z.infer<T>['body'],
-	z.infer<T>['query']
+  z.infer<T>['params'],
+  any,
+  z.infer<T>['body'],
+  z.infer<T>['query']
 >

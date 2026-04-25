@@ -1,844 +1,884 @@
-import { ExerciseGroupType, PrismaClient, WorkoutLogVisibility } from '@prisma/client'
+import type { ExerciseGroupType, WorkoutLogVisibility } from '@prisma/client'
+import { PrismaClient } from '@prisma/client'
 import { withAccelerate } from '@prisma/extension-accelerate'
-import { Request, Response } from 'express'
+import type { Request, Response } from 'express'
+
 import { ApiError } from '../../common/utils/ApiError.js'
 import { ApiResponse } from '../../common/utils/ApiResponse.js'
 import { asyncHandler } from '../../common/utils/asyncHandler.js'
 import { generateSecureToken } from '../../common/utils/helpers.js'
 import { logError, logInfo, logWarn } from '../../common/utils/logger.js'
-import { isValidCompletedSet, WorkoutSet } from '../../common/utils/workoutValidation.js'
+import type { WorkoutSet } from '../../common/utils/workoutValidation.js'
+import { isValidCompletedSet } from '../../common/utils/workoutValidation.js'
 
 const prisma = new PrismaClient().$extends(withAccelerate())
 
 interface ExerciseInput {
-	exerciseId: string
-	exerciseIndex: number
-	exerciseGroupId?: string
-	sets: WorkoutSet[]
+  exerciseId: string
+  exerciseIndex: number
+  exerciseGroupId?: string
+  sets: WorkoutSet[]
 }
 
 interface ExerciseGroupInput {
-	id: string
-	groupType: ExerciseGroupType
-	groupIndex: number
-	restSeconds?: number
+  id: string
+  groupType: ExerciseGroupType
+  groupIndex: number
+  restSeconds?: number
 }
 
 interface CreateWorkoutBody {
-	clientId?: string
-	title?: string
-	startTime: string
-	endTime: string
-	exercises: ExerciseInput[]
-	exerciseGroups?: ExerciseGroupInput[]
-	visibility?: WorkoutLogVisibility
-	userProgramDayId?: string
+  clientId?: string
+  title?: string
+  startTime: string
+  endTime: string
+  exercises: ExerciseInput[]
+  exerciseGroups?: ExerciseGroupInput[]
+  visibility?: WorkoutLogVisibility
+  userProgramDayId?: string
 }
 
 interface UpdateWorkoutBody extends CreateWorkoutBody {}
 
-export const createWorkout = asyncHandler(async (req: Request<object, object, CreateWorkoutBody>, res: Response) => {
-	const { clientId, title, startTime, endTime, exercises, exerciseGroups, visibility, userProgramDayId } = req.body
+export const createWorkout = asyncHandler(
+  async (req: Request<object, object, CreateWorkoutBody>, res: Response) => {
+    const {
+      clientId,
+      title,
+      startTime,
+      endTime,
+      exercises,
+      exerciseGroups,
+      visibility,
+      userProgramDayId,
+    } = req.body
 
-	/* ───── Idempotency Check ───── */
-	if (clientId) {
-		const existing = await prisma.workoutLog.findUnique({
-			where: { clientId },
-		})
+    /* ───── Idempotency Check ───── */
+    if (clientId) {
+      const existing = await prisma.workoutLog.findUnique({
+        where: { clientId },
+      })
 
-		if (existing) {
-			logInfo('Workout creation idempotent hit', { clientId, workoutId: existing.id }, req)
-			return res.json(new ApiResponse(200, { workout: existing }, 'Workout already created (Idempotent)'))
-		}
-	}
+      if (existing) {
+        logInfo('Workout creation idempotent hit', { clientId, workoutId: existing.id }, req)
+        return res.json(
+          new ApiResponse(200, { workout: existing }, 'Workout already created (Idempotent)'),
+        )
+      }
+    }
 
-	/* ───────────────── Prune Counters ───────────────── */
+    /* ───────────────── Prune Counters ───────────────── */
 
-	let droppedSets = 0
-	let droppedExercises = 0
-	let droppedGroups = 0
+    let droppedSets = 0
+    let droppedExercises = 0
+    let droppedGroups = 0
 
-	let workout: { id: string }
-	const persistedExercises: { id: string; exerciseGroupId: string | null }[] = []
+    let workout: { id: string }
+    const persistedExercises: { id: string; exerciseGroupId: string | null }[] = []
 
-	/* ───────────────── Transaction ───────────────── */
+    /* ───────────────── Transaction ───────────────── */
 
-	try {
-		await prisma.$transaction(async tx => {
-			/* ───── Create Workout ───── */
+    try {
+      await prisma.$transaction(async (tx) => {
+        /* ───── Create Workout ───── */
 
-			workout = await tx.workoutLog.create({
-				data: {
-					userId: req.user!.id,
-					clientId,
-					title,
-					startTime: new Date(startTime),
-					endTime: new Date(endTime),
-					visibility: visibility,
-					shareId: generateSecureToken(),
-				},
-			})
+        workout = await tx.workoutLog.create({
+          data: {
+            userId: req.user!.id,
+            clientId,
+            title,
+            startTime: new Date(startTime),
+            endTime: new Date(endTime),
+            visibility: visibility,
+            shareId: generateSecureToken(),
+          },
+        })
 
-			/* ───────────────── Normalize & Create Groups ───────────────── */
+        /* ───────────────── Normalize & Create Groups ───────────────── */
 
-			const groupIdMap = new Map<string, string>()
+        const groupIdMap = new Map<string, string>()
 
-			if (Array.isArray(exerciseGroups) && exerciseGroups.length > 0) {
-				const normalized = [...exerciseGroups]
-					.sort((a, b) => a.groupIndex - b.groupIndex)
-					.map((g, i) => ({ ...g, normalizedIndex: i }))
+        if (Array.isArray(exerciseGroups) && exerciseGroups.length > 0) {
+          const normalized = [...exerciseGroups]
+            .sort((a, b) => a.groupIndex - b.groupIndex)
+            .map((g, i) => ({ ...g, normalizedIndex: i }))
 
-				for (const group of normalized) {
-					const created = await tx.workoutLogExerciseGroup.create({
-						data: {
-							workoutId: workout.id,
-							groupType: group.groupType,
-							groupIndex: group.normalizedIndex,
-							restSeconds: group.restSeconds ?? null,
-						},
-					})
+          for (const group of normalized) {
+            const created = await tx.workoutLogExerciseGroup.create({
+              data: {
+                workoutId: workout.id,
+                groupType: group.groupType,
+                groupIndex: group.normalizedIndex,
+                restSeconds: group.restSeconds ?? null,
+              },
+            })
 
-					groupIdMap.set(group.id, created.id)
-				}
-			}
+            groupIdMap.set(group.id, created.id)
+          }
+        }
 
-			/* ───────────────── Create Exercises & Sets ───────────────── */
+        /* ───────────────── Create Exercises & Sets ───────────────── */
 
-			for (const exercise of exercises) {
-				const exerciseMeta = await tx.exercise.findUnique({
-					where: { id: exercise.exerciseId },
-					select: { exerciseType: true },
-				})
+        for (const exercise of exercises) {
+          const exerciseMeta = await tx.exercise.findUnique({
+            where: { id: exercise.exerciseId },
+            select: { exerciseType: true },
+          })
 
-				if (!exerciseMeta) {
-					droppedExercises++
-					logWarn('Exercise not found, skipping', { exerciseId: exercise.exerciseId }, req)
-					continue
-				}
+          if (!exerciseMeta) {
+            droppedExercises++
+            logWarn('Exercise not found, skipping', { exerciseId: exercise.exerciseId }, req)
+            continue
+          }
 
-				const totalSets = Array.isArray(exercise.sets) ? exercise.sets.length : 0
+          const totalSets = Array.isArray(exercise.sets) ? exercise.sets.length : 0
 
-				const validSets = Array.isArray(exercise.sets)
-					? exercise.sets.filter(set => isValidCompletedSet(set, exerciseMeta.exerciseType))
-					: []
+          const validSets = Array.isArray(exercise.sets)
+            ? exercise.sets.filter((set) => isValidCompletedSet(set, exerciseMeta.exerciseType))
+            : []
 
-				droppedSets += totalSets - validSets.length
+          droppedSets += totalSets - validSets.length
 
-				if (validSets.length === 0) {
-					droppedExercises++
-					logWarn('No valid sets, dropping exercise', { exerciseId: exercise.exerciseId }, req)
-					continue
-				}
+          if (validSets.length === 0) {
+            droppedExercises++
+            logWarn('No valid sets, dropping exercise', { exerciseId: exercise.exerciseId }, req)
+            continue
+          }
 
-				const workoutExercise = await tx.workoutLogExercise.create({
-					data: {
-						workoutId: workout.id,
-						exerciseId: exercise.exerciseId,
-						exerciseIndex: exercise.exerciseIndex,
-						exerciseGroupId: exercise.exerciseGroupId
-							? (groupIdMap.get(exercise.exerciseGroupId) ?? null)
-							: null,
-					},
-				})
+          const workoutExercise = await tx.workoutLogExercise.create({
+            data: {
+              workoutId: workout.id,
+              exerciseId: exercise.exerciseId,
+              exerciseIndex: exercise.exerciseIndex,
+              exerciseGroupId: exercise.exerciseGroupId
+                ? (groupIdMap.get(exercise.exerciseGroupId) ?? null)
+                : null,
+            },
+          })
 
-				persistedExercises.push(workoutExercise)
+          persistedExercises.push(workoutExercise)
 
-				await tx.workoutLogExerciseSet.createMany({
-					data: validSets.map(set => ({
-						workoutExerciseId: workoutExercise.id,
-						setIndex: set.setIndex,
-						setType: set.setType,
-						weight: set.weight ?? null,
-						reps: set.reps ?? null,
-						rpe: set.rpe ?? null,
-						durationSeconds: set.durationSeconds ?? null,
-						restSeconds: set.restSeconds ?? null,
-						note: set.note ?? null,
-					})),
-				})
-			}
+          await tx.workoutLogExerciseSet.createMany({
+            data: validSets.map((set) => ({
+              workoutExerciseId: workoutExercise.id,
+              setIndex: set.setIndex,
+              setType: set.setType,
+              weight: set.weight ?? null,
+              reps: set.reps ?? null,
+              rpe: set.rpe ?? null,
+              durationSeconds: set.durationSeconds ?? null,
+              restSeconds: set.restSeconds ?? null,
+              note: set.note ?? null,
+            })),
+          })
+        }
 
-			/* ───── Final Guard ───── */
+        /* ───── Final Guard ───── */
 
-			if (persistedExercises.length === 0) {
-				throw new ApiError(400, 'No valid exercises to save')
-			}
+        if (persistedExercises.length === 0) {
+          throw new ApiError(400, 'No valid exercises to save')
+        }
 
-			/* ───────────────── Group Pruning (Authoritative) ───────────────── */
+        /* ───────────────── Group Pruning (Authoritative) ───────────────── */
 
-			const groupUsage = new Map<string, number>()
+        const groupUsage = new Map<string, number>()
 
-			for (const ex of persistedExercises) {
-				if (ex.exerciseGroupId) {
-					groupUsage.set(ex.exerciseGroupId, (groupUsage.get(ex.exerciseGroupId) ?? 0) + 1)
-				}
-			}
+        for (const ex of persistedExercises) {
+          if (ex.exerciseGroupId) {
+            groupUsage.set(ex.exerciseGroupId, (groupUsage.get(ex.exerciseGroupId) ?? 0) + 1)
+          }
+        }
 
-			for (const [, dbGroupId] of groupIdMap.entries()) {
-				const count = groupUsage.get(dbGroupId) ?? 0
+        for (const [, dbGroupId] of groupIdMap.entries()) {
+          const count = groupUsage.get(dbGroupId) ?? 0
 
-				if (count < 2) {
-					droppedGroups++
+          if (count < 2) {
+            droppedGroups++
 
-					await tx.workoutLogExerciseGroup.delete({
-						where: { id: dbGroupId },
-					})
+            await tx.workoutLogExerciseGroup.delete({
+              where: { id: dbGroupId },
+            })
 
-					await tx.workoutLogExercise.updateMany({
-						where: { exerciseGroupId: dbGroupId },
-						data: { exerciseGroupId: null },
-					})
-				}
-			}
+            await tx.workoutLogExercise.updateMany({
+              where: { exerciseGroupId: dbGroupId },
+              data: { exerciseGroupId: null },
+            })
+          }
+        }
 
-			/* ───────────────── Reindex Remaining Groups ───────────────── */
+        /* ───────────────── Reindex Remaining Groups ───────────────── */
 
-			const remainingGroups = await tx.workoutLogExerciseGroup.findMany({
-				where: { workoutId: workout.id },
-				orderBy: { groupIndex: 'asc' },
-			})
+        const remainingGroups = await tx.workoutLogExerciseGroup.findMany({
+          where: { workoutId: workout.id },
+          orderBy: { groupIndex: 'asc' },
+        })
 
-			for (let i = 0; i < remainingGroups.length; i++) {
-				if (remainingGroups[i].groupIndex !== i) {
-					await tx.workoutLogExerciseGroup.update({
-						where: { id: remainingGroups[i].id },
-						data: { groupIndex: i },
-					})
-				}
-			}
+        for (let i = 0; i < remainingGroups.length; i++) {
+          if (remainingGroups[i].groupIndex !== i) {
+            await tx.workoutLogExerciseGroup.update({
+              where: { id: remainingGroups[i].id },
+              data: { groupIndex: i },
+            })
+          }
+        }
 
-			/* ───────────────── Link to Program Day & Advance Progress ───────────────── */
+        /* ───────────────── Link to Program Day & Advance Progress ───────────────── */
 
-			if (userProgramDayId) {
-				const userProgramDay = await tx.userProgramDay.findUnique({
-					where: { id: userProgramDayId },
-					include: {
-						week: {
-							include: {
-								userProgram: {
-									include: { progress: true },
-								},
-							},
-						},
-					},
-				})
+        if (userProgramDayId) {
+          const userProgramDay = await tx.userProgramDay.findUnique({
+            where: { id: userProgramDayId },
+            include: {
+              week: {
+                include: {
+                  userProgram: {
+                    include: { progress: true },
+                  },
+                },
+              },
+            },
+          })
 
-				if (userProgramDay && !userProgramDay.completed) {
-					// Verify this is the current day
-					const progress = userProgramDay.week.userProgram.progress
-					if (
-						progress &&
-						progress.currentWeek === userProgramDay.week.weekIndex &&
-						progress.currentDay === userProgramDay.dayIndex
-					) {
-						// 1. Mark day as completed
-						await tx.userProgramDay.update({
-							where: { id: userProgramDayId },
-							data: {
-								completed: true,
-								completedAt: new Date(),
-								workoutLogId: workout.id,
-							},
-						})
+          if (userProgramDay && !userProgramDay.completed) {
+            // Verify this is the current day
+            const progress = userProgramDay.week.userProgram.progress
+            if (
+              progress &&
+              progress.currentWeek === userProgramDay.week.weekIndex &&
+              progress.currentDay === userProgramDay.dayIndex
+            ) {
+              // 1. Mark day as completed
+              await tx.userProgramDay.update({
+                where: { id: userProgramDayId },
+                data: {
+                  completed: true,
+                  completedAt: new Date(),
+                  workoutLogId: workout.id,
+                },
+              })
 
-						// 2. Advance Progress
-						let nextDay = progress.currentDay + 1
-						let nextWeek = progress.currentWeek
+              // 2. Advance Progress
+              let nextDay = progress.currentDay + 1
+              let nextWeek = progress.currentWeek
 
-						if (nextDay >= 7) {
-							nextDay = 0
-							nextWeek += 1
-						}
+              if (nextDay >= 7) {
+                nextDay = 0
+                nextWeek += 1
+              }
 
-						// Only advance if within duration limits
-						if (nextWeek < userProgramDay.week.userProgram.durationWeeks) {
-							await tx.userProgramProgress.update({
-								where: { id: progress.id },
-								data: {
-									currentDay: nextDay,
-									currentWeek: nextWeek,
-								},
-							})
-						} else {
-							// Program finished? Maybe mark status as completed
-							await tx.userProgram.update({
-								where: { id: userProgramDay.week.userProgramId },
-								data: { status: 'completed' },
-							})
-						}
-					}
-				}
-			}
-		})
-	} catch (error) {
-		logError('Failed to create workout', error as Error, { action: 'createWorkout' }, req)
-		throw error instanceof ApiError ? error : new ApiError(500, 'Failed to create workout')
-	}
+              // Only advance if within duration limits
+              if (nextWeek < userProgramDay.week.userProgram.durationWeeks) {
+                await tx.userProgramProgress.update({
+                  where: { id: progress.id },
+                  data: {
+                    currentDay: nextDay,
+                    currentWeek: nextWeek,
+                  },
+                })
+              } else {
+                // Program finished? Maybe mark status as completed
+                await tx.userProgram.update({
+                  where: { id: userProgramDay.week.userProgramId },
+                  data: { status: 'completed' },
+                })
+              }
+            }
+          }
+        }
+      })
+    } catch (error) {
+      logError('Failed to create workout', error as Error, { action: 'createWorkout' }, req)
+      throw error instanceof ApiError ? error : new ApiError(500, 'Failed to create workout')
+    }
 
-	/* ───────────────── Response ───────────────── */
+    /* ───────────────── Response ───────────────── */
 
-	let fullWorkout
+    let fullWorkout
 
-	try {
-		fullWorkout = await prisma.workoutLog.findUnique({
-			where: { id: workout!.id },
-			select: workoutSelect,
-		})
-	} catch (error) {
-		logError(
-			'Failed to fetch full workout details after creation',
-			error as Error,
-			{ action: 'createWorkout' },
-			req
-		)
-		// Fallback to the basic workout object if fetch fails, though this shouldn't happen
-		return res.json(
-			new ApiResponse(
-				201,
-				{
-					workout: workout!,
-					meta: {
-						droppedSets,
-						droppedExercises,
-						droppedGroups,
-					},
-				},
-				'Workout created, but failed to fetch full details'
-			)
-		)
-	}
+    try {
+      fullWorkout = await prisma.workoutLog.findUnique({
+        where: { id: workout!.id },
+        select: workoutSelect,
+      })
+    } catch (error) {
+      logError(
+        'Failed to fetch full workout details after creation',
+        error as Error,
+        { action: 'createWorkout' },
+        req,
+      )
+      // Fallback to the basic workout object if fetch fails, though this shouldn't happen
+      return res.json(
+        new ApiResponse(
+          201,
+          {
+            workout: workout!,
+            meta: {
+              droppedSets,
+              droppedExercises,
+              droppedGroups,
+            },
+          },
+          'Workout created, but failed to fetch full details',
+        ),
+      )
+    }
 
-	return res.json(
-		new ApiResponse(
-			201,
-			{
-				workout: fullWorkout!,
-				meta: {
-					droppedSets,
-					droppedExercises,
-					droppedGroups,
-				},
-			},
-			'Workout created successfully'
-		)
-	)
-})
+    return res.json(
+      new ApiResponse(
+        201,
+        {
+          workout: fullWorkout!,
+          meta: {
+            droppedSets,
+            droppedExercises,
+            droppedGroups,
+          },
+        },
+        'Workout created successfully',
+      ),
+    )
+  },
+)
 
 const workoutSelect = {
-	id: true,
-	clientId: true,
-	shareId: true,
-	title: true,
-	startTime: true,
-	endTime: true,
-	createdAt: true,
-	updatedAt: true,
-	isEdited: true,
-	editedAt: true,
-	deletedAt: true,
-	visibility: true,
-	likesCount: true,
-	commentsCount: true,
-	exerciseGroups: {
-		orderBy: { groupIndex: 'asc' },
-		select: {
-			id: true,
-			groupType: true,
-			groupIndex: true,
-			restSeconds: true,
-		},
-	},
-	exercises: {
-		orderBy: { exerciseIndex: 'asc' },
-		select: {
-			id: true,
-			exerciseId: true,
-			exerciseIndex: true,
-			exerciseGroupId: true,
-			exercise: {
-				select: {
-					id: true,
-					title: true,
-					thumbnailUrl: true,
-					exerciseType: true,
-				},
-			},
-			sets: {
-				orderBy: { setIndex: 'asc' },
-			},
-		},
-	},
-	user: {
-		select: {
-			id: true,
-			firstName: true,
-			lastName: true,
-			profilePicUrl: true,
-			isPro: true,
-			proSubscriptionType: true,
-		},
-	},
+  id: true,
+  clientId: true,
+  shareId: true,
+  title: true,
+  startTime: true,
+  endTime: true,
+  createdAt: true,
+  updatedAt: true,
+  isEdited: true,
+  editedAt: true,
+  deletedAt: true,
+  visibility: true,
+  likesCount: true,
+  commentsCount: true,
+  exerciseGroups: {
+    orderBy: { groupIndex: 'asc' },
+    select: {
+      id: true,
+      groupType: true,
+      groupIndex: true,
+      restSeconds: true,
+    },
+  },
+  exercises: {
+    orderBy: { exerciseIndex: 'asc' },
+    select: {
+      id: true,
+      exerciseId: true,
+      exerciseIndex: true,
+      exerciseGroupId: true,
+      exercise: {
+        select: {
+          id: true,
+          title: true,
+          thumbnailUrl: true,
+          exerciseType: true,
+        },
+      },
+      sets: {
+        orderBy: { setIndex: 'asc' },
+      },
+    },
+  },
+  user: {
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      profilePicUrl: true,
+      isPro: true,
+      proSubscriptionType: true,
+    },
+  },
 } as const
 
 export const getAllWorkouts = asyncHandler(async (req: Request, res: Response) => {
-	const userId = req.user!.id
-	const page = parseInt(req.query.page as string) || 1
-	const limit = parseInt(req.query.limit as string) || 10
-	const skip = (page - 1) * limit
+  const userId = req.user!.id
+  const page = parseInt(req.query.page as string) || 1
+  const limit = parseInt(req.query.limit as string) || 10
+  const skip = (page - 1) * limit
 
-	/* ───── Query ───── */
+  /* ───── Query ───── */
 
-	let workouts
+  let workouts
 
-	try {
-		workouts = await prisma.workoutLog.findMany({
-			where: {
-				userId,
-				deletedAt: null,
-			},
-			orderBy: { createdAt: 'desc' },
-			skip,
-			take: limit,
-			select: workoutSelect,
-		})
-	} catch (error) {
-		const err = error as Error
-		logError('Failed to fetch workouts', err, { action: 'getWorkouts', error: err.message }, req)
-		throw new ApiError(500, 'Failed to fetch workouts')
-	}
+  try {
+    workouts = await prisma.workoutLog.findMany({
+      where: {
+        userId,
+        deletedAt: null,
+      },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: limit,
+      select: workoutSelect,
+    })
+  } catch (error) {
+    const err = error as Error
+    logError('Failed to fetch workouts', err, { action: 'getWorkouts', error: err.message }, req)
+    throw new ApiError(500, 'Failed to fetch workouts')
+  }
 
-	const hasMore = workouts.length === limit
+  const hasMore = workouts.length === limit
 
-	if (!workouts || workouts.length === 0) {
-		logInfo('No workouts found for user', { action: 'getWorkouts', userId }, req)
-		return res.json(
-			new ApiResponse(
-				200,
-				{ workouts: [], meta: { currentPage: page, limit, hasMore: false } },
-				'No workouts found'
-			)
-		)
-	}
+  if (!workouts || workouts.length === 0) {
+    logInfo('No workouts found for user', { action: 'getWorkouts', userId }, req)
+    return res.json(
+      new ApiResponse(
+        200,
+        { workouts: [], meta: { currentPage: page, limit, hasMore: false } },
+        'No workouts found',
+      ),
+    )
+  }
 
-	logInfo(
-		'Workouts fetched',
-		{
-			action: 'getWorkouts',
-			userId,
-			workoutCount: workouts.length,
-			page,
-			limit,
-		},
-		req
-	)
+  logInfo(
+    'Workouts fetched',
+    {
+      action: 'getWorkouts',
+      userId,
+      workoutCount: workouts.length,
+      page,
+      limit,
+    },
+    req,
+  )
 
-	return res.json(
-		new ApiResponse(200, { workouts, meta: { currentPage: page, limit, hasMore } }, 'Workouts fetched successfully')
-	)
+  return res.json(
+    new ApiResponse(
+      200,
+      { workouts, meta: { currentPage: page, limit, hasMore } },
+      'Workouts fetched successfully',
+    ),
+  )
 })
 
 export const getDiscoverWorkouts = asyncHandler(async (req: Request, res: Response) => {
-	const userId = req.user!.id
-	const page = parseInt(req.query.page as string) || 1
-	const limit = parseInt(req.query.limit as string) || 10
-	const skip = (page - 1) * limit
+  const userId = req.user!.id
+  const page = parseInt(req.query.page as string) || 1
+  const limit = parseInt(req.query.limit as string) || 10
+  const skip = (page - 1) * limit
 
-	/* ───── Query ───── */
-	let workouts
+  /* ───── Query ───── */
+  let workouts
 
-	try {
-		workouts = await prisma.workoutLog.findMany({
-			where: {
-				userId: {
-					not: userId,
-				},
-				deletedAt: null,
-				visibility: 'public',
-			},
-			orderBy: { createdAt: 'desc' },
-			skip,
-			take: limit,
-			select: workoutSelect,
-		})
-	} catch (error) {
-		const err = error as Error
-		logError('Failed to fetch workouts', err, { action: 'getWorkouts', error: err.message }, req)
-		throw new ApiError(500, 'Failed to fetch workouts')
-	}
+  try {
+    workouts = await prisma.workoutLog.findMany({
+      where: {
+        userId: {
+          not: userId,
+        },
+        deletedAt: null,
+        visibility: 'public',
+      },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: limit,
+      select: workoutSelect,
+    })
+  } catch (error) {
+    const err = error as Error
+    logError('Failed to fetch workouts', err, { action: 'getWorkouts', error: err.message }, req)
+    throw new ApiError(500, 'Failed to fetch workouts')
+  }
 
-	const hasMore = workouts.length === limit
+  const hasMore = workouts.length === limit
 
-	if (!workouts || workouts.length === 0) {
-		logInfo('No workouts found for user', { action: 'getWorkouts' }, req)
-		return res.json(
-			new ApiResponse(
-				200,
-				{ workouts: [], meta: { currentPage: page, limit, hasMore: false } },
-				'No workouts found'
-			)
-		)
-	}
+  if (!workouts || workouts.length === 0) {
+    logInfo('No workouts found for user', { action: 'getWorkouts' }, req)
+    return res.json(
+      new ApiResponse(
+        200,
+        { workouts: [], meta: { currentPage: page, limit, hasMore: false } },
+        'No workouts found',
+      ),
+    )
+  }
 
-	logInfo(
-		'Workouts fetched',
-		{
-			action: 'getWorkouts',
-			workoutCount: workouts.length,
-			page,
-			limit,
-		},
-		req
-	)
+  logInfo(
+    'Workouts fetched',
+    {
+      action: 'getWorkouts',
+      workoutCount: workouts.length,
+      page,
+      limit,
+    },
+    req,
+  )
 
-	return res.json(
-		new ApiResponse(200, { workouts, meta: { currentPage: page, limit, hasMore } }, 'Workouts fetched successfully')
-	)
+  return res.json(
+    new ApiResponse(
+      200,
+      { workouts, meta: { currentPage: page, limit, hasMore } },
+      'Workouts fetched successfully',
+    ),
+  )
 })
 
 export const getWorkoutById = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
-	const workoutId = req.params.id
-	const userId = req.user!.id
+  const workoutId = req.params.id
+  const userId = req.user!.id
 
-	let workout
+  let workout
 
-	try {
-		// Use findFirst to ensure the workout belongs to the requesting user
-		workout = await prisma.workoutLog.findFirst({
-			where: {
-				id: workoutId,
-			},
-			select: workoutSelect,
-		})
-	} catch (error) {
-		const err = error as Error
-		logError('Failed to fetch workout', err, { action: 'getWorkoutById', error: err.message, workoutId }, req)
-		throw new ApiError(500, 'Failed to fetch workout')
-	}
+  try {
+    // Use findFirst to ensure the workout belongs to the requesting user
+    workout = await prisma.workoutLog.findFirst({
+      where: {
+        id: workoutId,
+      },
+      select: workoutSelect,
+    })
+  } catch (error) {
+    const err = error as Error
+    logError(
+      'Failed to fetch workout',
+      err,
+      { action: 'getWorkoutById', error: err.message, workoutId },
+      req,
+    )
+    throw new ApiError(500, 'Failed to fetch workout')
+  }
 
-	if (!workout) {
-		logWarn('Workout not found', { action: 'getWorkoutById', workoutId }, req)
-		throw new ApiError(404, 'Workout not found')
-	}
+  if (!workout) {
+    logWarn('Workout not found', { action: 'getWorkoutById', workoutId }, req)
+    throw new ApiError(404, 'Workout not found')
+  }
 
-	return res.json(new ApiResponse(200, workout, 'Workout fetched successfully'))
+  return res.json(new ApiResponse(200, workout, 'Workout fetched successfully'))
 })
 
 export const deleteWorkout = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
-	const workoutId = req.params.id
-	const userId = req.user!.id
+  const workoutId = req.params.id
+  const userId = req.user!.id
 
-	let workout
+  let workout
 
-	/* ───── Transaction ───── */
+  /* ───── Transaction ───── */
 
-	try {
-		workout = await prisma.workoutLog.findUnique({
-			where: {
-				id: workoutId,
-			},
-		})
+  try {
+    workout = await prisma.workoutLog.findUnique({
+      where: {
+        id: workoutId,
+      },
+    })
 
-		if (!workout || workout.userId !== userId) {
-			logWarn(
-				'Workout not found or does not belong to user',
-				{
-					action: 'deleteWorkout',
-					workoutId,
-					userId,
-				},
-				req
-			)
-			throw new ApiError(404, 'Workout not found')
-		}
+    if (!workout || workout.userId !== userId) {
+      logWarn(
+        'Workout not found or does not belong to user',
+        {
+          action: 'deleteWorkout',
+          workoutId,
+          userId,
+        },
+        req,
+      )
+      throw new ApiError(404, 'Workout not found')
+    }
 
-		await prisma.workoutLog.update({
-			where: {
-				id: workoutId,
-			},
-			data: {
-				deletedAt: new Date(),
-			},
-		})
-	} catch (error) {
-		const err = error as Error
-		logError('Failed to delete workout', err, { action: 'deleteWorkout', error: err.message, workoutId }, req)
-		throw new ApiError(500, 'Failed to delete workout')
-	}
+    await prisma.workoutLog.update({
+      where: {
+        id: workoutId,
+      },
+      data: {
+        deletedAt: new Date(),
+      },
+    })
+  } catch (error) {
+    const err = error as Error
+    logError(
+      'Failed to delete workout',
+      err,
+      { action: 'deleteWorkout', error: err.message, workoutId },
+      req,
+    )
+    throw new ApiError(500, 'Failed to delete workout')
+  }
 
-	/* ───── Success Log ───── */
+  /* ───── Success Log ───── */
 
-	logInfo(
-		'Workout deleted',
-		{
-			action: 'deleteWorkout',
-			workoutId,
-			userId,
-		},
-		req
-	)
+  logInfo(
+    'Workout deleted',
+    {
+      action: 'deleteWorkout',
+      workoutId,
+      userId,
+    },
+    req,
+  )
 
-	/* ───── Response ───── */
+  /* ───── Response ───── */
 
-	return res.json(new ApiResponse(200, null, 'Workout deleted successfully'))
+  return res.json(new ApiResponse(200, null, 'Workout deleted successfully'))
 })
 
 export const updateWorkout = asyncHandler(
-	async (req: Request<{ id: string }, object, UpdateWorkoutBody>, res: Response) => {
-		const workoutId = req.params.id
-		const userId = req.user!.id
-		const { title, startTime, endTime, exercises, exerciseGroups, visibility } = req.body
+  async (req: Request<{ id: string }, object, UpdateWorkoutBody>, res: Response) => {
+    const workoutId = req.params.id
+    const userId = req.user!.id
+    const { title, startTime, endTime, exercises, exerciseGroups, visibility } = req.body
 
-		/* ───────────────── Prune Counters ───────────────── */
+    /* ───────────────── Prune Counters ───────────────── */
 
-		let droppedSets = 0
-		let droppedExercises = 0
-		let droppedGroups = 0
+    let droppedSets = 0
+    let droppedExercises = 0
+    let droppedGroups = 0
 
-		const persistedExercises: { id: string; exerciseGroupId: string | null }[] = []
+    const persistedExercises: { id: string; exerciseGroupId: string | null }[] = []
 
-		/* ───────────────── Transaction ───────────────── */
+    /* ───────────────── Transaction ───────────────── */
 
-		try {
-			await prisma.$transaction(async tx => {
-				/* ───── Verify Ownership ───── */
+    try {
+      await prisma.$transaction(async (tx) => {
+        /* ───── Verify Ownership ───── */
 
-				const existingWorkout = await tx.workoutLog.findUnique({
-					where: { id: workoutId },
-				})
+        const existingWorkout = await tx.workoutLog.findUnique({
+          where: { id: workoutId },
+        })
 
-				if (existingWorkout?.deletedAt) {
-					logWarn(
-						'Attempt to update deleted workout',
-						{
-							action: 'updateWorkout',
-							workoutId,
-							userId,
-						},
-						req
-					)
-					throw new ApiError(404, 'Workout not found (deleted)')
-				}
+        if (existingWorkout?.deletedAt) {
+          logWarn(
+            'Attempt to update deleted workout',
+            {
+              action: 'updateWorkout',
+              workoutId,
+              userId,
+            },
+            req,
+          )
+          throw new ApiError(404, 'Workout not found (deleted)')
+        }
 
-				if (existingWorkout?.userId !== userId) {
-					logWarn(
-						'Your unauthorized to update this workout',
-						{
-							action: 'updateWorkout',
-							workoutId,
-							userId,
-						},
-						req
-					)
-					throw new ApiError(403, 'Unauthorized to update this workout')
-				}
+        if (existingWorkout?.userId !== userId) {
+          logWarn(
+            'Your unauthorized to update this workout',
+            {
+              action: 'updateWorkout',
+              workoutId,
+              userId,
+            },
+            req,
+          )
+          throw new ApiError(403, 'Unauthorized to update this workout')
+        }
 
-				if (!existingWorkout) {
-					logWarn(
-						'Workout not found or does not belong to user',
-						{
-							action: 'updateWorkout',
-							workoutId,
-							userId,
-						},
-						req
-					)
-					throw new ApiError(404, 'Workout not found')
-				}
+        if (!existingWorkout) {
+          logWarn(
+            'Workout not found or does not belong to user',
+            {
+              action: 'updateWorkout',
+              workoutId,
+              userId,
+            },
+            req,
+          )
+          throw new ApiError(404, 'Workout not found')
+        }
 
-				/* ───── Delete Existing Exercises & Sets (Cascade) ───── */
+        /* ───── Delete Existing Exercises & Sets (Cascade) ───── */
 
-				await tx.workoutLogExercise.deleteMany({
-					where: { workoutId },
-				})
+        await tx.workoutLogExercise.deleteMany({
+          where: { workoutId },
+        })
 
-				await tx.workoutLogExerciseGroup.deleteMany({
-					where: { workoutId },
-				})
+        await tx.workoutLogExerciseGroup.deleteMany({
+          where: { workoutId },
+        })
 
-				/* ───── Update Workout Metadata ───── */
+        /* ───── Update Workout Metadata ───── */
 
-				await tx.workoutLog.update({
-					where: { id: workoutId },
-					data: {
-						title,
-						startTime: new Date(startTime),
-						endTime: new Date(endTime),
-						isEdited: true,
-						editedAt: new Date(),
-						visibility,
-						shareId: existingWorkout.shareId || generateSecureToken(),
-					},
-				})
+        await tx.workoutLog.update({
+          where: { id: workoutId },
+          data: {
+            title,
+            startTime: new Date(startTime),
+            endTime: new Date(endTime),
+            isEdited: true,
+            editedAt: new Date(),
+            visibility,
+            shareId: existingWorkout.shareId || generateSecureToken(),
+          },
+        })
 
-				/* ───────────────── Normalize & Create Groups ───────────────── */
+        /* ───────────────── Normalize & Create Groups ───────────────── */
 
-				const groupIdMap = new Map<string, string>()
+        const groupIdMap = new Map<string, string>()
 
-				if (Array.isArray(exerciseGroups) && exerciseGroups.length > 0) {
-					const normalized = [...exerciseGroups]
-						.sort((a, b) => a.groupIndex - b.groupIndex)
-						.map((g, i) => ({ ...g, normalizedIndex: i }))
+        if (Array.isArray(exerciseGroups) && exerciseGroups.length > 0) {
+          const normalized = [...exerciseGroups]
+            .sort((a, b) => a.groupIndex - b.groupIndex)
+            .map((g, i) => ({ ...g, normalizedIndex: i }))
 
-					for (const group of normalized) {
-						const created = await tx.workoutLogExerciseGroup.create({
-							data: {
-								workoutId,
-								groupType: group.groupType,
-								groupIndex: group.normalizedIndex,
-								restSeconds: group.restSeconds ?? null,
-							},
-						})
+          for (const group of normalized) {
+            const created = await tx.workoutLogExerciseGroup.create({
+              data: {
+                workoutId,
+                groupType: group.groupType,
+                groupIndex: group.normalizedIndex,
+                restSeconds: group.restSeconds ?? null,
+              },
+            })
 
-						groupIdMap.set(group.id, created.id)
-					}
-				}
+            groupIdMap.set(group.id, created.id)
+          }
+        }
 
-				/* ───────────────── Create Exercises & Sets ───────────────── */
+        /* ───────────────── Create Exercises & Sets ───────────────── */
 
-				for (const exercise of exercises) {
-					const exerciseMeta = await tx.exercise.findUnique({
-						where: { id: exercise.exerciseId },
-						select: { exerciseType: true },
-					})
+        for (const exercise of exercises) {
+          const exerciseMeta = await tx.exercise.findUnique({
+            where: { id: exercise.exerciseId },
+            select: { exerciseType: true },
+          })
 
-					if (!exerciseMeta) {
-						droppedExercises++
-						logWarn('Exercise not found, skipping', { exerciseId: exercise.exerciseId }, req)
-						continue
-					}
+          if (!exerciseMeta) {
+            droppedExercises++
+            logWarn('Exercise not found, skipping', { exerciseId: exercise.exerciseId }, req)
+            continue
+          }
 
-					const totalSets = Array.isArray(exercise.sets) ? exercise.sets.length : 0
+          const totalSets = Array.isArray(exercise.sets) ? exercise.sets.length : 0
 
-					const validSets = Array.isArray(exercise.sets)
-						? exercise.sets.filter(set => isValidCompletedSet(set, exerciseMeta.exerciseType))
-						: []
+          const validSets = Array.isArray(exercise.sets)
+            ? exercise.sets.filter((set) => isValidCompletedSet(set, exerciseMeta.exerciseType))
+            : []
 
-					droppedSets += totalSets - validSets.length
+          droppedSets += totalSets - validSets.length
 
-					if (validSets.length === 0) {
-						droppedExercises++
-						logWarn('No valid sets, dropping exercise', { exerciseId: exercise.exerciseId }, req)
-						continue
-					}
+          if (validSets.length === 0) {
+            droppedExercises++
+            logWarn('No valid sets, dropping exercise', { exerciseId: exercise.exerciseId }, req)
+            continue
+          }
 
-					const workoutExercise = await tx.workoutLogExercise.create({
-						data: {
-							workoutId,
-							exerciseId: exercise.exerciseId,
-							exerciseIndex: exercise.exerciseIndex,
-							exerciseGroupId: exercise.exerciseGroupId
-								? (groupIdMap.get(exercise.exerciseGroupId) ?? null)
-								: null,
-						},
-					})
+          const workoutExercise = await tx.workoutLogExercise.create({
+            data: {
+              workoutId,
+              exerciseId: exercise.exerciseId,
+              exerciseIndex: exercise.exerciseIndex,
+              exerciseGroupId: exercise.exerciseGroupId
+                ? (groupIdMap.get(exercise.exerciseGroupId) ?? null)
+                : null,
+            },
+          })
 
-					persistedExercises.push(workoutExercise)
+          persistedExercises.push(workoutExercise)
 
-					await tx.workoutLogExerciseSet.createMany({
-						data: validSets.map(set => ({
-							workoutExerciseId: workoutExercise.id,
-							setIndex: set.setIndex,
-							setType: set.setType,
-							weight: set.weight ?? null,
-							reps: set.reps ?? null,
-							rpe: set.rpe ?? null,
-							durationSeconds: set.durationSeconds ?? null,
-							restSeconds: set.restSeconds ?? null,
-							note: set.note ?? null,
-						})),
-					})
-				}
+          await tx.workoutLogExerciseSet.createMany({
+            data: validSets.map((set) => ({
+              workoutExerciseId: workoutExercise.id,
+              setIndex: set.setIndex,
+              setType: set.setType,
+              weight: set.weight ?? null,
+              reps: set.reps ?? null,
+              rpe: set.rpe ?? null,
+              durationSeconds: set.durationSeconds ?? null,
+              restSeconds: set.restSeconds ?? null,
+              note: set.note ?? null,
+            })),
+          })
+        }
 
-				/* ───── Final Guard ───── */
+        /* ───── Final Guard ───── */
 
-				if (persistedExercises.length === 0) {
-					throw new ApiError(400, 'No valid exercises to save')
-				}
+        if (persistedExercises.length === 0) {
+          throw new ApiError(400, 'No valid exercises to save')
+        }
 
-				/* ───────────────── Group Pruning (Authoritative) ───────────────── */
+        /* ───────────────── Group Pruning (Authoritative) ───────────────── */
 
-				const groupUsage = new Map<string, number>()
+        const groupUsage = new Map<string, number>()
 
-				for (const ex of persistedExercises) {
-					if (ex.exerciseGroupId) {
-						groupUsage.set(ex.exerciseGroupId, (groupUsage.get(ex.exerciseGroupId) ?? 0) + 1)
-					}
-				}
+        for (const ex of persistedExercises) {
+          if (ex.exerciseGroupId) {
+            groupUsage.set(ex.exerciseGroupId, (groupUsage.get(ex.exerciseGroupId) ?? 0) + 1)
+          }
+        }
 
-				for (const [, dbGroupId] of groupIdMap.entries()) {
-					const count = groupUsage.get(dbGroupId) ?? 0
+        for (const [, dbGroupId] of groupIdMap.entries()) {
+          const count = groupUsage.get(dbGroupId) ?? 0
 
-					if (count < 2) {
-						droppedGroups++
+          if (count < 2) {
+            droppedGroups++
 
-						await tx.workoutLogExerciseGroup.delete({
-							where: { id: dbGroupId },
-						})
+            await tx.workoutLogExerciseGroup.delete({
+              where: { id: dbGroupId },
+            })
 
-						await tx.workoutLogExercise.updateMany({
-							where: { exerciseGroupId: dbGroupId },
-							data: { exerciseGroupId: null },
-						})
-					}
-				}
+            await tx.workoutLogExercise.updateMany({
+              where: { exerciseGroupId: dbGroupId },
+              data: { exerciseGroupId: null },
+            })
+          }
+        }
 
-				/* ───────────────── Reindex Remaining Groups ───────────────── */
+        /* ───────────────── Reindex Remaining Groups ───────────────── */
 
-				const remainingGroups = await tx.workoutLogExerciseGroup.findMany({
-					where: { workoutId },
-					orderBy: { groupIndex: 'asc' },
-				})
+        const remainingGroups = await tx.workoutLogExerciseGroup.findMany({
+          where: { workoutId },
+          orderBy: { groupIndex: 'asc' },
+        })
 
-				for (let i = 0; i < remainingGroups.length; i++) {
-					if (remainingGroups[i].groupIndex !== i) {
-						await tx.workoutLogExerciseGroup.update({
-							where: { id: remainingGroups[i].id },
-							data: { groupIndex: i },
-						})
-					}
-				}
-			})
-		} catch (error) {
-			logError('Failed to update workout', error as Error, { action: 'updateWorkout' }, req)
-			throw error instanceof ApiError ? error : new ApiError(500, 'Failed to update workout')
-		}
+        for (let i = 0; i < remainingGroups.length; i++) {
+          if (remainingGroups[i].groupIndex !== i) {
+            await tx.workoutLogExerciseGroup.update({
+              where: { id: remainingGroups[i].id },
+              data: { groupIndex: i },
+            })
+          }
+        }
+      })
+    } catch (error) {
+      logError('Failed to update workout', error as Error, { action: 'updateWorkout' }, req)
+      throw error instanceof ApiError ? error : new ApiError(500, 'Failed to update workout')
+    }
 
-		/* ───────────────── Response ───────────────── */
+    /* ───────────────── Response ───────────────── */
 
-		/* ───── Fetch Updated Workout ───── */
+    /* ───── Fetch Updated Workout ───── */
 
-		const updatedWorkout = await prisma.workoutLog.findUnique({
-			where: { id: workoutId },
-			select: workoutSelect,
-		})
+    const updatedWorkout = await prisma.workoutLog.findUnique({
+      where: { id: workoutId },
+      select: workoutSelect,
+    })
 
-		logInfo(
-			'Workout updated',
-			{
-				action: 'updateWorkout',
-				workoutId,
-				userId,
-				pruneReport: { droppedSets, droppedExercises, droppedGroups },
-			},
-			req
-		)
+    logInfo(
+      'Workout updated',
+      {
+        action: 'updateWorkout',
+        workoutId,
+        userId,
+        pruneReport: { droppedSets, droppedExercises, droppedGroups },
+      },
+      req,
+    )
 
-		return res.json(new ApiResponse(200, updatedWorkout, 'Workout updated successfully'))
-	}
+    return res.json(new ApiResponse(200, updatedWorkout, 'Workout updated successfully'))
+  },
 )
 
-export const getWorkoutByShareId = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
-	const shareId = req.params.id
+export const getWorkoutByShareId = asyncHandler(
+  async (req: Request<{ id: string }>, res: Response) => {
+    const shareId = req.params.id
 
-	const workout = await prisma.workoutLog.findUnique({
-		where: { shareId },
-		select: workoutSelect,
-	})
+    const workout = await prisma.workoutLog.findUnique({
+      where: { shareId },
+      select: workoutSelect,
+    })
 
-	if (!workout || workout.deletedAt || workout.visibility === 'private') {
-		logWarn('Shared workout not found or private', { action: 'getWorkoutByShareId', shareId }, req)
-		throw new ApiError(404, 'Shared workout not found')
-	}
+    if (!workout || workout.deletedAt || workout.visibility === 'private') {
+      logWarn(
+        'Shared workout not found or private',
+        { action: 'getWorkoutByShareId', shareId },
+        req,
+      )
+      throw new ApiError(404, 'Shared workout not found')
+    }
 
-	return res.json(new ApiResponse(200, workout, 'Workout fetched successfully'))
-})
+    return res.json(new ApiResponse(200, workout, 'Workout fetched successfully'))
+  },
+)

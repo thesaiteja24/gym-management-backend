@@ -1,38 +1,44 @@
 // app.ts
-import express, { Express, Request } from 'express'
 import cors from 'cors'
+import type { Express, Request } from 'express'
+import express from 'express'
 import morgan from 'morgan'
-import { morganStream } from './common/utils/logger.js'
+
 import { globalErrorHandler } from './common/middlewares/globalErrorHandler.js'
-import { indexRoutes } from './routes/index.routes.js'
+import { morganStream } from './common/utils/logger.js'
 import { mountSwagger } from './common/utils/swagger.js'
+import { indexRoutes } from './routes/index.routes.js'
 
 const app: Express = express()
 
 const corsOptions = {
-	origin: process.env.CORS_ORIGIN,
+  origin: process.env.CORS_ORIGIN,
 }
 
 // ---- morgan setup: put BEFORE any routes are declared ----
 morgan.token('user-id', (req: Request) => req.user?.id || 'anonymous')
 morgan.token(
-	'client-ip',
-	(req: Request) => req.ip || (req.ips && req.ips[0]) || (req.headers['x-forwarded-for'] as string) || 'unknown'
+  'client-ip',
+  (req: Request) =>
+    req.ip || (req.ips && req.ips[0]) || (req.headers['x-forwarded-for'] as string) || 'unknown',
 )
 
 // include tokens in format so the stream only receives the final formatted string
 app.use(
-	morgan(':method :url :status :res[content-length] - :response-time ms :client-ip', {
-		stream: {
-			write: (message: string) =>
-				morganStream.write(message, (app as unknown as { get: (key: string) => Request }).get('req')),
-		},
-		immediate: false,
-		skip: (req: Request) => {
-			;(app as unknown as { set: (key: string, value: Request) => void }).set('req', req) // make req available to morganStream
-			return false
-		},
-	})
+  morgan(':method :url :status :res[content-length] - :response-time ms :client-ip', {
+    stream: {
+      write: (message: string) =>
+        morganStream.write(
+          message,
+          (app as unknown as { get: (key: string) => Request }).get('req'),
+        ),
+    },
+    immediate: false,
+    skip: (req: Request) => {
+      ;(app as unknown as { set: (key: string, value: Request) => void }).set('req', req) // make req available to morganStream
+      return false
+    },
+  }),
 )
 // -----------------------------------------------------------
 

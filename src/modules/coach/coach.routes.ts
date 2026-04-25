@@ -1,13 +1,15 @@
 import { Router } from 'express'
-import {
-	getActiveConversation,
-	sendMessage,
-	startConversation,
-	streamSpeech,
-	transcribeMessage,
-} from './coach.controller.js'
+
 import { authenticate } from '../../common/middlewares/auth.middleware.js'
 import { upload } from '../../common/middlewares/upload.middleware.js'
+
+import {
+  getActiveConversation,
+  sendMessage,
+  startConversation,
+  streamSpeech,
+  transcribeMessage,
+} from './coach.controller.js'
 
 const router = Router()
 

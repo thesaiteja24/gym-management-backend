@@ -29,8 +29,8 @@ This document serves as the **single source of truth** for the project's roadmap
 
 - [x] **History List**: Infinite scroll list of past workouts.
 - [x] **Editing**: Reuses the `start.tsx` active workout UI for editing past logs.
-    - _Logic_: Loads history -> Hydrates Store -> User Edits -> Queues `EDIT_WORKOUT` mutation.
-    - _UI_: Displays "Edited" badge and switch to "Accumulated Time" (static) mode.
+  - _Logic_: Loads history -> Hydrates Store -> User Edits -> Queues `EDIT_WORKOUT` mutation.
+  - _UI_: Displays "Edited" badge and switch to "Accumulated Time" (static) mode.
 - [x] **Deletion**: Optimistic UI updates with offline queue support.
 
 ### 🧠 Challenges & Edge Cases Solved
