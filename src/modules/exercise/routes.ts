@@ -5,38 +5,45 @@ import { authenticate } from '../../middlewares/auth.middleware.js'
 import { authorize } from '../../middlewares/authorize.middleware.js'
 import { upload } from '../../middlewares/upload.middleware.js'
 import { validateResource } from '../../middlewares/validate.middleware.js'
-
 import {
   createExercise,
   deleteExercise,
   getAllExercises,
   getExerciseById,
   updateExercise,
-} from './exercise.controller.js'
-import { createExerciseSchema, updateExerciseSchema } from './exercise.validators.js'
+} from './controller.js'
+import { createExerciseSchema, updateExerciseSchema } from './validators.js'
 
 const router = Router()
 
+// LIST & GET
+
 router.route('/').get(getAllExercises)
 router.route('/:id').get(getExerciseById)
+
+// CREATE
+
 router
   .route('/')
   .post(
     authenticate,
+    authorize(roles.systemAdmin),
     upload.single('video'),
     validateResource(createExerciseSchema),
-    authorize(roles.systemAdmin),
     createExercise,
   )
+
+// UPDATE & DELETE
+
 router
   .route('/:id')
   .put(
     authenticate,
+    authorize(roles.systemAdmin),
     upload.single('video'),
     validateResource(updateExerciseSchema),
-    authorize(roles.systemAdmin),
     updateExercise,
   )
-router.route('/:id').delete(authenticate, authorize(roles.systemAdmin), deleteExercise)
+  .delete(authenticate, authorize(roles.systemAdmin), deleteExercise)
 
 export const exerciseRoutes = router

@@ -1,9 +1,13 @@
 import { ExerciseType } from '@prisma/client'
 import { z } from 'zod'
 
+// HELPERS
+
 const stringOrArrayToArray = z
   .union([z.uuid(), z.array(z.uuid())])
   .transform((val) => (Array.isArray(val) ? val : [val]))
+
+// SCHEMAS
 
 export const createExerciseSchema = z.object({
   body: z.object({
@@ -11,8 +15,7 @@ export const createExerciseSchema = z.object({
     instructions: z.string().min(1, 'Instructions are required'),
     primaryMuscleGroupId: z.uuid('Invalid Muscle Group ID'),
     equipmentId: z.uuid('Invalid Equipment ID'),
-    exerciseType: z.enum(ExerciseType),
-
+    exerciseType: z.nativeEnum(ExerciseType),
     otherMuscleGroupIds: stringOrArrayToArray.optional(),
   }),
   file: z.any().refine((file) => !!file, 'Exercise video is required'),
@@ -27,8 +30,7 @@ export const updateExerciseSchema = z.object({
     instructions: z.string().optional(),
     primaryMuscleGroupId: z.uuid('Invalid Muscle Group ID').optional(),
     equipmentId: z.uuid('Invalid Equipment ID').optional(),
-    exerciseType: z.enum(ExerciseType).optional(),
-
+    exerciseType: z.nativeEnum(ExerciseType).optional(),
     otherMuscleGroupIds: stringOrArrayToArray.optional(),
   }),
 })
