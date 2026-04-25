@@ -9,6 +9,7 @@ export interface PublicUser {
   followingCount: number
   isPro: boolean
   proSubscriptionType: string | null
+  isFollowing?: boolean
 }
 
 // PAYLOAD

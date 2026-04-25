@@ -1,222 +1,136 @@
-import { PrismaClient } from '@prisma/client'
-import { withAccelerate } from '@prisma/extension-accelerate'
 import type { Request, Response } from 'express'
 
-import { ApiError } from '../../utils/ApiError.js'
 import { ApiResponse } from '../../utils/ApiResponse.js'
 import { asyncHandler } from '../../utils/asyncHandler.js'
-
 import * as engagementService from './service.js'
-import type {
-  CreateCommentBody,
-  EditCommentBody,
-  GetCommentsQuery,
-  GetLikesQuery,
-  ToggleLikeQuery,
-} from './types.js'
-
-// CONSTANTS
-
-const prisma = new PrismaClient().$extends(withAccelerate())
+import type { GetCommentsQuery, GetLikesQuery, ToggleLikeQuery } from './types.js'
 
 // FUNCTIONS
 
-export const followUser = asyncHandler(
-  async (req: Request<{ id: string }, object, object>, res: Response) => {
-    const currentUserId = req.user?.id as string
-    const targetUserId = req.params.id
+/**
+ * Follow a user.
+ */
+export const followUser = asyncHandler(async (req: Request, res: Response) => {
+  const followerId = req.user!.id
+  const followingId = req.params.id as string
+  const user = await engagementService.followUser(followerId, followingId)
+  return res.status(200).json(new ApiResponse(200, { user, status: 'following' }, 'Followed user successfully'))
+})
 
-    if (currentUserId === targetUserId) throw new ApiError(400, 'You cannot follow yourself')
+/**
+ * Unfollow a user.
+ */
+export const unFollowUser = asyncHandler(async (req: Request, res: Response) => {
+  const followerId = req.user!.id
+  const followingId = req.params.id as string
+  const user = await engagementService.unFollowUser(followerId, followingId)
+  return res.status(200).json(new ApiResponse(200, { user, status: 'not_following' }, 'Unfollowed user successfully'))
+})
 
-    const { alreadyFollowing, targetUser } = await engagementService.processFollow(
-      currentUserId,
-      targetUserId,
-    )
+/**
+ * Fetch followers of a user.
+ */
+export const getUserFollowers = asyncHandler(async (req: Request, res: Response) => {
+  const userId = req.params.userId as string
+  const currentUserId = req.user!.id
+  const followers = await engagementService.getUserFollowers(userId, currentUserId)
+  return res.status(200).json(new ApiResponse(200, followers, 'Followers fetched successfully'))
+})
 
-    const status = alreadyFollowing ? 'Already following' : "You're now following"
-    return res
-      .status(200)
-      .json(
-        new ApiResponse(
-          200,
-          { ...engagementService.mapUserResponse(targetUser), isFollowing: true },
-          status,
-        ),
-      )
-  },
-)
+/**
+ * Fetch users followed by a user.
+ */
+export const getUserFollowing = asyncHandler(async (req: Request, res: Response) => {
+  const userId = req.params.userId as string
+  const currentUserId = req.user!.id
+  const following = await engagementService.getUserFollowing(userId, currentUserId)
+  return res.status(200).json(new ApiResponse(200, following, 'Following fetched successfully'))
+})
 
-export const unFollowUser = asyncHandler(
-  async (req: Request<{ id: string }, object, object>, res: Response) => {
-    const currentUserId = req.user?.id as string
-    const targetUserId = req.params.id
-
-    if (currentUserId === targetUserId) throw new ApiError(400, 'You cannot unfollow yourself')
-
-    const { notFollowing, targetUser } = await engagementService.processUnfollow(
-      currentUserId,
-      targetUserId,
-    )
-
-    const status = notFollowing ? 'Not following this user' : "You've unfollowed"
-    return res
-      .status(200)
-      .json(
-        new ApiResponse(
-          200,
-          { ...engagementService.mapUserResponse(targetUser), isFollowing: false },
-          status,
-        ),
-      )
-  },
-)
-
-export const getUserFollowing = asyncHandler(
-  async (req: Request<{ userId: string }, object, object>, res: Response) => {
-    const { userId } = req.params
-    const currentUserId = req.user?.id
-
-    const result = await engagementService.getFollowing(userId, currentUserId)
-    return res.status(200).json(new ApiResponse(200, result, 'User following fetched'))
-  },
-)
-
-export const getUserFollowers = asyncHandler(
-  async (req: Request<{ userId: string }, object, object>, res: Response) => {
-    const { userId } = req.params
-    const currentUserId = req.user?.id
-
-    const result = await engagementService.getFollowers(userId, currentUserId)
-    return res.status(200).json(new ApiResponse(200, result, 'User followers fetched'))
-  },
-)
-
+/**
+ * Search users by name or email.
+ */
 export const searchUsers = asyncHandler(async (req: Request, res: Response) => {
   const query = req.query.query as string
-  const currentUserId = req.user?.id
-
-  if (!query) throw new ApiError(400, 'No query provided')
-
-  const formattedResults = await engagementService.searchUsers(query, currentUserId)
-  return res.status(200).json(new ApiResponse(200, formattedResults, 'Users fetched successfully'))
+  const currentUserId = req.user!.id
+  const users = await engagementService.searchUsers(query, currentUserId)
+  return res.status(200).json(new ApiResponse(200, users, 'Users searched successfully'))
 })
 
+/**
+ * Get suggested users.
+ */
 export const getSuggestedUsers = asyncHandler(async (req: Request, res: Response) => {
-  const currentUserId = req.user?.id
-  const result = await engagementService.getSuggestedUsers(currentUserId)
-  return res.status(200).json(new ApiResponse(200, result, 'Users fetched successfully'))
+  const currentUserId = req.user!.id
+  const users = await engagementService.getSuggestedUsers(currentUserId)
+  return res.status(200).json(new ApiResponse(200, users, 'Suggestions fetched successfully'))
 })
 
-export const createComment = asyncHandler(
-  async (req: Request<{ id: string }, object, CreateCommentBody>, res: Response) => {
-    const userId = req.user?.id as string
-    const workoutId = req.params.id
-    const { content, parentId } = req.body
+/**
+ * Toggle like status for a workout or comment.
+ */
+export const toggleLikeAction = asyncHandler(async (req: Request, res: Response) => {
+  const userId = req.user!.id
+  const targetId = req.params.id as string
+  const { type, liked } = req.query as unknown as ToggleLikeQuery
+  const isLiked = liked === true || liked === 'true'
 
-    const comment = await engagementService.processComment(userId, workoutId, content, parentId)
-    return res
-      .status(200)
-      .json(
-        new ApiResponse(200, engagementService.formatCommentResponse(comment), 'Comment created'),
-      )
-  },
-)
+  const result = await engagementService.toggleLike(userId, targetId, type, isLiked)
+  const message = isLiked ? 'Liked successfully' : 'Unliked successfully'
+  return res.status(200).json(new ApiResponse(200, result, message))
+})
 
-export const getComments = asyncHandler(
-  async (req: Request<{ id: string }, object, object, any>, res: Response) => {
-    const { id } = req.params
-    const query = req.query as unknown as GetCommentsQuery
-    const isRepliesRoute = query.isReply === 'true'
-    const limit = parseInt(query.limit || '10', 10)
-    const cursor = query.cursor
+/**
+ * Fetch likes for a target.
+ */
+export const getLikes = asyncHandler(async (req: Request, res: Response) => {
+  const targetId = req.params.id as string
+  const { type } = req.query as unknown as GetLikesQuery
+  const likes = await engagementService.getLikes(targetId, type)
+  return res.status(200).json(new ApiResponse(200, likes, 'Likes fetched successfully'))
+})
 
-    const result = await engagementService.getComments(id, isRepliesRoute, limit, cursor)
-    return res.status(200).json(new ApiResponse(200, result, 'Comments fetched'))
-  },
-)
+/**
+ * Create a new comment.
+ */
+export const createComment = asyncHandler(async (req: Request, res: Response) => {
+  const userId = req.user!.id
+  const workoutId = req.params.id as string
+  const { content, parentId } = req.body
+  const comment = await engagementService.createComment(userId, workoutId, content, parentId)
+  return res.status(201).json(new ApiResponse(201, comment, 'Comment created successfully'))
+})
 
-export const editComment = asyncHandler(
-  async (req: Request<{ commentId: string }, object, EditCommentBody>, res: Response) => {
-    const { commentId } = req.params
-    const userId = req.user?.id
-    const { content } = req.body
+/**
+ * Edit an existing comment.
+ */
+export const editComment = asyncHandler(async (req: Request, res: Response) => {
+  const userId = req.user!.id
+  const commentId = req.params.commentId as string
+  const { content } = req.body
+  const comment = await engagementService.editComment(userId, commentId, content)
+  return res.status(200).json(new ApiResponse(200, comment, 'Comment updated successfully'))
+})
 
-    const comment = await prisma.workoutComment.update({
-      where: { id: commentId, userId },
-      data: { content },
-      include: {
-        user: { select: { id: true, firstName: true, lastName: true, profilePicUrl: true } },
-        _count: { select: { replies: true } },
-      },
-    })
-    if (!comment) throw new ApiError(404, 'Comment not found')
+/**
+ * Delete a comment.
+ */
+export const deleteComment = asyncHandler(async (req: Request, res: Response) => {
+  const userId = req.user!.id
+  const commentId = req.params.commentId as string
+  await engagementService.deleteComment(userId, commentId)
+  return res.status(200).json(new ApiResponse(200, null, 'Comment deleted successfully'))
+})
 
-    return res
-      .status(200)
-      .json(
-        new ApiResponse(200, engagementService.formatCommentResponse(comment), 'Comment edited'),
-      )
-  },
-)
+/**
+ * Fetch comments for a workout or replies for a comment.
+ */
+export const getComments = asyncHandler(async (req: Request, res: Response) => {
+  const targetId = req.params.id as string
+  const { isReply, limit, cursor } = req.query as unknown as GetCommentsQuery
+  const isReplyBool = isReply === 'true'
+  const limitNum = parseInt(limit || '10')
 
-export const deleteComment = asyncHandler(
-  async (req: Request<{ commentId: string }>, res: Response) => {
-    const { commentId } = req.params
-    const userId = req.user?.id
-
-    const comment = await prisma.workoutComment.update({
-      where: { id: commentId, userId },
-      data: { deletedAt: new Date() },
-    })
-    if (!comment) throw new ApiError(404, 'Comment not found')
-
-    return res.status(200).json(new ApiResponse(200, comment, 'Comment deleted'))
-  },
-)
-
-export const getLikes = asyncHandler(
-  async (req: Request<{ id: string }, object, object, any>, res: Response) => {
-    const { id } = req.params
-    const query = req.query as unknown as GetLikesQuery
-    const type = query.type
-
-    const mappedLikes = await engagementService.getLikes(id, type)
-    return res.status(200).json(new ApiResponse(200, mappedLikes, `${type} likes fetched`))
-  },
-)
-
-export const toggleLikeAction = asyncHandler(
-  async (req: Request<{ id: string }, object, object, any>, res: Response) => {
-    const { id } = req.params
-    const query = req.query as unknown as any
-    const type = query.type as ToggleLikeQuery['type']
-    const liked = query.liked === true // transformed by zod
-    const userId = req.user?.id as string
-
-    const { alreadyLiked, notLiked, like } = await engagementService.processToggleLike(
-      id,
-      type,
-      liked,
-      userId,
-    )
-
-    if (liked && alreadyLiked)
-      return res
-        .status(200)
-        .json(
-          new ApiResponse(
-            200,
-            { id: `${userId}_${id}`, userId, targetId: id, targetType: type, user: like.user },
-            'Already liked',
-          ),
-        )
-    if (!liked && notLiked) return res.status(200).json(new ApiResponse(200, null, 'Not liked yet'))
-
-    const resData = liked
-      ? { id: `${userId}_${id}`, userId, targetId: id, targetType: type, user: like.user }
-      : null
-    return res
-      .status(200)
-      .json(new ApiResponse(200, resData, `${type} ${liked ? 'liked' : 'unliked'} successfully`))
-  },
-)
+  const result = await engagementService.getComments(targetId, isReplyBool, limitNum, cursor as string | undefined)
+  return res.status(200).json(new ApiResponse(200, result, 'Comments fetched successfully'))
+})

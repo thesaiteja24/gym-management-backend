@@ -1,5 +1,6 @@
 import { Router } from 'express'
 
+import { authenticateOptional } from '../../middlewares/auth.middleware.js'
 import { validateResource } from '../../middlewares/validate.middleware.js'
 import {
   getActiveUserProgram,
@@ -19,7 +20,7 @@ import { getUser } from './controller.js'
 const router = Router()
 
 // single user
-router.route('/:userId').get(getUser)
+router.route('/:userId').get(authenticateOptional, getUser)
 
 router.route('/:userId/programs').get(validateResource(listUserProgramsSchema), listUserPrograms)
 router

@@ -1,33 +1,27 @@
+import type { PublicUser } from '../user/types.js'
+
 // MAIN
 
 export interface EngagementUser {
   id: string
   firstName: string
   lastName: string
-  profilePicUrl: string
-  isFollowing: boolean
-  isPro: boolean
-  proSubscriptionType: string
+  profilePicUrl: string | null
 }
 
 export interface CommentResponse {
   id: string
   userId: string
   content: string
-  parentId: string
-  workoutId: string
+  parentId: string | null
+  workoutId: string | null
   likesCount: number
   repliesCount: number
-  createdAt: Date
-  updatedAt: Date
-  deletedAt: Date | null
-  user: {
-    id: string
-    firstName: string
-    lastName: string
-    profilePicUrl: string
-  }
-  replies: CommentResponse[]
+  createdAt: string | Date
+  updatedAt: string | Date
+  deletedAt: string | Date | null
+  user: EngagementUser
+  replies?: CommentResponse[]
 }
 
 export interface LikeResponse {
@@ -35,12 +29,7 @@ export interface LikeResponse {
   userId: string
   targetId: string
   targetType: 'workout' | 'comment'
-  user: {
-    id: string
-    firstName: string
-    lastName: string
-    profilePicUrl: string
-  }
+  user: EngagementUser
 }
 
 // PAYLOAD
@@ -56,7 +45,7 @@ export interface EditCommentBody {
 
 export interface ToggleLikeQuery {
   type: 'workout' | 'comment'
-  liked: string // 'true' or 'false'
+  liked: string | boolean
 }
 
 export interface GetCommentsQuery {
@@ -70,11 +59,6 @@ export interface GetLikesQuery {
 }
 
 // RESPONSE
-
-export interface FollowResponse {
-  user: EngagementUser
-  status: string
-}
 
 export interface CommentsListResponse {
   comments?: CommentResponse[]
