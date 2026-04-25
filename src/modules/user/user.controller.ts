@@ -30,6 +30,9 @@ export const selfUserSelect = {
   privacyPolicyAcceptedAt: true,
   privacyPolicyVersion: true,
   phoneE164: true,
+  googleId: true,
+  proExpirationDate: true,
+  proSubscriptionId: true,
   createdAt: true,
   updatedAt: true,
 }

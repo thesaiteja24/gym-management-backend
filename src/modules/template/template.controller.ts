@@ -1,412 +1,83 @@
-import type { ExerciseGroupType, SetType } from '@prisma/client'
 import { PrismaClient } from '@prisma/client'
 import { withAccelerate } from '@prisma/extension-accelerate'
 import type { Request, Response } from 'express'
 
-import { FREE_LIMITS } from '../../common/constants/limits.js'
 import { ApiError } from '../../common/utils/ApiError.js'
 import { ApiResponse } from '../../common/utils/ApiResponse.js'
 import { asyncHandler } from '../../common/utils/asyncHandler.js'
-import { generateSecureToken } from '../../common/utils/helpers.js'
-import { logError, logWarn } from '../../common/utils/logger.js'
+
+import * as templateService from './template.service.js'
 
 const prisma = new PrismaClient().$extends(withAccelerate())
 
-interface TemplateSetInput {
-  setIndex: number
-  setType: SetType
-  weight?: number | null
-  reps?: number | null
-  rpe?: number | null
-  durationSeconds?: number | null
-  restSeconds?: number | null
-  note?: string | null
-}
-
-interface TemplateExerciseInput {
-  exerciseId: string
-  exerciseIndex: number
-  exerciseGroupId?: string
-  sets: TemplateSetInput[]
-}
-
-interface TemplateExerciseGroupInput {
-  id: string
-  groupType: ExerciseGroupType
-  groupIndex: number
-  restSeconds?: number
-}
-
-interface CreateTemplateBody {
-  title: string
-  notes?: string
-  exercises: TemplateExerciseInput[]
-  exerciseGroups?: TemplateExerciseGroupInput[]
-  sourceShareId?: string
+const templateInclude = {
+  exerciseGroups: { orderBy: { groupIndex: 'asc' as const } },
+  exercises: {
+    orderBy: { exerciseIndex: 'asc' as const },
+    include: {
+      sets: { orderBy: { setIndex: 'asc' as const } },
+      exercise: { select: { id: true, title: true, thumbnailUrl: true, exerciseType: true } },
+    },
+  },
 }
 
 export const createTemplate = asyncHandler(
-  async (req: Request<object, object, CreateTemplateBody>, res: Response) => {
-    const { title, notes, exercises, exerciseGroups, sourceShareId } = req.body
-
-    let template: { id: string }
-
-    try {
-      await prisma.$transaction(async (tx) => {
-        // Get user details for authorName
-        const user = await tx.user.findUnique({
-          where: { id: req.user!.id },
-          select: { firstName: true, lastName: true, isPro: true },
-        })
-
-        if (!user?.isPro) {
-          const templateCount = await tx.workoutTemplate.count({
-            where: { userId: req.user!.id },
-          })
-          if (templateCount >= FREE_LIMITS.MAX_CUSTOM_TEMPLATES) {
-            throw new ApiError(
-              403,
-              `You can only add up to ${FREE_LIMITS.MAX_CUSTOM_TEMPLATES} custom templates on the Free plan. Upgrade to create UNLIMITED Templates`,
-            )
-          }
-        }
-
-        const authorName = user
-          ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Unknown'
-          : 'Unknown'
-
-        /* ───── Create Template Header ───── */
-        template = await tx.workoutTemplate.create({
-          data: {
-            userId: req.user!.id,
-            title,
-            notes,
-            shareId: generateSecureToken(),
-            sourceShareId: sourceShareId ?? null,
-            authorName,
-          },
-        })
-
-        /* ───── Create Groups ───── */
-        const groupIdMap = new Map<string, string>()
-
-        if (Array.isArray(exerciseGroups) && exerciseGroups.length > 0) {
-          const normalized = [...exerciseGroups]
-            .sort((a, b) => a.groupIndex - b.groupIndex)
-            .map((g, i) => ({ ...g, normalizedIndex: i }))
-
-          for (const group of normalized) {
-            const created = await tx.workoutTemplateExerciseGroup.create({
-              data: {
-                templateId: template.id,
-                groupType: group.groupType,
-                groupIndex: group.normalizedIndex,
-                restSeconds: group.restSeconds ?? null,
-              },
-            })
-            groupIdMap.set(group.id, created.id)
-          }
-        }
-
-        /* ───── Create Exercises & Sets ───── */
-        for (const exercise of exercises) {
-          // Verify exercise exists
-          const exerciseMeta = await tx.exercise.findUnique({
-            where: { id: exercise.exerciseId },
-          })
-
-          if (!exerciseMeta) {
-            logWarn(
-              'Exercise not found for template, skipping',
-              { exerciseId: exercise.exerciseId },
-              req,
-            )
-            continue
-          }
-
-          const templateExercise = await tx.workoutTemplateExercise.create({
-            data: {
-              templateId: template.id,
-              exerciseId: exercise.exerciseId,
-              exerciseIndex: exercise.exerciseIndex,
-              exerciseGroupId: exercise.exerciseGroupId
-                ? (groupIdMap.get(exercise.exerciseGroupId) ?? null)
-                : null,
-            },
-          })
-
-          if (Array.isArray(exercise.sets) && exercise.sets.length > 0) {
-            await tx.workoutTemplateSet.createMany({
-              data: exercise.sets.map((set) => ({
-                templateExerciseId: templateExercise.id,
-                setIndex: set.setIndex,
-                setType: set.setType,
-                weight: set.weight ?? null,
-                reps: set.reps ?? null,
-                rpe: set.rpe ?? null,
-                durationSeconds: set.durationSeconds ?? null,
-                restSeconds: set.restSeconds ?? null,
-                note: set.note ?? null,
-              })),
-            })
-          }
-        }
-      })
-    } catch (error) {
-      logError('Failed to create template', error as Error, { action: 'createTemplate' }, req)
-      throw new ApiError(500, 'Failed to create template')
-    }
-
-    return res.json(new ApiResponse(201, { template: template! }, 'Template created successfully'))
+  async (req: Request<object, object, templateService.CreateTemplateData>, res: Response) => {
+    const template = await templateService.processCreateTemplate(req.user!.id, req.body)
+    return res.status(201).json(new ApiResponse(201, { template }, 'Template created successfully'))
   },
 )
 
 export const getAllTemplates = asyncHandler(async (req: Request, res: Response) => {
-  const userId = req.user!.id
-
   const templates = await prisma.workoutTemplate.findMany({
-    where: {
-      userId,
-      deletedAt: null,
-    },
+    where: { userId: req.user!.id, deletedAt: null },
     orderBy: { createdAt: 'desc' },
-    include: {
-      exerciseGroups: {
-        orderBy: { groupIndex: 'asc' },
-      },
-      exercises: {
-        orderBy: { exerciseIndex: 'asc' },
-        include: {
-          sets: { orderBy: { setIndex: 'asc' } },
-          exercise: {
-            select: {
-              id: true,
-              title: true,
-              thumbnailUrl: true,
-              exerciseType: true,
-            },
-          },
-        },
-      },
-    },
+    include: templateInclude,
   })
-
   return res.json(new ApiResponse(200, templates, 'Templates fetched successfully'))
 })
 
 export const getTemplateById = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
-  const userId = req.user!.id
-  const templateId = req.params.id
-
   const template = await prisma.workoutTemplate.findUnique({
-    where: { id: templateId },
-    include: {
-      exerciseGroups: {
-        orderBy: { groupIndex: 'asc' },
-      },
-      exercises: {
-        orderBy: { exerciseIndex: 'asc' },
-        include: {
-          sets: { orderBy: { setIndex: 'asc' } },
-          exercise: {
-            select: {
-              id: true,
-              title: true,
-              thumbnailUrl: true,
-              exerciseType: true,
-            },
-          },
-        },
-      },
-    },
+    where: { id: req.params.id },
+    include: templateInclude,
   })
-
-  if (!template || template.userId !== userId) {
-    throw new ApiError(404, 'Template not found')
-  }
-
+  if (!template || template.userId !== req.user!.id) throw new ApiError(404, 'Template not found')
   return res.json(new ApiResponse(200, template, 'Template fetched successfully'))
 })
 
 export const getTemplateByShareId = asyncHandler(
   async (req: Request<{ id: string }>, res: Response) => {
-    const templateShareId = req.params.id
-
     const template = await prisma.workoutTemplate.findUnique({
-      where: { shareId: templateShareId },
-      include: {
-        exerciseGroups: {
-          orderBy: { groupIndex: 'asc' },
-        },
-        exercises: {
-          orderBy: { exerciseIndex: 'asc' },
-          include: {
-            sets: { orderBy: { setIndex: 'asc' } },
-            exercise: {
-              select: {
-                id: true,
-                title: true,
-                thumbnailUrl: true,
-                exerciseType: true,
-              },
-            },
-          },
-        },
-      },
+      where: { shareId: req.params.id },
+      include: templateInclude,
     })
-
-    if (!template) {
-      throw new ApiError(404, 'Shared Tempplate not found')
-    }
-
+    if (!template) throw new ApiError(404, 'Shared Template not found')
     return res.json(new ApiResponse(200, template, 'Template fetched successfully'))
   },
 )
 
 export const updateTemplate = asyncHandler(
-  async (req: Request<{ id: string }, object, CreateTemplateBody>, res: Response) => {
-    const userId = req.user!.id
-    const templateId = req.params.id
-
-    const { title, notes, exercises, exerciseGroups } = req.body
-
-    await prisma.$transaction(async (tx) => {
-      const user = await tx.user.findUnique({
-        where: { id: req.user!.id },
-        select: { firstName: true, lastName: true },
-      })
-
-      const authorName = user
-        ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Unknown'
-        : 'Unknown'
-
-      const template = await tx.workoutTemplate.findUnique({ where: { id: templateId } })
-
-      if (!template || template.userId !== userId) {
-        throw new ApiError(404, 'Template not found')
-      }
-
-      if (template.deletedAt) {
-        throw new ApiError(404, 'Template not found (deleted)')
-      }
-
-      // Delete existing children
-      await tx.workoutTemplateExercise.deleteMany({ where: { templateId } })
-      await tx.workoutTemplateExerciseGroup.deleteMany({ where: { templateId } })
-
-      // Update Header
-      await tx.workoutTemplate.update({
-        where: { id: templateId },
-        data: {
-          title,
-          notes,
-          authorName: template.authorName || authorName, // only if missing
-          shareId: template.shareId || generateSecureToken(), // only if missing
-        },
-      })
-
-      // Recreate Children (Reuse create logic mostly)
-      /* ───── Create Groups ───── */
-      const groupIdMap = new Map<string, string>()
-
-      if (Array.isArray(exerciseGroups) && exerciseGroups.length > 0) {
-        const normalized = [...exerciseGroups]
-          .sort((a, b) => a.groupIndex - b.groupIndex)
-          .map((g, i) => ({ ...g, normalizedIndex: i }))
-
-        for (const group of normalized) {
-          const created = await tx.workoutTemplateExerciseGroup.create({
-            data: {
-              templateId: templateId,
-              groupType: group.groupType,
-              groupIndex: group.normalizedIndex,
-              restSeconds: group.restSeconds ?? null,
-            },
-          })
-          groupIdMap.set(group.id, created.id)
-        }
-      }
-
-      /* ───── Create Exercises & Sets ───── */
-      for (const exercise of exercises) {
-        const exerciseMeta = await tx.exercise.findUnique({
-          where: { id: exercise.exerciseId },
-        })
-
-        if (!exerciseMeta) continue
-
-        const templateExercise = await tx.workoutTemplateExercise.create({
-          data: {
-            templateId: templateId,
-            exerciseId: exercise.exerciseId,
-            exerciseIndex: exercise.exerciseIndex,
-            exerciseGroupId: exercise.exerciseGroupId
-              ? (groupIdMap.get(exercise.exerciseGroupId) ?? null)
-              : null,
-          },
-        })
-
-        if (Array.isArray(exercise.sets) && exercise.sets.length > 0) {
-          await tx.workoutTemplateSet.createMany({
-            data: exercise.sets.map((set) => ({
-              templateExerciseId: templateExercise.id,
-              setIndex: set.setIndex,
-              setType: set.setType,
-              weight: set.weight ?? null,
-              reps: set.reps ?? null,
-              rpe: set.rpe ?? null,
-              durationSeconds: set.durationSeconds ?? null,
-              restSeconds: set.restSeconds ?? null,
-              note: set.note ?? null,
-            })),
-          })
-        }
-      }
-    })
-
-    /* ───── Fetch Updated Template ───── */
-
-    const updatedTemplate = await prisma.workoutTemplate.findUnique({
-      where: { id: templateId },
-      include: {
-        exerciseGroups: {
-          orderBy: { groupIndex: 'asc' },
-        },
-        exercises: {
-          orderBy: { exerciseIndex: 'asc' },
-          include: {
-            sets: { orderBy: { setIndex: 'asc' } },
-            exercise: {
-              select: {
-                id: true,
-                title: true,
-                thumbnailUrl: true,
-                exerciseType: true,
-              },
-            },
-          },
-        },
-      },
-    })
-
+  async (
+    req: Request<{ id: string }, object, templateService.CreateTemplateData>,
+    res: Response,
+  ) => {
+    const updatedTemplate = await templateService.processUpdateTemplate(
+      req.user!.id,
+      req.params.id,
+      req.body,
+    )
     return res.json(new ApiResponse(200, updatedTemplate, 'Template updated successfully'))
   },
 )
 
 export const deleteTemplate = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
-  const userId = req.user!.id
-  const templateId = req.params.id
-
-  const template = await prisma.workoutTemplate.findUnique({ where: { id: templateId } })
-
-  if (!template || template.userId !== userId) {
-    throw new ApiError(404, 'Template not found')
-  }
+  const template = await prisma.workoutTemplate.findUnique({ where: { id: req.params.id } })
+  if (!template || template.userId !== req.user!.id) throw new ApiError(404, 'Template not found')
 
   await prisma.workoutTemplate.update({
-    where: { id: templateId },
+    where: { id: req.params.id },
     data: { deletedAt: new Date() },
   })
-
   return res.json(new ApiResponse(200, null, 'Template deleted successfully'))
 })

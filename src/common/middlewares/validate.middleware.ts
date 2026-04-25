@@ -3,7 +3,6 @@ import type { z, ZodObject } from 'zod'
 import { ZodError } from 'zod'
 
 import { ApiError } from '../utils/ApiError.js'
-import { logWarn } from '../utils/logger.js'
 
 // Generic types for typed middleware
 export const validateResource =
@@ -39,20 +38,6 @@ export const validateResource =
           message: iss.message,
           received: (iss as any).received ?? undefined,
         }))
-
-        logWarn(
-          'Validation failed',
-          {
-            action: 'validateResource',
-            errors: errorDetails,
-            input: {
-              body: req.body,
-              query: req.query,
-              params: req.params,
-            },
-          },
-          req,
-        )
 
         next(new ApiError(400, 'Validation failed: ' + errorDetails[0].message, errorDetails))
       } else {

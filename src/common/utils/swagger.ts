@@ -29,7 +29,6 @@ export function mountSwagger(app: Express): void {
       `OpenAPI file not found at ${specPath}\n` +
       `• If your file is at repo-root/docs/api/openapi.yaml, keep this code.\n` +
       `• Otherwise, move the file or update the path.`
-    console.error(msg)
     throw new Error(msg)
   }
 

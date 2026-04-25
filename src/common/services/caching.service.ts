@@ -2,8 +2,6 @@ import { Redis } from 'ioredis'
 import type { StringValue } from 'ms'
 import ms from 'ms'
 
-import { logError, logInfo } from '../utils/logger.js'
-
 const redisClient = new Redis(process.env.REDIS_URL!, {
   lazyConnect: true,
   maxRetriesPerRequest: 3,
@@ -12,21 +10,17 @@ const redisClient = new Redis(process.env.REDIS_URL!, {
 })
 
 // Eager connect for early failure detection
-redisClient.connect().catch((err: Error) => {
-  logError('Failed redisInit: Connection error', err, { error: err.message }, null)
+redisClient.connect().catch(() => {
   throw new Error(`Redis connection failed`)
 })
 
 redisClient.on('connect', () => {
-  logInfo('Redis connection establishment successful', {}, null)
 })
 
-redisClient.on('error', (err: Error) => {
-  logError('Redis Failure: connection error', err, { error: err.message }, null)
+redisClient.on('error', () => {
 })
 
 redisClient.on('ready', async () => {
-  logInfo('Redis client is ready to use', {}, null)
   // Health check ping
   const pong = await redisClient.ping()
   if (pong !== 'PONG') {
@@ -35,13 +29,11 @@ redisClient.on('ready', async () => {
 })
 
 redisClient.on('close', () => {
-  logInfo('Redis connection closed', {}, null)
 })
 
 process.on('SIGINT', async () => {
   if (redisClient) {
     await redisClient.quit()
-    logInfo('Redis client disconnected through app termination', {}, null)
   }
   process.exit(0)
 })
@@ -67,62 +59,6 @@ export const ttlHandler = (providedTTL: string): TTLResult => {
   } catch {
     throw new Error(`TTL Error: parse error`)
   }
-}
-
-// --- OTP Management ---
-interface SetOTPOptions {
-  force?: boolean
-}
-
-export const setOTP = async (
-  phoneE164: string,
-  otp: string,
-  providedTTL: string,
-  options: SetOTPOptions = { force: false },
-): Promise<boolean> => {
-  const ttl = ttlHandler(providedTTL)
-  const key = `otp:${phoneE164}`
-
-  let result: string | null
-  if (options.force) {
-    result = await redisClient.set(key, otp, 'EX', ttl.seconds)
-  } else {
-    result = await redisClient.set(key, otp, 'EX', ttl.seconds, 'NX')
-  }
-
-  if (result !== 'OK') {
-    throw new Error(
-      `Failed to set OTP: ${options.force ? 'Unexpected Redis error' : 'Cache key already exists'}`,
-    )
-  }
-
-  return true
-}
-
-// Get OTP (returns null if missing/expired; no throw)
-export const getOTP = async (phoneE164: string): Promise<string | null> => {
-  const key = `otp:${phoneE164}`
-  return (await redisClient.get(key)) || null
-}
-
-// Delete OTP (returns boolean; throws on Redis error)
-export const deleteOTP = async (phoneE164: string): Promise<boolean> => {
-  const key = `otp:${phoneE164}`
-  const deleted = await redisClient.del(key)
-  return deleted > 0
-}
-
-// For resends: Delete old, set new (throws on failure)
-export const resendOTP = async (
-  phoneE164: string,
-  newOtp: string,
-  providedTTL: string,
-): Promise<boolean> => {
-  const success = await deleteOTP(phoneE164)
-  if (!success && !newOtp) {
-    throw new Error('Failed to clear previous OTP')
-  }
-  return await setOTP(phoneE164, newOtp, providedTTL, { force: true })
 }
 
 // --- Refresh Token Management ---

@@ -90,3 +90,16 @@ export const formatTimeAgo = (date: Date, daysOnly: boolean = false): string => 
   const years = Math.floor(days / 365)
   return `${years} year${years > 1 ? 's' : ''} ago`
 }
+
+/**
+ * Formats a number into a compact string (e.g., 1k, 200k, 1M)
+ */
+export function formatCompactNumber(count: number): string {
+  if (count >= 1000000) {
+    return (count / 1000000).toFixed(1).replace(/\.0$/, '') + 'M'
+  }
+  if (count >= 1000) {
+    return (count / 1000).toFixed(1).replace(/\.0$/, '') + 'k'
+  }
+  return count.toString()
+}

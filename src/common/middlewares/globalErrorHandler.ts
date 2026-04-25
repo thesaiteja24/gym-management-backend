@@ -20,9 +20,8 @@ export const globalErrorHandler: ErrorRequestHandler = async (
   if (req.session && req.session.inTransaction()) {
     try {
       await req.session.abortTransaction()
-      console.error('Transaction aborted')
-    } catch (abortError) {
-      console.error('Failed to abort transaction:', (abortError as Error).stack)
+    } catch (_abortError) {
+      // Silent abort failure
     } finally {
       await req.session.endSession()
     }
@@ -36,7 +35,6 @@ export const globalErrorHandler: ErrorRequestHandler = async (
       data: err.data,
     })
   } else {
-    console.error('Unhandled error:', err.stack)
     res.status(500).json({
       success: false,
       message: 'Internal server error',

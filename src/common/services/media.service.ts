@@ -15,15 +15,6 @@ import {
 import type { ImageMediaRule, VideoMediaRule } from '../constants/mediaRules.js'
 import { MEDIA_RULES } from '../constants/mediaRules.js'
 import { optimizeImage } from '../utils/imageOptimizer.js'
-import { logDebug, logError, logInfo, logWarn } from '../utils/logger.js'
-
-interface S3Config {
-  region: string | undefined
-  credentials: {
-    accessKeyId: string | undefined
-    secretAccessKey: string | undefined
-  }
-}
 
 const s3 = new S3Client({
   region: process.env.AWS_REGION,
@@ -47,70 +38,43 @@ export const extractS3KeyFromUrl = (url: string | null | undefined): string | nu
   return new URL(url).pathname.substring(1)
 }
 
-export const uploadProfilePicture = async (file: UploadedFile, userId: string): Promise<string> => {
+export const uploadProfilePicture = async (file: UploadedFile, _userId: string): Promise<string> => {
   if (!file) {
-    logWarn('No file provided', { action: 'uploadProfilePicture', userId })
     throw new Error('No file provided')
   }
 
   const rule = MEDIA_RULES.profile as ImageMediaRule
 
-  try {
-    if (file.size > rule.limits.maxInputBytes) {
-      throw new Error('Profile image too large')
-    }
-
-    const optimized = await optimizeImage(file.buffer, rule)
-
-    if (optimized.length > rule.output.maxBytes) {
-      throw new Error('Profile image exceeds size limit')
-    }
-
-    const key = `gym-sass/user-profile/${randomUUID()}.webp`
-
-    const response = await s3.send(
-      new PutObjectCommand({
-        Bucket: BUCKET_NAME,
-        Key: key,
-        Body: optimized,
-        ContentType: 'image/webp',
-      }),
-    )
-
-    logInfo('Profile image uploaded', {
-      action: 'uploadProfilePicture',
-      userId,
-      key,
-      size: optimized.length,
-      etag: response.ETag,
-    })
-
-    return `https://${BUCKET_NAME}.s3.amazonaws.com/${key}`
-  } catch (error) {
-    logError(
-      'Failed to upload profile image',
-      error as Error,
-      { action: 'uploadProfilePicture', userId },
-      null,
-    )
-    throw error
+  if (file.size > rule.limits.maxInputBytes) {
+    throw new Error('Profile image too large')
   }
+
+  const optimized = await optimizeImage(file.buffer, rule)
+
+  if (optimized.length > rule.output.maxBytes) {
+    throw new Error('Profile image exceeds size limit')
+  }
+
+  const key = `gym-sass/user-profile/${randomUUID()}.webp`
+
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: BUCKET_NAME,
+      Key: key,
+      Body: optimized,
+      ContentType: 'image/webp',
+    }),
+  )
+
+  return `https://${BUCKET_NAME}.s3.amazonaws.com/${key}`
 }
 
 export const deleteProfilePicture = async (
-  userId: string,
+  _userId: string,
   profilePicUrl: string,
 ): Promise<boolean> => {
   const urlPath = new URL(profilePicUrl).pathname.substring(1) // Remove leading '/'
-  logDebug('Extracted path from URL', { action: 'deleteProfilePic', path: urlPath })
   const key = urlPath
-
-  logDebug('Deleting profile picture', {
-    action: 'deleteProfilePic',
-    user: userId,
-    profilePicUrl: profilePicUrl,
-    key: key,
-  })
 
   const params = {
     Bucket: BUCKET_NAME,
@@ -121,32 +85,15 @@ export const deleteProfilePicture = async (
   const command = new DeleteObjectCommand(params)
 
   try {
-    const headResponse = await s3.send(headCommand)
-    logDebug('Logging s3 response of head', {
-      action: 'deleteProfilePic',
-      headResponse: headResponse,
-    })
-
-    const response = await s3.send(command)
-    logDebug('Logging s3 response of delete', { action: 'deleteProfilePic', response: response })
+    await s3.send(headCommand)
+    await s3.send(command)
     return true
   } catch (error) {
     const err = error as Error & { name?: string }
     if (err.name === 'NotFound') {
-      logWarn(
-        'File not found in S3, nothing to delete',
-        { action: 'deleteProfilePic', user: userId, key: key },
-        null,
-      )
-      throw new Error('Failed to delete file: No file exists with the given key')
+      throw new Error('Failed to delete file: No file exists with the given key', { cause: error })
     }
-    logError(
-      'Failed to delete file from S3',
-      err,
-      { action: 'deleteProfilePic', user: userId },
-      null,
-    )
-    throw new Error(`Failed to delete file: ${err.message}`)
+    throw new Error(`Failed to delete file: ${err.message}`, { cause: error })
   }
 }
 
@@ -161,61 +108,39 @@ export const uploadMedia = async ({
   file,
   mediaType,
   filePath,
-  userId,
 }: UploadMediaParams): Promise<string> => {
   if (!file) {
-    logWarn('No file provided', { action: 'uploadMedia', userId, mediaType })
     throw new Error('No file provided')
   }
 
   const rule = MEDIA_RULES[mediaType] as ImageMediaRule
 
   if (!rule) {
-    logWarn('Invalid media type', { action: 'uploadMedia', mediaType })
     throw new Error('Invalid media type')
   }
 
-  try {
-    if (file.size > rule.limits.maxInputBytes) {
-      throw new Error('Image too large')
-    }
-
-    const optimized = await optimizeImage(file.buffer, rule)
-
-    if (optimized.length > rule.output.maxBytes) {
-      throw new Error(`${mediaType} image exceeds size limit`)
-    }
-
-    const key = `${filePath}.webp`
-
-    const response = await s3.send(
-      new PutObjectCommand({
-        Bucket: BUCKET_NAME,
-        Key: key,
-        Body: optimized,
-        ContentType: 'image/webp',
-      }),
-    )
-
-    logInfo('Media uploaded', {
-      action: 'uploadMedia',
-      userId,
-      mediaType,
-      key,
-      size: optimized.length,
-      etag: response.ETag,
-    })
-
-    return `https://${BUCKET_NAME}.s3.amazonaws.com/${key}`
-  } catch (error) {
-    logError(
-      'Failed to upload media',
-      error as Error,
-      { action: 'uploadMedia', userId, mediaType, filePath },
-      null,
-    )
-    throw error
+  if (file.size > rule.limits.maxInputBytes) {
+    throw new Error('Image too large')
   }
+
+  const optimized = await optimizeImage(file.buffer, rule)
+
+  if (optimized.length > rule.output.maxBytes) {
+    throw new Error(`${mediaType} image exceeds size limit`)
+  }
+
+  const key = `${filePath}.webp`
+
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: BUCKET_NAME,
+      Key: key,
+      Body: optimized,
+      ContentType: 'image/webp',
+    }),
+  )
+
+  return `https://${BUCKET_NAME}.s3.amazonaws.com/${key}`
 }
 
 interface DeleteMediaParams {
@@ -226,8 +151,6 @@ interface DeleteMediaParams {
 
 export const deleteMediaByKey = async ({
   key,
-  userId,
-  reason,
 }: DeleteMediaParams): Promise<void> => {
   try {
     await s3.send(
@@ -236,21 +159,8 @@ export const deleteMediaByKey = async ({
         Key: key,
       }),
     )
-
-    logInfo('Rolled back media upload', {
-      action: 'deleteMediaByKey',
-      userId,
-      key,
-      reason,
-    })
-  } catch (error) {
-    // Rollback failure should NEVER crash the request
-    logError(
-      'Failed to rollback media upload',
-      error as Error,
-      { action: 'deleteMediaByKey', userId, key, reason },
-      null,
-    )
+  } catch (_error) {
+    // Rollback failure silent for now as requested
   }
 }
 
@@ -270,17 +180,14 @@ export const uploadVideo = async ({
   file,
   mediaType,
   filePath,
-  userId,
 }: UploadVideoParams): Promise<VideoUploadResult> => {
   if (!file) {
-    logWarn('No file provided', { action: 'uploadVideo', userId })
     throw new Error('No file provided')
   }
 
   const videoRule = MEDIA_RULES[mediaType] as VideoMediaRule
 
   if (!videoRule || videoRule.kind !== 'video') {
-    logWarn('Invalid media type for video', { action: 'uploadVideo', mediaType })
     throw new Error('Invalid media type for video')
   }
 
@@ -312,7 +219,7 @@ export const uploadVideo = async ({
     const videoKey = `${filePath}.${videoRule.output.format}`
     const videoBuffer = await fs.readFile(cleanedPath)
 
-    const videoUploadResponse = await s3.send(
+    await s3.send(
       new PutObjectCommand({
         Bucket: BUCKET_NAME,
         Key: videoKey,
@@ -321,27 +228,10 @@ export const uploadVideo = async ({
       }),
     )
 
-    logInfo('Video uploaded', {
-      action: 'uploadVideo',
-      userId,
-      mediaType,
-      videoKey,
-      videoSize: videoBuffer.length,
-      videoEtag: videoUploadResponse.ETag,
-    })
-
     return {
       videoUrl: `https://${BUCKET_NAME}.s3.amazonaws.com/${videoKey}`,
       videoKey,
     }
-  } catch (error) {
-    logError(
-      'Failed to upload video',
-      error as Error,
-      { action: 'uploadVideo', userId, filePath },
-      null,
-    )
-    throw error
   } finally {
     await fs.unlink(inputPath).catch(() => {})
     await fs.unlink(cleanedPath).catch(() => {})
@@ -366,10 +256,8 @@ interface ExerciseVideoUploadResult {
 export const uploadExerciseVideo = async ({
   file,
   filePath,
-  userId,
 }: UploadExerciseVideoParams): Promise<ExerciseVideoUploadResult> => {
   if (!file) {
-    logWarn('No file provided', { action: 'uploadExerciseVideo', userId })
     throw new Error('No file provided')
   }
 
@@ -430,7 +318,7 @@ export const uploadExerciseVideo = async ({
     const videoBuffer = await fs.readFile(cleanedPath)
 
     // Upload cleaned video
-    const videoUploadResponse = await s3.send(
+    await s3.send(
       new PutObjectCommand({
         Bucket: BUCKET_NAME,
         Key: videoKey,
@@ -440,7 +328,7 @@ export const uploadExerciseVideo = async ({
     )
 
     // Upload thumbnail
-    const thumbnailUploadResponse = await s3.send(
+    await s3.send(
       new PutObjectCommand({
         Bucket: BUCKET_NAME,
         Key: thumbnailKey,
@@ -449,31 +337,12 @@ export const uploadExerciseVideo = async ({
       }),
     )
 
-    logInfo('Exercise video and thumbnail uploaded', {
-      action: 'uploadExerciseVideo',
-      userId,
-      videoKey,
-      videoSize: videoBuffer.length,
-      videoEtag: videoUploadResponse.ETag,
-      thumbnailKey,
-      thumbnailSize: optimizedThumbnail.length,
-      thumbnailEtag: thumbnailUploadResponse.ETag,
-    })
-
     return {
       videoUrl: `https://${BUCKET_NAME}.s3.amazonaws.com/${videoKey}`,
       thumbnailUrl: `https://${BUCKET_NAME}.s3.amazonaws.com/${thumbnailKey}`,
       videoKey,
       thumbnailKey,
     }
-  } catch (error) {
-    logError(
-      'Failed to upload exercise video',
-      error as Error,
-      { action: 'uploadExerciseVideo', userId, filePath },
-      null,
-    )
-    throw error
   } finally {
     await fs.unlink(inputPath).catch(() => {})
     await fs.unlink(cleanedPath).catch(() => {})

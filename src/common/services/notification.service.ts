@@ -1,17 +1,12 @@
 import * as OneSignal from '@onesignal/node-onesignal'
 
 import { ApiError } from '../utils/ApiError.js'
-import { logError, logInfo } from '../utils/logger.js'
 
 /**
  * Service for handling push notifications via OneSignal
  */
 const ONESIGNAL_API_KEY = process.env.ONESIGNAL_API_KEY as string
 const ONESIGNAL_APP_ID = process.env.ONESIGNAL_APP_ID as string
-
-if (!ONESIGNAL_API_KEY || !ONESIGNAL_APP_ID) {
-  console.error('OneSignal credentials missing in environment variables')
-}
 
 const configuration = OneSignal.createConfiguration({
   restApiKey: ONESIGNAL_API_KEY,
@@ -48,14 +43,8 @@ export const NotificationService = {
         external_id: userIds,
       }
 
-      const response = await client.createNotification(notification)
-      logInfo('Push notification sent successfully', {
-        notificationId: response.id,
-        recipientCount: userIds.length,
-        userIds,
-      })
+      await client.createNotification(notification)
     } catch (error: any) {
-      logError('Failed to send push notification to users', error, { userIds, title })
       // We throw an error if it's a critical failure, but usually we don't want to break the main flow
       // depending on the context. For now, we follow the plan to log and throw.
       throw new ApiError(500, `Notification Service Error: ${error?.message || 'Unknown error'}`)
@@ -85,13 +74,8 @@ export const NotificationService = {
       notification.data = data
       notification.included_segments = segments
 
-      const response = await client.createNotification(notification)
-      logInfo('Segment push notification sent successfully', {
-        notificationId: response.id,
-        segments,
-      })
+      await client.createNotification(notification)
     } catch (error: any) {
-      logError('Failed to send push notification to segments', error, { segments, title })
       throw new ApiError(500, `Notification Service Error: ${error?.message || 'Unknown error'}`)
     }
   },

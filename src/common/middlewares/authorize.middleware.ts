@@ -4,7 +4,6 @@ import type { Request, Response, NextFunction, RequestHandler } from 'express'
 
 import type { UserRole } from '../types/index.js'
 import { ApiError } from '../utils/ApiError.js'
-import { logWarn } from '../utils/logger.js'
 
 const prisma = new PrismaClient().$extends(withAccelerate())
 
@@ -24,17 +23,6 @@ export const authorize = (...allowedRoles: UserRole[]): RequestHandler => {
     }
 
     if (!allowedRoles.includes(user.role)) {
-      logWarn(
-        'Authorization failed',
-        {
-          action: 'authorize',
-          userId: req.user.id,
-          role: user.role,
-          allowedRoles,
-        },
-        req,
-      )
-
       return next(new ApiError(403, 'Your role does not have permission to perform this action'))
     }
 
@@ -63,17 +51,6 @@ export const authorizeSelfOrAdmin = (paramName: string = 'id'): RequestHandler =
       return next()
     }
 
-    logWarn(
-      'Authorization failed',
-      {
-        action: 'authorizeSelfOrAdmin',
-        userId: req.user.id,
-        role: user.role,
-        paramName,
-        paramValue: req.params[paramName],
-      },
-      req,
-    )
     return next(new ApiError(403, 'You do not have permission to perform this action'))
   }
 }

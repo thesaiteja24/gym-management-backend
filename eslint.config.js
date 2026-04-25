@@ -29,7 +29,10 @@ export default tseslint.config(
 
       // Unused imports (AUTO FIX)
       'unused-imports/no-unused-imports': 'error',
-      '@typescript-eslint/no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
+      ],
 
       // TypeScript sanity
       '@typescript-eslint/no-explicit-any': 'warn',

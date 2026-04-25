@@ -6,7 +6,6 @@ import { setRefreshToken } from '../services/caching.service.js'
 import type { TokenPayload } from '../types/index.js'
 
 import { ApiError } from './ApiError.js'
-import { logInfo, logError } from './logger.js'
 
 const refreshTokenSecret = process.env.REFRESH_TOKEN_SECRET!
 const refreshTokenExpiry = process.env.REFRESH_TOKEN_EXPIRY! as StringValue
@@ -42,16 +41,9 @@ export const issueRefreshToken = async (user: UserForToken): Promise<string> => 
   try {
     refreshToken = jwt.sign(payload, refreshTokenSecret, options)
     await setRefreshToken(user.id, refreshToken, refreshTokenExpiry, true)
-    logInfo('Refresh token stored', { action: 'storeRefreshToken', user: user.id }, null)
     return refreshToken
   } catch (error) {
     const err = error as Error
-    logError(
-      `Failed issueRefreshToken: Token or Redis error`,
-      err,
-      { action: 'issueRefreshToken', user: user.id },
-      null,
-    )
     throw new ApiError(500, 'Authentication failed', [err.message])
   }
 }
@@ -76,16 +68,9 @@ export const issueAccessToken = async (user: UserForToken): Promise<string> => {
   const options: SignOptions = { expiresIn: accessTokenExpiry }
   try {
     const accessToken = jwt.sign(payload, accessTokenSecret, options)
-    logInfo('Access token issued', { action: 'issueAccessToken', user: user.id }, null)
     return accessToken
   } catch (error) {
     const err = error as Error
-    logError(
-      `Failed issueAccessToken: Token error`,
-      err,
-      { action: 'issueAccessToken', user: user.id },
-      null,
-    )
     throw new ApiError(500, 'Token generation failed', [err.message])
   }
 }

@@ -1,8 +1,11 @@
+import { PrismaClient } from '@prisma/client'
+import { withAccelerate } from '@prisma/extension-accelerate'
 import type { Request, Response, NextFunction } from 'express'
 
 import { ApiError } from '../utils/ApiError.js'
-import { logDebug, logError } from '../utils/logger.js'
 import { verifyAccessToken } from '../utils/tokens.js'
+
+const prisma = new PrismaClient().$extends(withAccelerate())
 
 export const authenticate = async (
   req: Request,
@@ -18,22 +21,26 @@ export const authenticate = async (
 
   try {
     const payload = verifyAccessToken(token)
-    logDebug('Token verified', { action: 'verifyAccessToken', payload }, req)
-    req.user = {
-      id: payload.id,
-      phoneE164: payload.phoneE164,
-      email: payload.email,
-      role: payload.role,
+    
+    // Verify user exists and get current role from DB
+    const user = await prisma.user.findUnique({
+      where: { id: payload.id },
+      select: { id: true, email: true, phoneE164: true, role: true },
+    })
+
+    if (!user) {
+      return next(new ApiError(401, 'User not found'))
     }
-    logDebug('User attached to request', { action: 'attachUser', user: req.user }, req)
+
+    req.user = {
+      id: user.id,
+      phoneE164: user.phoneE164,
+      email: user.email,
+      role: user.role,
+    }
+
     next()
-  } catch (error) {
-    logError(
-      'Failed verifyAccessToken: Invalid access token',
-      error as Error,
-      { action: 'verifyAccessToken' },
-      req,
-    )
+  } catch (_error) {
     return next(new ApiError(401, 'Invalid access token'))
   }
 }
