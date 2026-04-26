@@ -34,6 +34,89 @@ export const selfUserSelect = {
   updatedAt: true,
 }
 
+// HELPERS
+
+/**
+ * Formats a raw user object from Prisma into a SelfUser response.
+ */
+export function formatSelfUser(user: any): SelfUser {
+  if (!user) return null as any
+  return {
+    id: user.id,
+    firstName: user.firstName ?? null,
+    lastName: user.lastName ?? null,
+    profilePicUrl: user.profilePicUrl ?? null,
+    followersCount: user.followersCount ?? 0,
+    followingCount: user.followingCount ?? 0,
+    isPro: user.isPro ?? false,
+    proSubscriptionType: user.proSubscriptionType ?? null,
+    email: user.email ?? null,
+    countryCode: user.countryCode ?? null,
+    phone: user.phone ?? null,
+    height: user.height?.toNumber?.() ?? user.height ?? null,
+    weight: user.weight?.toNumber?.() ?? user.weight ?? null,
+    preferredLengthUnit: user.preferredLengthUnit ?? null,
+    preferredWeightUnit: user.preferredWeightUnit ?? null,
+    dateOfBirth: user.dateOfBirth?.toISOString?.() ?? user.dateOfBirth ?? null,
+    gender: user.gender ?? null,
+    role: user.role,
+    privacyPolicyAcceptedAt:
+      user.privacyPolicyAcceptedAt?.toISOString?.() ?? user.privacyPolicyAcceptedAt ?? null,
+    privacyPolicyVersion: user.privacyPolicyVersion ?? null,
+    phoneE164: user.phoneE164 ?? null,
+    createdAt: user.createdAt?.toISOString?.() ?? user.createdAt,
+    updatedAt: user.updatedAt?.toISOString?.() ?? user.updatedAt,
+  }
+}
+
+function formatFitnessProfile(profile: any) {
+  return {
+    ...profile,
+    targetWeight: profile.targetWeight?.toNumber?.() ?? profile.targetWeight ?? null,
+    targetBodyFat: profile.targetBodyFat?.toNumber?.() ?? profile.targetBodyFat ?? null,
+    weeklyWeightChange:
+      profile.weeklyWeightChange?.toNumber?.() ?? profile.weeklyWeightChange ?? null,
+    nutritionPlan: profile.nutritionPlan ? formatNutritionPlan(profile.nutritionPlan) : null,
+  }
+}
+
+function formatNutritionPlan(plan: any) {
+  return {
+    ...plan,
+  }
+}
+
+/**
+ * Helper to parse duration string (e.g. '1w', '1m') to a start date.
+ */
+export function parseDurationToStartDate(duration: string): Date | null {
+  const norm = duration.toLowerCase()
+  if (norm === 'all') return null
+
+  const now = new Date()
+  const start = new Date(now)
+
+  if (norm === '1w') {
+    start.setDate(start.getDate() - 7)
+    return start
+  }
+
+  const unit = norm.slice(-1)
+  const val = parseInt(norm.slice(0, -1)) || 0
+
+  if (unit === 'd') {
+    start.setDate(start.getDate() - val)
+  } else if (unit === 'm') {
+    start.setMonth(start.getMonth() - val)
+  } else if (unit === 'y') {
+    start.setFullYear(start.getFullYear() - val)
+  } else {
+    start.setMonth(start.getMonth() - 1)
+  }
+
+  return start
+}
+
 // FUNCTIONS
 
 /**
@@ -442,87 +525,4 @@ export async function getStrengthTrend(
   }
 
   return result
-}
-
-// OTHER HELPERS
-
-/**
- * Formats a raw user object from Prisma into a SelfUser response.
- */
-export function formatSelfUser(user: any): SelfUser {
-  if (!user) return null as any
-  return {
-    id: user.id,
-    firstName: user.firstName ?? null,
-    lastName: user.lastName ?? null,
-    profilePicUrl: user.profilePicUrl ?? null,
-    followersCount: user.followersCount ?? 0,
-    followingCount: user.followingCount ?? 0,
-    isPro: user.isPro ?? false,
-    proSubscriptionType: user.proSubscriptionType ?? null,
-    email: user.email ?? null,
-    countryCode: user.countryCode ?? null,
-    phone: user.phone ?? null,
-    height: user.height?.toNumber?.() ?? user.height ?? null,
-    weight: user.weight?.toNumber?.() ?? user.weight ?? null,
-    preferredLengthUnit: user.preferredLengthUnit ?? null,
-    preferredWeightUnit: user.preferredWeightUnit ?? null,
-    dateOfBirth: user.dateOfBirth?.toISOString?.() ?? user.dateOfBirth ?? null,
-    gender: user.gender ?? null,
-    role: user.role,
-    privacyPolicyAcceptedAt:
-      user.privacyPolicyAcceptedAt?.toISOString?.() ?? user.privacyPolicyAcceptedAt ?? null,
-    privacyPolicyVersion: user.privacyPolicyVersion ?? null,
-    phoneE164: user.phoneE164 ?? null,
-    createdAt: user.createdAt?.toISOString?.() ?? user.createdAt,
-    updatedAt: user.updatedAt?.toISOString?.() ?? user.updatedAt,
-  }
-}
-
-function formatFitnessProfile(profile: any) {
-  return {
-    ...profile,
-    targetWeight: profile.targetWeight?.toNumber?.() ?? profile.targetWeight ?? null,
-    targetBodyFat: profile.targetBodyFat?.toNumber?.() ?? profile.targetBodyFat ?? null,
-    weeklyWeightChange:
-      profile.weeklyWeightChange?.toNumber?.() ?? profile.weeklyWeightChange ?? null,
-    nutritionPlan: profile.nutritionPlan ? formatNutritionPlan(profile.nutritionPlan) : null,
-  }
-}
-
-function formatNutritionPlan(plan: any) {
-  return {
-    ...plan,
-  }
-}
-
-/**
- * Helper to parse duration string (e.g. '1w', '1m') to a start date.
- */
-export function parseDurationToStartDate(duration: string): Date | null {
-  const norm = duration.toLowerCase()
-  if (norm === 'all') return null
-
-  const now = new Date()
-  const start = new Date(now)
-
-  if (norm === '1w') {
-    start.setDate(start.getDate() - 7)
-    return start
-  }
-
-  const unit = norm.slice(-1)
-  const val = parseInt(norm.slice(0, -1)) || 0
-
-  if (unit === 'd') {
-    start.setDate(start.getDate() - val)
-  } else if (unit === 'm') {
-    start.setMonth(start.getMonth() - val)
-  } else if (unit === 'y') {
-    start.setFullYear(start.getFullYear() - val)
-  } else {
-    start.setMonth(start.getMonth() - 1)
-  }
-
-  return start
 }

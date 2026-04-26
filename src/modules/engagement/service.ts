@@ -32,7 +32,59 @@ export const engagementUserSelect = {
  * Returns a Prisma select object for user data with follower status.
  * @param currentUserId The ID of the user performing the request
  */
-export const getEngagementUserSelect = (currentUserId?: string) => getPublicUserSelect(currentUserId)
+export const getEngagementUserSelect = (currentUserId?: string) =>
+  getPublicUserSelect(currentUserId)
+
+//  HELPERS
+
+/**
+ * Formats a Prisma user result into a lean EngagementUser.
+ */
+export function formatLeanUser(user: any): EngagementUser {
+  if (!user) return null as any
+  return {
+    id: user.id,
+    firstName: user.firstName || '',
+    lastName: user.lastName || '',
+    profilePicUrl: user.profilePicUrl || null,
+  }
+}
+
+/**
+ * Formats a Prisma comment result into a CommentResponse.
+ */
+export function formatComment(comment: any): CommentResponse {
+  return {
+    id: comment.id,
+    userId: comment.userId,
+    content: comment.content,
+    parentId: comment.parentId,
+    workoutId: comment.workoutId,
+    likesCount: comment.likesCount || 0,
+    repliesCount: comment._count?.replies || 0,
+    createdAt: comment.createdAt.toISOString(),
+    updatedAt: comment.updatedAt.toISOString(),
+    deletedAt: comment.deletedAt ? comment.deletedAt.toISOString() : null,
+    user: formatLeanUser(comment.user),
+  }
+}
+
+/**
+ * Formats a Prisma like result into a LikeResponse.
+ */
+export function formatLike(
+  like: any,
+  targetId: string,
+  targetType: 'workout' | 'comment',
+): LikeResponse {
+  return {
+    id: `${like.userId}_${targetId}`,
+    userId: like.userId,
+    targetId,
+    targetType,
+    user: formatLeanUser(like.user),
+  }
+}
 
 // FUNCTIONS
 
@@ -120,7 +172,10 @@ export async function unFollowUser(followerId: string, followingId: string): Pro
 /**
  * Fetch followers of a user.
  */
-export async function getUserFollowers(userId: string, currentUserId: string): Promise<PublicUser[]> {
+export async function getUserFollowers(
+  userId: string,
+  currentUserId: string,
+): Promise<PublicUser[]> {
   const followers = await prisma.follow.findMany({
     where: { followingId: userId },
     include: {
@@ -133,7 +188,10 @@ export async function getUserFollowers(userId: string, currentUserId: string): P
 /**
  * Fetch users followed by a user.
  */
-export async function getUserFollowing(userId: string, currentUserId: string): Promise<PublicUser[]> {
+export async function getUserFollowing(
+  userId: string,
+  currentUserId: string,
+): Promise<PublicUser[]> {
   const following = await prisma.follow.findMany({
     where: { followerId: userId },
     include: {
@@ -435,55 +493,4 @@ export async function getComments(
   return isReply
     ? { replies: formattedComments, nextCursor }
     : { comments: formattedComments, nextCursor }
-}
-
-// OTHER HELPERS
-
-/**
- * Formats a Prisma user result into a lean EngagementUser.
- */
-export function formatLeanUser(user: any): EngagementUser {
-  if (!user) return null as any
-  return {
-    id: user.id,
-    firstName: user.firstName || '',
-    lastName: user.lastName || '',
-    profilePicUrl: user.profilePicUrl || null,
-  }
-}
-
-/**
- * Formats a Prisma comment result into a CommentResponse.
- */
-export function formatComment(comment: any): CommentResponse {
-  return {
-    id: comment.id,
-    userId: comment.userId,
-    content: comment.content,
-    parentId: comment.parentId,
-    workoutId: comment.workoutId,
-    likesCount: comment.likesCount || 0,
-    repliesCount: comment._count?.replies || 0,
-    createdAt: comment.createdAt.toISOString(),
-    updatedAt: comment.updatedAt.toISOString(),
-    deletedAt: comment.deletedAt ? comment.deletedAt.toISOString() : null,
-    user: formatLeanUser(comment.user),
-  }
-}
-
-/**
- * Formats a Prisma like result into a LikeResponse.
- */
-export function formatLike(
-  like: any,
-  targetId: string,
-  targetType: 'workout' | 'comment',
-): LikeResponse {
-  return {
-    id: `${like.userId}_${targetId}`,
-    userId: like.userId,
-    targetId,
-    targetType,
-    user: formatLeanUser(like.user),
-  }
 }
