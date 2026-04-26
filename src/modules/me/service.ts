@@ -202,7 +202,7 @@ export async function buildMeasurementPayload(userId: string, startDate?: Date |
 export async function processMeasurements(userId: string, data: any) {
   const { date, ...metrics } = data
   const entryDate = new Date(date)
-  entryDate.setHours(0, 0, 0, 0)
+  entryDate.setUTCHours(0, 0, 0, 0)
 
   const measurement = await prisma.userMeasurement.upsert({
     where: {

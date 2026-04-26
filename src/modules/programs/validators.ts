@@ -1,14 +1,13 @@
 import { FitnessLevel } from '@prisma/client'
 import { z } from 'zod'
 
+// SECTION: SHARED SCHEMAS
+
 const daySchema = z
   .object({
     name: z.string().min(1, 'Day name is required').trim(),
-
     dayIndex: z.number().int().min(0).max(6, 'dayIndex must be between 0 and 6'),
-
     isRestDay: z.boolean(),
-
     templateId: z.uuid('Invalid Template ID').optional().nullable(),
   })
   .superRefine((day, ctx) => {
@@ -32,9 +31,7 @@ const daySchema = z
 const weekSchema = z
   .object({
     name: z.string().min(1, 'Week name is required').trim(),
-
     weekIndex: z.number().int().min(0),
-
     days: z
       .array(daySchema)
       .min(1, 'At least one day is required')
@@ -42,7 +39,6 @@ const weekSchema = z
   })
   .superRefine((week, ctx) => {
     const seen = new Set<number>()
-
     week.days.forEach((day, i) => {
       if (seen.has(day.dayIndex)) {
         ctx.addIssue({
@@ -54,6 +50,8 @@ const weekSchema = z
       seen.add(day.dayIndex)
     })
   })
+
+// SECTION: PROGRAM SCHEMAS
 
 export const createProgramSchema = z.object({
   body: z
@@ -114,22 +112,10 @@ export const deleteProgramSchema = z.object({
   }),
 })
 
-// User Specific Validators
-export const listUserProgramsSchema = z.object({
-  params: z.object({
-    userId: z.uuid('Invalid User ID'),
-  }),
-})
-
-export const getActiveUserProgramSchema = z.object({
-  params: z.object({
-    userId: z.uuid('Invalid User ID'),
-  }),
-})
+// SECTION: USER PROGRAM SCHEMAS
 
 export const startProgramSchema = z.object({
   params: z.object({
-    userId: z.uuid('Invalid User ID'),
     programId: z.uuid('Invalid Program ID'),
   }),
   body: z.object({
@@ -140,7 +126,6 @@ export const startProgramSchema = z.object({
 
 export const getUserProgramSchema = z.object({
   params: z.object({
-    userId: z.uuid('Invalid User ID'),
     userProgramId: z.uuid('Invalid User Program ID'),
   }),
   query: z.object({
