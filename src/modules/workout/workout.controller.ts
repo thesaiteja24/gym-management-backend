@@ -9,6 +9,7 @@ import { generateSecureToken } from '../../utils/helpers.js'
 
 import type { CreateWorkoutBody, UpdateWorkoutBody } from './workout.service.js'
 import * as workoutService from './workout.service.js'
+import { invalidateUserProgramCache } from '../programs/service.js'
 
 const prisma = new PrismaClient().$extends(withAccelerate())
 
@@ -66,6 +67,11 @@ export const createWorkout = asyncHandler(
           await workoutService.advanceProgramProgress(tx, userProgramDayId, workoutId)
         }
       })
+
+      // Invalidate program cache if it was a program workout
+      if (userProgramDayId) {
+        await invalidateUserProgramCache(req.user!.id)
+      }
     } catch (_error) {
       throw _error instanceof ApiError ? _error : new ApiError(500, 'Failed to create workout')
     }

@@ -125,4 +125,13 @@ export const deleteCache = async (key: string): Promise<boolean> => {
   return deleted > 0
 }
 
+export const invalidateCachePattern = async (pattern: string): Promise<void> => {
+  const stream = redisClient.scanStream({ match: pattern })
+  for await (const keys of stream) {
+    if (keys.length > 0) {
+      await redisClient.del(...keys)
+    }
+  }
+}
+
 export { redisClient }

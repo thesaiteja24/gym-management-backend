@@ -5,10 +5,18 @@ import { ApiError } from '../../utils/ApiError.js'
 import { formatCompactNumber } from '../../utils/helpers.js'
 import type {
   CreateProgramBody,
+  Program,
   ProgramResponse,
   UpdateProgramBody,
   UserProgramResponse,
 } from './types.js'
+import {
+  deleteCache,
+  getCache,
+  invalidateCachePattern,
+  redisClient,
+  setCache,
+} from '../../service/caching.service.js'
 
 // SECTION: CONFIG
 
@@ -24,8 +32,39 @@ const standardProgramSelect = {
 
 // SECTION: CONSTANTS
 
-const GET_ALL_PROGRAMS_CACHE = 'programs:all'
-const ALL_PROGRAMS_CACHE_TTL = '365d'
+const getProgramsCacheKey = (page: number, limit: number) => `programs:all:${page}:${limit}`
+const getProgramByIdCacheKey = (id: string) => `programs:id:${id}`
+
+// User-specific keys include the current date (UTC) to ensure once-a-day synchronization
+// even if explicit invalidation is missed.
+const getDateStr = () => new Date().toISOString().split('T')[0]
+const getActiveUserProgramCacheKey = (userId: string) =>
+  `programs:user:active:${userId}:${getDateStr()}`
+const getUserProgramByIdCacheKey = (upId: string, week: number) =>
+  `programs:user:id:${upId}:${week}:${getDateStr()}`
+const getUserProgramListCacheKey = (userId: string) =>
+  `programs:user:list:${userId}:${getDateStr()}`
+
+const PROGRAMS_CACHE_TTL = '365d'
+const USER_PROGRAM_CACHE_TTL = '1d'
+
+// SECTION: CACHE HELPERS
+
+/**
+ * Public helper to invalidate all program caches for a specific user.
+ */
+export async function invalidateUserProgramCache(userId: string, userProgramId?: string) {
+  const stream = redisClient.scanStream({
+    match: `programs:user:*:${userId}:*`,
+  })
+  for await (const keys of stream) {
+    if (keys.length > 0) await redisClient.del(...keys)
+  }
+
+  if (userProgramId) {
+    await invalidateCachePattern(`programs:user:id:${userProgramId}:*`)
+  }
+}
 
 // SECTION: FORMATTERS
 
@@ -64,6 +103,10 @@ export function formatUserProgram(userProgram: any): UserProgramResponse {
  * Fetches all programs with pagination.
  */
 export async function getAllPrograms(page: number, limit: number) {
+  const cacheKey = getProgramsCacheKey(page, limit)
+  const cached = await getCache<any>(cacheKey)
+  if (cached) return cached
+
   const skip = (page - 1) * limit
 
   const [programs, total] = await Promise.all([
@@ -83,13 +126,22 @@ export async function getAllPrograms(page: number, limit: number) {
     enrolledCountLabel: formatCompactNumber(p._count.userPrograms),
   }))
 
-  return { programs: results, pagination: { total, page, limit, pages: Math.ceil(total / limit) } }
+  const response = {
+    programs: results,
+    pagination: { total, page, limit, pages: Math.ceil(total / limit) },
+  }
+  await setCache(cacheKey, response, PROGRAMS_CACHE_TTL)
+  return response
 }
 
 /**
  * Fetches a single program by ID with full week/day details.
  */
 export async function getProgramById(programId: string): Promise<ProgramResponse> {
+  const cacheKey = getProgramByIdCacheKey(programId)
+  const cached = await getCache<ProgramResponse>(cacheKey)
+  if (cached) return cached
+
   const program = await prisma.program.findUnique({
     where: { id: programId },
     include: {
@@ -113,7 +165,10 @@ export async function getProgramById(programId: string): Promise<ProgramResponse
   })
 
   if (!program) throw new ApiError(404, 'Program not found')
-  return program as any
+
+  const response = program as Program
+  await setCache(cacheKey, response, PROGRAMS_CACHE_TTL)
+  return response
 }
 
 /**
@@ -141,7 +196,7 @@ export async function createProgram(userId: string, body: CreateProgramBody) {
     }
   }
 
-  return prisma.program.create({
+  const result = await prisma.program.create({
     data: {
       clientId,
       title,
@@ -165,6 +220,9 @@ export async function createProgram(userId: string, body: CreateProgramBody) {
       },
     },
   })
+
+  await invalidateCachePattern('programs:all:*')
+  return result
 }
 
 /**
@@ -182,7 +240,7 @@ export async function updateProgram(programId: string, userId: string, body: Upd
     throw new ApiError(403, 'Unauthorized')
   }
 
-  return prisma.$transaction(async (tx) => {
+  const res = await prisma.$transaction(async (tx) => {
     await tx.program.update({
       where: { id: programId },
       data: { title, description, experienceLevel, durationOptions },
@@ -209,11 +267,20 @@ export async function updateProgram(programId: string, userId: string, body: Upd
       }
     }
 
-    return tx.program.findUnique({
+    const result = await tx.program.findUnique({
       where: { id: programId },
       include: { weeks: { include: { days: { include: { template: true } } } } },
     })
+
+    return result
   })
+
+  await Promise.all([
+    invalidateCachePattern('programs:all:*'),
+    deleteCache(getProgramByIdCacheKey(programId)),
+  ])
+
+  return res
 }
 
 /**
@@ -232,6 +299,11 @@ export async function deleteProgram(programId: string, userId: string) {
     where: { id: programId },
     data: { deletedAt: new Date() },
   })
+
+  await Promise.all([
+    invalidateCachePattern('programs:all:*'),
+    deleteCache(getProgramByIdCacheKey(programId)),
+  ])
 }
 
 // SECTION: USER PROGRAM SERVICES
@@ -369,6 +441,16 @@ export async function syncAndPopulateUserProgram(userProgram: any) {
       templateSnapshot: currentDayData.templateSnapshot,
     }
   }
+
+  // If progress advanced, invalidate user caches
+  if (advanced) {
+    await Promise.all([
+      deleteCache(getActiveUserProgramCacheKey(userProgram.userId)),
+      deleteCache(getUserProgramListCacheKey(userProgram.userId)),
+      invalidateCachePattern(`programs:user:id:${userProgram.id}:*`),
+    ])
+  }
+
   return userProgram
 }
 
@@ -383,7 +465,24 @@ export async function startProgram(
 ): Promise<UserProgramResponse> {
   const program = await prisma.program.findUnique({
     where: { id: programId },
-    include: { weeks: { include: { days: { include: { template: true } } } } },
+    include: {
+      weeks: {
+        orderBy: { weekIndex: 'asc' },
+        include: {
+          days: {
+            orderBy: { dayIndex: 'asc' },
+            include: {
+              template: {
+                include: {
+                  exerciseGroups: true,
+                  exercises: { include: { sets: true, exercise: true } },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
   })
 
   if (!program) throw new ApiError(404, 'Program not found')
@@ -420,6 +519,12 @@ export async function startProgram(
     })
   })
 
+  await Promise.all([
+    invalidateCachePattern('programs:all:*'), // Count changed
+    deleteCache(getActiveUserProgramCacheKey(userId)),
+    deleteCache(getUserProgramListCacheKey(userId)),
+  ])
+
   return formatUserProgram(result)
 }
 
@@ -431,6 +536,10 @@ export async function getUserProgramById(
   userProgramId: string,
   requestedWeek: number,
 ): Promise<UserProgramResponse> {
+  const cacheKey = getUserProgramByIdCacheKey(userProgramId, requestedWeek)
+  const cached = await getCache<UserProgramResponse>(cacheKey)
+  if (cached) return cached
+
   let up = await prisma.userProgram.findUnique({
     where: { id: userProgramId },
     include: {
@@ -448,7 +557,24 @@ export async function getUserProgramById(
   if (up.weeks.length === 0 && requestedWeek < up.durationWeeks) {
     const base = await prisma.program.findUnique({
       where: { id: up.programId },
-      include: { weeks: { include: { days: { include: { template: true } } } } },
+      include: {
+        weeks: {
+          orderBy: { weekIndex: 'asc' },
+          include: {
+            days: {
+              orderBy: { dayIndex: 'asc' },
+              include: {
+                template: {
+                  include: {
+                    exerciseGroups: true,
+                    exercises: { include: { sets: true, exercise: true } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
     })
 
     if (base) {
@@ -474,13 +600,19 @@ export async function getUserProgramById(
   }
 
   up = await syncAndPopulateUserProgram(up)
-  return formatUserProgram(up)
+  const response = formatUserProgram(up)
+  await setCache(cacheKey, response, USER_PROGRAM_CACHE_TTL)
+  return response
 }
 
 /**
  * Fetches the active program for a user.
  */
 export async function getActiveUserProgram(userId: string): Promise<UserProgramResponse | null> {
+  const cacheKey = getActiveUserProgramCacheKey(userId)
+  const cached = await getCache<UserProgramResponse>(cacheKey)
+  if (cached) return cached
+
   let up = await prisma.userProgram.findFirst({
     where: { userId, status: 'active' },
     orderBy: { createdAt: 'desc' },
@@ -490,18 +622,26 @@ export async function getActiveUserProgram(userId: string): Promise<UserProgramR
   if (!up) return null
 
   up = await syncAndPopulateUserProgram(up)
-  return formatUserProgram(up)
+  const response = formatUserProgram(up)
+  await setCache(cacheKey, response, USER_PROGRAM_CACHE_TTL)
+  return response
 }
 
 /**
  * Lists all programs for a user.
  */
 export async function listUserPrograms(userId: string): Promise<UserProgramResponse[]> {
+  const cacheKey = getUserProgramListCacheKey(userId)
+  const cached = await getCache<UserProgramResponse[]>(cacheKey)
+  if (cached) return cached
+
   const ups = await prisma.userProgram.findMany({
     where: { userId },
     orderBy: { createdAt: 'desc' },
     include: { program: { select: standardProgramSelect }, progress: true },
   })
 
-  return ups.map((up) => formatUserProgram(up))
+  const response = ups.map((up) => formatUserProgram(up))
+  await setCache(cacheKey, response, USER_PROGRAM_CACHE_TTL)
+  return response
 }
