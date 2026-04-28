@@ -5,6 +5,7 @@ import { NotificationService } from '../../service/notification.service.js'
 import { ApiError } from '../../utils/ApiError.js'
 import { formatPublicUser, getPublicUserSelect } from '../user/service.js'
 import type { PublicUser } from '../user/types.js'
+
 import type {
   CommentResponse,
   CommentsListResponse,

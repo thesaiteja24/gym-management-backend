@@ -40,12 +40,6 @@ export const googleLogin = asyncHandler(
 
     return res
       .status(200)
-      .json(
-        new ApiResponse(
-          200,
-          { user, accessToken, refreshToken },
-          'Google login successful',
-        ),
-      )
+      .json(new ApiResponse(200, { user, accessToken, refreshToken }, 'Google login successful'))
   },
 )

@@ -1,6 +1,8 @@
 import { PrismaClient } from '@prisma/client'
 import { withAccelerate } from '@prisma/extension-accelerate'
+
 import { ApiError } from '../../utils/ApiError.js'
+
 import type { SelfUser, UpdateProfileBody } from './types.js'
 
 // CONSTANTS

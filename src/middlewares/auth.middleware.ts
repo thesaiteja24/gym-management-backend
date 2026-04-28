@@ -2,8 +2,8 @@ import { PrismaClient } from '@prisma/client'
 import { withAccelerate } from '@prisma/extension-accelerate'
 import type { Request, Response, NextFunction } from 'express'
 
-import { ApiError } from '../utils/ApiError.js'
 import { verifyAccessToken } from '../modules/auth/providers/token.provider.js'
+import { ApiError } from '../utils/ApiError.js'
 
 const prisma = new PrismaClient().$extends(withAccelerate())
 
@@ -21,7 +21,7 @@ export const authenticate = async (
 
   try {
     const payload = verifyAccessToken(token)
-    
+
     // Verify user exists and get current role from DB
     const user = await prisma.user.findUnique({
       where: { id: payload.id },
@@ -59,7 +59,7 @@ export const authenticateOptional = async (
 
   try {
     const payload = verifyAccessToken(token)
-    
+
     const user = await prisma.user.findUnique({
       where: { id: payload.id },
       select: { id: true, email: true, phoneE164: true, role: true },
@@ -76,6 +76,6 @@ export const authenticateOptional = async (
   } catch (_error) {
     // Ignore errors for optional authentication
   }
-  
+
   next()
 }

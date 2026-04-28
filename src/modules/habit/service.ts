@@ -2,13 +2,8 @@ import { PrismaClient, HabitSource } from '@prisma/client'
 import { withAccelerate } from '@prisma/extension-accelerate'
 
 import { ApiError } from '../../utils/ApiError.js'
-import type {
-  CreateHabitBody,
-  Habit,
-  HabitLog,
-  HabitLogsMap,
-  UpdateHabitBody,
-} from './types.js'
+
+import type { CreateHabitBody, Habit, HabitLog, HabitLogsMap, UpdateHabitBody } from './types.js'
 
 // CONSTANTS
 
@@ -91,11 +86,7 @@ export async function deleteHabit(id: string): Promise<void> {
 /**
  * Log progress for a habit.
  */
-export async function logHabit(
-  habitId: string,
-  date: string,
-  value: number,
-): Promise<HabitLog> {
+export async function logHabit(habitId: string, date: string, value: number): Promise<HabitLog> {
   const existing = await prisma.habit.findUnique({ where: { id: habitId } })
   if (!existing) throw new ApiError(404, 'Habit not found')
 
@@ -150,9 +141,7 @@ export async function getProcessedHabitLogs(
   const internalHabits = habits.filter((h) => h.source === HabitSource.internal)
   if (internalHabits.length > 0) {
     const metrics = internalHabits.map((h) => h.internalMetricId)
-    const needsMeasurements = metrics.some((m) =>
-      ['weight', 'bodyFat', 'waist'].includes(m || ''),
-    )
+    const needsMeasurements = metrics.some((m) => ['weight', 'bodyFat', 'waist'].includes(m || ''))
     const needsWorkouts = metrics.includes('workout')
 
     const [measurements, workouts] = await Promise.all([

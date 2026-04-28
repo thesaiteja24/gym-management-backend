@@ -14,11 +14,9 @@ redisClient.connect().catch(() => {
   throw new Error(`Redis connection failed`)
 })
 
-redisClient.on('connect', () => {
-})
+redisClient.on('connect', () => {})
 
-redisClient.on('error', () => {
-})
+redisClient.on('error', () => {})
 
 redisClient.on('ready', async () => {
   // Health check ping
@@ -28,8 +26,7 @@ redisClient.on('ready', async () => {
   }
 })
 
-redisClient.on('close', () => {
-})
+redisClient.on('close', () => {})
 
 process.on('SIGINT', async () => {
   if (redisClient) {

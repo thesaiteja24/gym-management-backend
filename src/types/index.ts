@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express'
-import { TokenPayload } from '../modules/auth/types.js'
+
+import type { TokenPayload } from '../modules/auth/types.js'
 
 // User role enum (mirrors Prisma enum)
 export type UserRole = 'systemAdmin' | 'gymAdmin' | 'trainer' | 'member'

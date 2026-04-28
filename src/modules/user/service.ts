@@ -1,6 +1,8 @@
 import { PrismaClient } from '@prisma/client'
 import { withAccelerate } from '@prisma/extension-accelerate'
+
 import { ApiError } from '../../utils/ApiError.js'
+
 import type { PublicUser } from './types.js'
 
 // CONSTANTS
@@ -74,6 +76,6 @@ export function formatPublicUser(user: any, currentUserId?: string): PublicUser 
     followingCount: user.followingCount || 0,
     isPro: user.isPro || false,
     proSubscriptionType: user.proSubscriptionType || null,
-    isFollowing: currentUserId ? (user.followers?.length > 0) : undefined,
+    isFollowing: currentUserId ? user.followers?.length > 0 : undefined,
   }
 }

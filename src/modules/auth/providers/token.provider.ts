@@ -3,7 +3,6 @@ import jwt from 'jsonwebtoken'
 import type { StringValue } from 'ms'
 
 import { setRefreshToken } from '../../../service/caching.service.js'
-
 import { ApiError } from '../../../utils/ApiError.js'
 import type { TokenPayload, UserForToken } from '../types.js'
 

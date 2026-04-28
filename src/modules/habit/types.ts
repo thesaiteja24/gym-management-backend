@@ -1,4 +1,4 @@
-import { HabitSource, HabitTrackingType, HabitFooterType } from '@prisma/client'
+import type { HabitSource, HabitTrackingType, HabitFooterType } from '@prisma/client'
 
 // MAIN
 

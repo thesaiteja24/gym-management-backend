@@ -1,4 +1,4 @@
-import { EquipmentType } from '@prisma/client'
+import type { EquipmentType } from '@prisma/client'
 
 // MAIN
 

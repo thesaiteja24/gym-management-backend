@@ -1,5 +1,6 @@
-import { ExerciseType } from '@prisma/client'
-import { EquipmentItem, MetaItem } from '../meta/types.js'
+import type { ExerciseType } from '@prisma/client'
+
+import type { EquipmentItem, MetaItem } from '../meta/types.js'
 
 // MAIN
 

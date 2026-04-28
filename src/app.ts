@@ -3,9 +3,9 @@ import cors from 'cors'
 import type { Express } from 'express'
 import express from 'express'
 
+import { indexRoutes } from './index.routes.js'
 import { globalErrorHandler } from './middlewares/globalErrorHandler.js'
 import { mountSwagger } from './utils/swagger.js'
-import { indexRoutes } from './index.routes.js'
 
 const app: Express = express()
 

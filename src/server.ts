@@ -6,8 +6,7 @@ const PORT = process.env.PORT || 9999
 
 const server = http.createServer(app)
 
-server.listen(PORT, () => {
-})
+server.listen(PORT, () => {})
 
 process.on('unhandledRejection', (_reason: unknown) => {
   // Silent or new logging will go here

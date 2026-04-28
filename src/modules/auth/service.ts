@@ -4,6 +4,7 @@ import { withAccelerate } from '@prisma/extension-accelerate'
 import { getRefreshToken } from '../../service/caching.service.js'
 import { ApiError } from '../../utils/ApiError.js'
 import { formatSelfUser, selfUserSelect } from '../me/service.js'
+
 import { verifyGoogleToken } from './providers/google.provider.js'
 import {
   issueAccessToken,
@@ -17,7 +18,7 @@ const prisma = new PrismaClient().$extends(withAccelerate())
 
 // QUERY HELPERS
 /**
- * Internal select for Auth logic that includes fields needed for 
+ * Internal select for Auth logic that includes fields needed for
  * account linking and subscription checks, but aren't necessarily in the public profile.
  */
 const authUserSelect = {

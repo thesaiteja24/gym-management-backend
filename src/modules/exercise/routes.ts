@@ -5,6 +5,7 @@ import { authenticate } from '../../middlewares/auth.middleware.js'
 import { authorize } from '../../middlewares/authorize.middleware.js'
 import { upload } from '../../middlewares/upload.middleware.js'
 import { validateResource } from '../../middlewares/validate.middleware.js'
+
 import {
   createExercise,
   deleteExercise,

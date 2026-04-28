@@ -1,4 +1,4 @@
-import { FitnessLevel, UserProgramStatus } from '@prisma/client'
+import type { FitnessLevel, UserProgramStatus } from '@prisma/client'
 
 // SECTION: MAIN ENTITIES
 

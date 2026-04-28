@@ -2,6 +2,7 @@ import type { Request, Response } from 'express'
 
 import { ApiResponse } from '../../utils/ApiResponse.js'
 import { asyncHandler } from '../../utils/asyncHandler.js'
+
 import * as engagementService from './service.js'
 import type { GetCommentsQuery, GetLikesQuery, ToggleLikeQuery } from './types.js'
 
@@ -14,7 +15,9 @@ export const followUser = asyncHandler(async (req: Request, res: Response) => {
   const followerId = req.user!.id
   const followingId = req.params.id as string
   const user = await engagementService.followUser(followerId, followingId)
-  return res.status(200).json(new ApiResponse(200, { user, status: 'following' }, 'Followed user successfully'))
+  return res
+    .status(200)
+    .json(new ApiResponse(200, { user, status: 'following' }, 'Followed user successfully'))
 })
 
 /**
@@ -24,7 +27,9 @@ export const unFollowUser = asyncHandler(async (req: Request, res: Response) => 
   const followerId = req.user!.id
   const followingId = req.params.id as string
   const user = await engagementService.unFollowUser(followerId, followingId)
-  return res.status(200).json(new ApiResponse(200, { user, status: 'not_following' }, 'Unfollowed user successfully'))
+  return res
+    .status(200)
+    .json(new ApiResponse(200, { user, status: 'not_following' }, 'Unfollowed user successfully'))
 })
 
 /**
@@ -131,6 +136,11 @@ export const getComments = asyncHandler(async (req: Request, res: Response) => {
   const isReplyBool = isReply === 'true'
   const limitNum = parseInt(limit || '10')
 
-  const result = await engagementService.getComments(targetId, isReplyBool, limitNum, cursor as string | undefined)
+  const result = await engagementService.getComments(
+    targetId,
+    isReplyBool,
+    limitNum,
+    cursor as string | undefined,
+  )
   return res.status(200).json(new ApiResponse(200, result, 'Comments fetched successfully'))
 })

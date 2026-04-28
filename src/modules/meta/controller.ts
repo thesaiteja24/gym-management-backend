@@ -2,6 +2,7 @@ import type { Request, Response } from 'express'
 
 import { ApiResponse } from '../../utils/ApiResponse.js'
 import { asyncHandler } from '../../utils/asyncHandler.js'
+
 import * as metaService from './service.js'
 import type { MetaResource } from './types.js'
 
@@ -30,13 +31,7 @@ export const getMetaById = asyncHandler(async (req: Request, res: Response) => {
  */
 export const upsertMeta = asyncHandler(async (req: Request, res: Response) => {
   const { resource, id } = req.params as { resource: MetaResource; id?: string }
-  const result = await metaService.upsertMeta(
-    resource,
-    id,
-    req.body,
-    req.file,
-    req.user?.id
-  )
+  const result = await metaService.upsertMeta(resource, id, req.body, req.file, req.user?.id)
   return res.status(200).json(new ApiResponse(200, result, 'Saved successfully'))
 })
 

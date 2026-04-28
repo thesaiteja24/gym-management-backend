@@ -2,6 +2,7 @@ import type { Request, Response } from 'express'
 
 import { ApiResponse } from '../../utils/ApiResponse.js'
 import { asyncHandler } from '../../utils/asyncHandler.js'
+
 import * as habitService from './service.js'
 import type { CreateHabitBody, LogHabitBody, UpdateHabitBody } from './types.js'
 

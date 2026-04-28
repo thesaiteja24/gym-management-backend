@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto'
+
 import { PrismaClient } from '@prisma/client'
 import { withAccelerate } from '@prisma/extension-accelerate'
 
@@ -11,6 +12,7 @@ import {
 } from '../../service/media.service.js'
 import { ApiError } from '../../utils/ApiError.js'
 import { titleizeString } from '../../utils/helpers.js'
+
 import type { CreateExerciseBody, ExerciseResponse, UpdateExerciseBody } from './types.js'
 
 // CONSTANTS
@@ -38,7 +40,7 @@ const exerciseSelect = {
 /**
  * Flattens a Prisma exercise result by mapping otherMuscleGroups.
  */
-const flattenExercise = (ex: any): ExerciseResponse => ({
+export const flattenExercise = (ex: any): ExerciseResponse => ({
   ...ex,
   otherMuscleGroups: ex.otherMuscleGroups?.map((omg: any) => omg.muscleGroup) || [],
 })

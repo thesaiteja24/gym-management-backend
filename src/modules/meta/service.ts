@@ -1,15 +1,13 @@
 import { randomUUID } from 'crypto'
+
 import { PrismaClient } from '@prisma/client'
 import { withAccelerate } from '@prisma/extension-accelerate'
 
 import { deleteCache, getCache, setCache } from '../../service/caching.service.js'
-import {
-  deleteMediaByKey,
-  extractS3KeyFromUrl,
-  uploadMedia,
-} from '../../service/media.service.js'
+import { deleteMediaByKey, extractS3KeyFromUrl, uploadMedia } from '../../service/media.service.js'
 import { ApiError } from '../../utils/ApiError.js'
 import { titleizeString } from '../../utils/helpers.js'
+
 import type { MetaItem, MetaResource, UpsertMetaBody } from './types.js'
 
 // CONSTANTS
@@ -134,7 +132,11 @@ export async function upsertMeta(
 /**
  * Delete a meta item.
  */
-export async function deleteMeta(resource: MetaResource, id: string, userId: string): Promise<MetaItem> {
+export async function deleteMeta(
+  resource: MetaResource,
+  id: string,
+  userId: string,
+): Promise<MetaItem> {
   const config = RESOURCE_CONFIG[resource]
   const existing = await config.model.findUnique({ where: { id } })
   if (!existing) throw new ApiError(404, `${config.label} not found`)

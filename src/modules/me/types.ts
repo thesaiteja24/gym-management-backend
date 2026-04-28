@@ -1,4 +1,5 @@
-import { Gender, LengthUnits, WeightUnits } from '@prisma/client'
+import type { Gender, LengthUnits, WeightUnits } from '@prisma/client'
+
 import type { UserRole } from '../../types/index.js'
 
 // MAIN

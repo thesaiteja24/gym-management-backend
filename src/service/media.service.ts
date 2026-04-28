@@ -38,7 +38,10 @@ export const extractS3KeyFromUrl = (url: string | null | undefined): string | nu
   return new URL(url).pathname.substring(1)
 }
 
-export const uploadProfilePicture = async (file: UploadedFile, _userId: string): Promise<string> => {
+export const uploadProfilePicture = async (
+  file: UploadedFile,
+  _userId: string,
+): Promise<string> => {
   if (!file) {
     throw new Error('No file provided')
   }
@@ -149,9 +152,7 @@ interface DeleteMediaParams {
   reason: string
 }
 
-export const deleteMediaByKey = async ({
-  key,
-}: DeleteMediaParams): Promise<void> => {
+export const deleteMediaByKey = async ({ key }: DeleteMediaParams): Promise<void> => {
   try {
     await s3.send(
       new DeleteObjectCommand({

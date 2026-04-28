@@ -3,6 +3,7 @@ import type { Request, Response } from 'express'
 import type { UploadedFile } from '../../service/media.service.js'
 import { ApiResponse } from '../../utils/ApiResponse.js'
 import { asyncHandler } from '../../utils/asyncHandler.js'
+
 import * as exerciseService from './service.js'
 import type { CreateExerciseBody, UpdateExerciseBody } from './types.js'
 
@@ -41,7 +42,12 @@ export const createExercise = asyncHandler(
 export const updateExercise = asyncHandler(
   async (req: Request<{ id: string }, object, UpdateExerciseBody>, res: Response) => {
     const video = req.file as UploadedFile | undefined
-    const exercise = await exerciseService.updateExercise(req.params.id, req.body, video, req.user!.id)
+    const exercise = await exerciseService.updateExercise(
+      req.params.id,
+      req.body,
+      video,
+      req.user!.id,
+    )
     return res.status(200).json(new ApiResponse(200, exercise, 'Exercise updated successfully'))
   },
 )

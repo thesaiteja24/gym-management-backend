@@ -1,4 +1,5 @@
 import { OAuth2Client } from 'google-auth-library'
+
 import { ApiError } from '../../../utils/ApiError.js'
 import type { GooglePayload } from '../types.js'
 
@@ -25,7 +26,7 @@ export async function verifyGoogleToken(idToken: string): Promise<GooglePayload>
     })
     const payload = ticket.getPayload()
     if (!payload) throw new ApiError(401, 'Invalid Google payload')
-    
+
     return payload as GooglePayload
   } catch (_error) {
     throw new ApiError(401, 'Invalid Google Token')

@@ -1,15 +1,6 @@
 import { PrismaClient } from '@prisma/client'
 import { withAccelerate } from '@prisma/extension-accelerate'
 
-import { ApiError } from '../../utils/ApiError.js'
-import { formatCompactNumber } from '../../utils/helpers.js'
-import type {
-  CreateProgramBody,
-  Program,
-  ProgramResponse,
-  UpdateProgramBody,
-  UserProgramResponse,
-} from './types.js'
 import {
   deleteCache,
   getCache,
@@ -17,6 +8,16 @@ import {
   redisClient,
   setCache,
 } from '../../service/caching.service.js'
+import { ApiError } from '../../utils/ApiError.js'
+import { formatCompactNumber } from '../../utils/helpers.js'
+
+import type {
+  CreateProgramBody,
+  Program,
+  ProgramResponse,
+  UpdateProgramBody,
+  UserProgramResponse,
+} from './types.js'
 
 // SECTION: CONFIG
 

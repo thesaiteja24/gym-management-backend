@@ -10,13 +10,13 @@ import { habitRoutes } from './modules/habit/routes.js'
 import { healthCheckRoutes } from './modules/healthCheck/healthCheck.routes.js'
 import { meRoutes } from './modules/me/routes.js'
 import { metaRoutes } from './modules/meta/routes.js'
+import { userProgramRoutes } from './modules/programs/routes/me.js'
+import { programRoutes } from './modules/programs/routes/program.js'
 import { templateRoutes } from './modules/template/template.routes.js'
 import { userRoutes } from './modules/user/routes.js'
 import { revenueCatWebhookHandler } from './modules/webhooks/revenuecat.controller.js'
 import { getWorkoutByShareId } from './modules/workout/workout.controller.js'
 import { workoutRoutes } from './modules/workout/workout.routes.js'
-import { userProgramRoutes } from './modules/programs/routes/me.js'
-import { programRoutes } from './modules/programs/routes/program.js'
 
 const router = Router()
 
