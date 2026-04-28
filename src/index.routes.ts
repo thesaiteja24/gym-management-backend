@@ -15,8 +15,8 @@ import { programRoutes } from './modules/programs/routes/program.js'
 import { templateRoutes } from './modules/template/template.routes.js'
 import { userRoutes } from './modules/user/routes.js'
 import { revenueCatWebhookHandler } from './modules/webhooks/revenuecat.controller.js'
-import { getWorkoutByShareId } from './modules/workout/workout.controller.js'
-import { workoutRoutes } from './modules/workout/workout.routes.js'
+import { getWorkoutByShareId } from './modules/workout/controller.js'
+import { workoutRoutes } from './modules/workout/routes.js'
 
 const router = Router()
 
