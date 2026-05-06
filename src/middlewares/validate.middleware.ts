@@ -1,13 +1,15 @@
 import type { NextFunction, Request, Response } from 'express'
-import type { z, ZodObject } from 'zod'
+import type { z } from 'zod'
 import { ZodError } from 'zod'
 
 import { ApiError } from '../utils/ApiError.js'
 
+type AnyZodObject = z.ZodObject<z.ZodRawShape>
+
 // Generic types for typed middleware
 export const validateResource =
-  <T extends ZodObject<any, any>>(schema: T) =>
-  (req: Request<any, any, any>, res: Response, next: NextFunction) => {
+  <T extends AnyZodObject>(schema: T) =>
+  (req: Request, _res: Response, next: NextFunction) => {
     try {
       // Parse and transform
       const parsed = schema.parse({
@@ -28,7 +30,7 @@ export const validateResource =
           enumerable: true,
         })
       }
-      if (parsed.params) req.params = parsed.params as any
+      if (parsed.params) req.params = parsed.params as Record<string, string>
 
       next()
     } catch (e: unknown) {
@@ -36,7 +38,7 @@ export const validateResource =
         const errorDetails = e.issues.map((iss) => ({
           field: iss.path.join('.'),
           message: iss.message,
-          received: (iss as any).received ?? undefined,
+          received: 'received' in iss ? (iss as { received?: unknown }).received : undefined,
         }))
 
         next(new ApiError(400, 'Validation failed: ' + errorDetails[0].message, errorDetails))
@@ -47,9 +49,9 @@ export const validateResource =
   }
 
 // Helper type to extract validated type from a Zod schema
-export type ValidatedRequest<T extends ZodObject<any, any>> = Request<
+export type ValidatedRequest<T extends AnyZodObject> = Request<
   z.infer<T>['params'],
-  any,
+  unknown,
   z.infer<T>['body'],
   z.infer<T>['query']
 >

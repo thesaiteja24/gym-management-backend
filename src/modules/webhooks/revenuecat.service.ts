@@ -54,6 +54,13 @@ export class RevenueCatService {
     })
   }
 
+  private static determineSubscriptionType(productId: string): 'yearly' | 'monthly' | 'lifetime' {
+    const lowerId = productId.toLowerCase()
+    if (lowerId.includes('year')) return 'yearly'
+    if (lowerId.includes('month')) return 'monthly'
+    return 'lifetime'
+  }
+
   private static calculateProStatus(
     type: string,
     user: any,
@@ -64,30 +71,25 @@ export class RevenueCatService {
     let proExpirationDate = user.proExpirationDate
     const now = new Date()
     const expDate = expiration_at_ms ? new Date(Number(expiration_at_ms)) : null
-    const subType = product_id.toLowerCase().includes('year')
-      ? 'yearly'
-      : product_id.toLowerCase().includes('month')
-        ? 'monthly'
-        : 'lifetime'
+    const subType = this.determineSubscriptionType(product_id)
 
-    switch (type) {
-      case 'INITIAL_PURCHASE':
-      case 'RENEWAL':
-      case 'NON_RENEWING_PURCHASE':
-      case 'UNCANCELLATION':
-        if (!expDate || expDate > now) {
-          isPro = true
-          proExpirationDate = expDate
-        }
-        break
-      case 'CANCELLATION':
-      case 'EXPIRATION':
-      case 'BILLING_ISSUE':
-        if (expDate && expDate <= now) isPro = false
-        else if (!expDate) isPro = false
-        if (expDate) proExpirationDate = expDate
-        break
+    const purchaseEvents = ['INITIAL_PURCHASE', 'RENEWAL', 'NON_RENEWING_PURCHASE', 'UNCANCELLATION']
+    const expirationEvents = ['CANCELLATION', 'EXPIRATION', 'BILLING_ISSUE']
+
+    if (purchaseEvents.includes(type)) {
+      if (!expDate || expDate > now) {
+        isPro = true
+        proExpirationDate = expDate
+      }
+    } else if (expirationEvents.includes(type)) {
+      if (!expDate || expDate <= now) {
+        isPro = false
+      }
+      if (expDate) {
+        proExpirationDate = expDate
+      }
     }
+
     return {
       isPro,
       proExpirationDate,

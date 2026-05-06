@@ -31,7 +31,13 @@ export const getMetaById = asyncHandler(async (req: Request, res: Response) => {
  */
 export const upsertMeta = asyncHandler(async (req: Request, res: Response) => {
   const { resource, id } = req.params as { resource: MetaResource; id?: string }
-  const result = await metaService.upsertMeta(resource, id, req.body, req.file, req.user?.id)
+  const result = await metaService.upsertMeta({
+    resource,
+    id,
+    body: req.body,
+    file: req.file,
+    userId: req.user?.id,
+  })
   return res.status(200).json(new ApiResponse(200, result, 'Saved successfully'))
 })
 

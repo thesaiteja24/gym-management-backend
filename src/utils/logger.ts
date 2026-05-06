@@ -1,6 +1,6 @@
+import { blue, bold, green, magenta, red, yellow } from 'colorette'
 import pino from 'pino'
 import pretty from 'pino-pretty'
-import { blue, green, magenta, red, yellow, bold } from 'colorette'
 
 const env = process.env.NODE_ENV || 'dev'
 
@@ -20,7 +20,7 @@ export const logger = pino(
         if (level < 50) {
           if (inputArgs.length > 0 && typeof inputArgs[0] === 'object' && inputArgs[0].err) {
             const serializedErr = pino.stdSerializers.err(inputArgs[0].err)
-            const { stack, ...errWithoutStack } = serializedErr
+            const { stack: _stack, ...errWithoutStack } = serializedErr
             inputArgs[0].meta = errWithoutStack
             delete inputArgs[0].err
           }
@@ -51,36 +51,15 @@ export const logger = pino(
       time: (timestamp: any) => {
         const date = timestamp ? new Date(timestamp as number) : new Date()
         if (isNaN(date.getTime())) return String(timestamp)
-
-        const year = date.getFullYear()
-        const month = String(date.getMonth() + 1).padStart(2, '0')
-        const day = String(date.getDate()).padStart(2, '0')
-        const hours = String(date.getHours()).padStart(2, '0')
-        const minutes = String(date.getMinutes()).padStart(2, '0')
-        const seconds = String(date.getSeconds()).padStart(2, '0')
-        const millis = String(date.getMilliseconds()).padStart(3, '0')
-
-        const offsetMinutes = -date.getTimezoneOffset()
-        const offsetHours = Math.floor(Math.abs(offsetMinutes) / 60)
-        const remainingMinutes = Math.abs(offsetMinutes) % 60
-        const sign = offsetMinutes >= 0 ? '+' : '-'
-        const offset = `${sign}${offsetHours}:${String(remainingMinutes).padStart(2, '0')}`
-
-        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${millis} ${offset}`
+        return date.toISOString()
       },
     },
     ignore: 'pid,hostname,req,res,responseTime,userId,action',
-    messageFormat: (log: any, messageKey: string) => {
-      const userId = log.userId || 'unknown'
-      const ip = log.ip || log.req?.remoteAddress || '-'
-      const method = (log.method || log.req?.method || '-').toUpperCase()
-      const url = log.url || log.req?.url || '-'
-      const action = log.action || '-'
-      const msg = log[messageKey] || ''
-
-      const coloredMethod = methodColors[method] ? methodColors[method](method) : method
-
-      return `${userId} ${ip} ${bold(coloredMethod)} ${url} ${action} ${msg}`
+    messageFormat: (log: Record<string, any>, messageKey: string) => {
+      const { userId = 'unknown', ip = '-', method: m = '-', url = '-', action = '-', [messageKey]: msg = '' } = log
+      const method = String(m).toUpperCase()
+      const color = methodColors[method] || ((text: string) => text)
+      return `${userId} ${ip} ${bold(color(method))} ${url} ${action} ${msg}`
     },
   }),
 )

@@ -6,8 +6,8 @@ import { pinoHttp } from 'pino-http'
 
 import { indexRoutes } from './index.routes.js'
 import { globalErrorHandler } from './middlewares/globalErrorHandler.js'
-import { mountSwagger } from './utils/swagger.js'
 import { logger } from './utils/logger.js'
+import { mountSwagger } from './utils/swagger.js'
 
 const app: Express = express()
 

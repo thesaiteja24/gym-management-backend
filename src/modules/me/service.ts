@@ -3,7 +3,26 @@ import { withAccelerate } from '@prisma/extension-accelerate'
 
 import { ApiError } from '../../utils/ApiError.js'
 
+export {
+  formatFitnessProfile,
+  formatMeasurementEntry,
+  formatNutritionPlan,
+  formatSelfUser,
+} from './formatter.js'
+
+import {
+  formatFitnessProfile,
+  formatMeasurementEntry,
+  formatNutritionPlan,
+  formatSelfUser,
+} from './formatter.js'
 import type { SelfUser, UpdateProfileBody } from './types.js'
+import {
+  calculateStreak,
+  calculateWeeklyMetrics,
+  calculateWeightChange,
+  extractLatestValues,
+} from './utils.js'
 
 // CONSTANTS
 const prisma = new PrismaClient().$extends(withAccelerate())
@@ -34,58 +53,6 @@ export const selfUserSelect = {
   phoneE164: true,
   createdAt: true,
   updatedAt: true,
-}
-
-// HELPERS
-
-/**
- * Formats a raw user object from Prisma into a SelfUser response.
- */
-export function formatSelfUser(user: any): SelfUser {
-  if (!user) return null as any
-  return {
-    id: user.id,
-    firstName: user.firstName ?? null,
-    lastName: user.lastName ?? null,
-    profilePicUrl: user.profilePicUrl ?? null,
-    followersCount: user.followersCount ?? 0,
-    followingCount: user.followingCount ?? 0,
-    isPro: user.isPro ?? false,
-    proSubscriptionType: user.proSubscriptionType ?? null,
-    email: user.email ?? null,
-    countryCode: user.countryCode ?? null,
-    phone: user.phone ?? null,
-    height: user.height?.toNumber?.() ?? user.height ?? null,
-    weight: user.weight?.toNumber?.() ?? user.weight ?? null,
-    preferredLengthUnit: user.preferredLengthUnit ?? null,
-    preferredWeightUnit: user.preferredWeightUnit ?? null,
-    dateOfBirth: user.dateOfBirth?.toISOString?.() ?? user.dateOfBirth ?? null,
-    gender: user.gender ?? null,
-    role: user.role,
-    privacyPolicyAcceptedAt:
-      user.privacyPolicyAcceptedAt?.toISOString?.() ?? user.privacyPolicyAcceptedAt ?? null,
-    privacyPolicyVersion: user.privacyPolicyVersion ?? null,
-    phoneE164: user.phoneE164 ?? null,
-    createdAt: user.createdAt?.toISOString?.() ?? user.createdAt,
-    updatedAt: user.updatedAt?.toISOString?.() ?? user.updatedAt,
-  }
-}
-
-function formatFitnessProfile(profile: any) {
-  return {
-    ...profile,
-    targetWeight: profile.targetWeight?.toNumber?.() ?? profile.targetWeight ?? null,
-    targetBodyFat: profile.targetBodyFat?.toNumber?.() ?? profile.targetBodyFat ?? null,
-    weeklyWeightChange:
-      profile.weeklyWeightChange?.toNumber?.() ?? profile.weeklyWeightChange ?? null,
-    nutritionPlan: profile.nutritionPlan ? formatNutritionPlan(profile.nutritionPlan) : null,
-  }
-}
-
-function formatNutritionPlan(plan: any) {
-  return {
-    ...plan,
-  }
 }
 
 /**
@@ -175,7 +142,7 @@ export async function getFitnessProfile(userId: string) {
 /**
  * Update the authenticated user's fitness profile.
  */
-export async function updateFitnessProfile(userId: string, data: any) {
+export async function updateFitnessProfile(userId: string, data: Record<string, unknown>) {
   const { nutritionPlan, ...profileData } = data
 
   const profile = await prisma.userFitnessProfile.upsert({
@@ -183,16 +150,18 @@ export async function updateFitnessProfile(userId: string, data: any) {
     create: {
       ...profileData,
       userId,
-      targetDate: profileData.targetDate ? new Date(profileData.targetDate) : undefined,
-    },
+      targetDate:
+        typeof profileData.targetDate === 'string' ? new Date(profileData.targetDate) : undefined,
+    } as any,
     update: {
       ...profileData,
-      targetDate: profileData.targetDate ? new Date(profileData.targetDate) : undefined,
-    },
+      targetDate:
+        typeof profileData.targetDate === 'string' ? new Date(profileData.targetDate) : undefined,
+    } as any,
   })
 
   if (nutritionPlan) {
-    await updateNutritionPlan(userId, nutritionPlan)
+    await updateNutritionPlan(userId, nutritionPlan as Record<string, unknown>)
   }
 
   return formatFitnessProfile(profile)
@@ -211,18 +180,18 @@ export async function getNutritionPlan(userId: string) {
 /**
  * Update the authenticated user's nutrition plan.
  */
-export async function updateNutritionPlan(userId: string, data: any) {
+export async function updateNutritionPlan(userId: string, data: Record<string, unknown>) {
   const plan = await prisma.userNutritionPlan.upsert({
     where: { userId },
     create: {
       ...data,
       userId,
-      startDate: data.startDate ? new Date(data.startDate) : new Date(),
-    },
+      startDate: typeof data.startDate === 'string' ? new Date(data.startDate) : new Date(),
+    } as any,
     update: {
       ...data,
-      startDate: data.startDate ? new Date(data.startDate) : undefined,
-    },
+      startDate: typeof data.startDate === 'string' ? new Date(data.startDate) : undefined,
+    } as any,
   })
   return formatNutritionPlan(plan)
 }
@@ -239,44 +208,9 @@ export async function buildMeasurementPayload(userId: string, startDate?: Date |
     orderBy: { date: 'desc' },
   })
 
-  const latestValues: any = {}
-  let latestWeight: number | null = null
-  let previousWeight: number | null = null
-
-  const formattedHistory = measurementsHistory.map((entry) => {
-    const { userId: _, createdAt: __, updatedAt: ___, ...rest } = entry
-    const formatted: any = { ...rest }
-
-    for (const key in formatted) {
-      if (key !== 'id' && key !== 'date' && key !== 'progressPicUrls') {
-        const val = formatted[key]
-        formatted[key] = val !== null ? Number(val) : null
-      }
-    }
-
-    for (const key in formatted) {
-      if (key === 'id' || key === 'date') continue
-      if (latestValues[key] === undefined && formatted[key] !== null) {
-        latestValues[key] = formatted[key]
-      }
-    }
-
-    if (entry.weight !== null) {
-      const weight = Number(entry.weight)
-      if (latestWeight === null) latestWeight = weight
-      else if (previousWeight === null) previousWeight = weight
-    }
-
-    return formatted
-  })
-
-  let dailyWeightChange: any = null
-  if (latestWeight !== null && previousWeight !== null) {
-    dailyWeightChange = {
-      diff: Math.abs(latestWeight - previousWeight),
-      isPositive: latestWeight > previousWeight,
-    }
-  }
+  const formattedHistory = measurementsHistory.map(formatMeasurementEntry)
+  const latestValues = extractLatestValues(formattedHistory)
+  const dailyWeightChange = calculateWeightChange(formattedHistory)
 
   return { history: formattedHistory, latestValues, dailyWeightChange }
 }
@@ -284,8 +218,10 @@ export async function buildMeasurementPayload(userId: string, startDate?: Date |
 /**
  * Add or update daily measurements.
  */
-export async function processMeasurements(userId: string, data: any) {
+export async function processMeasurements(userId: string, data: Record<string, unknown>) {
   const { date, ...metrics } = data
+  if (typeof date !== 'string') throw new ApiError(400, 'Invalid date')
+
   const entryDate = new Date(date)
   entryDate.setUTCHours(0, 0, 0, 0)
 
@@ -297,10 +233,10 @@ export async function processMeasurements(userId: string, data: any) {
       ...metrics,
       userId,
       date: entryDate,
-    },
+    } as any,
     update: {
       ...metrics,
-    },
+    } as any,
   })
 
   return measurement
@@ -323,75 +259,21 @@ export async function getUserAnalytics(userId: string) {
     orderBy: { startTime: 'desc' },
   })
 
-  const today = new Date()
   const toDateKey = (date: Date) => date.toISOString().split('T')[0]
   const workoutDates = new Set(
-    workoutLogs.filter((w) => w.startTime).map((w) => toDateKey(new Date(w.startTime!))),
+    workoutLogs
+      .filter((w) => w.startTime)
+      .map((w) => toDateKey(new Date(w.startTime as Date))),
   )
 
-  let currentStreak = 0
-  const streakCursor = new Date(today)
-  if (!workoutDates.has(toDateKey(today))) {
-    streakCursor.setDate(streakCursor.getDate() - 1)
-  }
-  while (workoutDates.has(toDateKey(streakCursor))) {
-    currentStreak++
-    streakCursor.setDate(streakCursor.getDate() - 1)
-  }
-
+  const today = new Date()
   const currentWeekStart = new Date(today)
   currentWeekStart.setDate(today.getDate() - today.getDay())
   currentWeekStart.setHours(0, 0, 0, 0)
   const lastWeekStart = new Date(currentWeekStart)
   lastWeekStart.setDate(lastWeekStart.getDate() - 7)
 
-  const metrics = {
-    workoutsThisWeek: 0,
-    weeklyVolume: 0,
-    lastWeekVolume: 0,
-    weeklyDuration: 0,
-    lastWeekDuration: 0,
-    weeklyReps: 0,
-    lastWeekReps: 0,
-  }
-
-  workoutLogs.forEach((w) => {
-    if (!w.startTime) return
-    const wDate = new Date(w.startTime)
-    const isThisWeek = wDate >= currentWeekStart
-    const isLastWeek = wDate >= lastWeekStart && wDate < currentWeekStart
-    if (!isThisWeek && !isLastWeek) return
-
-    if (isThisWeek) metrics.workoutsThisWeek++
-
-    let workoutVolume = 0,
-      workoutReps = 0,
-      workoutDuration = 0
-    if (w.startTime && w.endTime) {
-      workoutDuration = Math.floor(
-        (new Date(w.endTime).getTime() - new Date(w.startTime).getTime()) / 1000,
-      )
-    }
-
-    w.exercises.forEach((ex) => {
-      ex.sets.forEach((set) => {
-        if (ex.exercise.exerciseType === 'weighted' || ex.exercise.exerciseType === 'assisted') {
-          workoutVolume += (Number(set.weight) || 0) * (set.reps || 0)
-        }
-        workoutReps += set.reps || 0
-      })
-    })
-
-    if (isThisWeek) {
-      metrics.weeklyVolume += workoutVolume
-      metrics.weeklyDuration += workoutDuration
-      metrics.weeklyReps += workoutReps
-    } else {
-      metrics.lastWeekVolume += workoutVolume
-      metrics.lastWeekDuration += workoutDuration
-      metrics.lastWeekReps += workoutReps
-    }
-  })
+  const metrics = calculateWeeklyMetrics(workoutLogs, currentWeekStart, lastWeekStart)
 
   const lastWorkoutDate =
     workoutLogs.length > 0 && workoutLogs[0].startTime ? new Date(workoutLogs[0].startTime) : null
@@ -401,7 +283,7 @@ export async function getUserAnalytics(userId: string) {
 
   return {
     ...metrics,
-    streakDays: currentStreak,
+    streakDays: calculateStreak(workoutDates),
     daysSinceLastWorkout,
     workoutDates: Array.from(workoutDates),
   }
@@ -428,8 +310,7 @@ export async function getTrainingAnalytics(userId: string, startDate: Date | nul
     orderBy: { startTime: 'asc' },
   })
 
-  // Group by date and calculate volume/reps/duration
-  const analytics: Record<string, any> = {}
+  const analytics: Record<string, { volume: number; reps: number; duration: number; workouts: number }> = {}
 
   workoutLogs.forEach((w) => {
     if (!w.startTime) return
@@ -490,7 +371,7 @@ export async function getStrengthTrend(
     orderBy: { workoutExercise: { workout: { startTime: 'asc' } } },
   })
 
-  const trends: Record<string, any> = {}
+  const trends: Record<string, { title: string; history: { date: string; estimated1RM: number }[] }> = {}
 
   exerciseSets.forEach((set: any) => {
     const ex = set.workoutExercise.exercise
@@ -508,8 +389,7 @@ export async function getStrengthTrend(
     const estimated1RM = weight * (1 + reps / 30) // Epley formula
     const date = startTime.toISOString().split('T')[0]
 
-    // Keep only the best 1RM per day for each exercise
-    const existing = trends[ex.id].history.find((h: any) => h.date === date)
+    const existing = trends[ex.id].history.find((h) => h.date === date)
     if (existing) {
       if (estimated1RM > existing.estimated1RM) {
         existing.estimated1RM = estimated1RM
@@ -521,8 +401,7 @@ export async function getStrengthTrend(
 
   let result = Object.values(trends)
   if (top !== 'all') {
-    // Sort by recent activity or volume? Let's just take top N by number of entries
-    result.sort((a: any, b: any) => b.history.length - a.history.length)
+    result.sort((a, b) => b.history.length - a.history.length)
     result = result.slice(0, top as number)
   }
 

@@ -6,10 +6,10 @@ import { ApiError } from '../../utils/ApiError.js'
 import { formatPublicUser, getPublicUserSelect } from '../user/service.js'
 import type { PublicUser } from '../user/types.js'
 
+import { formatComment, formatLike } from './formatter.js'
 import type {
   CommentResponse,
   CommentsListResponse,
-  EngagementUser,
   LikeResponse,
 } from './types.js'
 
@@ -35,57 +35,6 @@ export const engagementUserSelect = {
  */
 export const getEngagementUserSelect = (currentUserId?: string) =>
   getPublicUserSelect(currentUserId)
-
-//  HELPERS
-
-/**
- * Formats a Prisma user result into a lean EngagementUser.
- */
-export function formatLeanUser(user: any): EngagementUser {
-  if (!user) return null as any
-  return {
-    id: user.id,
-    firstName: user.firstName || '',
-    lastName: user.lastName || '',
-    profilePicUrl: user.profilePicUrl || null,
-  }
-}
-
-/**
- * Formats a Prisma comment result into a CommentResponse.
- */
-export function formatComment(comment: any): CommentResponse {
-  return {
-    id: comment.id,
-    userId: comment.userId,
-    content: comment.content,
-    parentId: comment.parentId,
-    workoutId: comment.workoutId,
-    likesCount: comment.likesCount || 0,
-    repliesCount: comment._count?.replies || 0,
-    createdAt: comment.createdAt.toISOString(),
-    updatedAt: comment.updatedAt.toISOString(),
-    deletedAt: comment.deletedAt ? comment.deletedAt.toISOString() : null,
-    user: formatLeanUser(comment.user),
-  }
-}
-
-/**
- * Formats a Prisma like result into a LikeResponse.
- */
-export function formatLike(
-  like: any,
-  targetId: string,
-  targetType: 'workout' | 'comment',
-): LikeResponse {
-  return {
-    id: `${like.userId}_${targetId}`,
-    userId: like.userId,
-    targetId,
-    targetType,
-    user: formatLeanUser(like.user),
-  }
-}
 
 // FUNCTIONS
 
@@ -183,7 +132,7 @@ export async function getUserFollowers(
       follower: { select: getEngagementUserSelect(currentUserId) },
     },
   })
-  return followers.map((f: any) => formatPublicUser(f.follower, currentUserId))
+  return followers.map((f) => formatPublicUser(f.follower, currentUserId))
 }
 
 /**
@@ -199,7 +148,7 @@ export async function getUserFollowing(
       following: { select: getEngagementUserSelect(currentUserId) },
     },
   })
-  return following.map((f: any) => formatPublicUser(f.following, currentUserId))
+  return following.map((f) => formatPublicUser(f.following, currentUserId))
 }
 
 /**
@@ -218,7 +167,7 @@ export async function searchUsers(query: string, currentUserId: string): Promise
     select: getEngagementUserSelect(currentUserId),
     take: 20,
   })
-  return users.map((u: any) => formatPublicUser(u, currentUserId))
+  return users.map((u) => formatPublicUser(u, currentUserId))
 }
 
 /**
@@ -232,7 +181,87 @@ export async function getSuggestedUsers(currentUserId: string): Promise<PublicUs
     select: getEngagementUserSelect(currentUserId),
     take: 20,
   })
-  return users.map((u: any) => formatPublicUser(u, currentUserId))
+  return users.map((u) => formatPublicUser(u, currentUserId))
+}
+
+/**
+ * Toggle like status for a workout or comment.
+ */
+async function handleWorkoutLike(userId: string, targetId: string, liked: boolean, userName: string) {
+  const existingLike = await prisma.workoutLike.findUnique({
+    where: { userId_workoutId: { userId, workoutId: targetId } },
+  })
+
+  if (liked && !existingLike) {
+    const [like] = await prisma.$transaction([
+      prisma.workoutLike.create({
+        data: { userId, workoutId: targetId },
+        include: { user: { select: engagementUserSelect } },
+      }),
+      prisma.workoutLog.update({
+        where: { id: targetId },
+        data: { likesCount: { increment: 1 } },
+      }),
+    ])
+
+    const workout = await prisma.workoutLog.findUnique({
+      where: { id: targetId },
+      select: { userId: true },
+    })
+    if (workout && workout.userId !== userId) {
+      await NotificationService.sendPushToUsers(
+        [workout.userId],
+        'New Like',
+        `${userName} liked your workout`,
+        { type: 'workout_like', workoutId: targetId },
+      ).catch(() => {})
+    }
+    return formatLike(like, targetId, 'workout')
+  } else if (!liked && existingLike) {
+    await prisma.$transaction([
+      prisma.workoutLike.delete({
+        where: { userId_workoutId: { userId, workoutId: targetId } },
+      }),
+      prisma.workoutLog.update({
+        where: { id: targetId },
+        data: { likesCount: { decrement: 1 } },
+      }),
+    ])
+    return { id: `${userId}_${targetId}`, userId, targetId, targetType: 'workout' as const, user: null as any }
+  }
+  throw new ApiError(400, 'Invalid workout like toggle')
+}
+
+async function handleCommentLike(userId: string, targetId: string, liked: boolean) {
+  const existingLike = await prisma.workoutCommentLike.findUnique({
+    where: { userId_commentId: { userId, commentId: targetId } },
+  })
+
+  if (liked && !existingLike) {
+    const [like] = await prisma.$transaction([
+      prisma.workoutCommentLike.create({
+        data: { userId, commentId: targetId },
+        include: { user: { select: engagementUserSelect } },
+      }),
+      prisma.workoutComment.update({
+        where: { id: targetId },
+        data: { likesCount: { increment: 1 } },
+      }),
+    ])
+    return formatLike(like, targetId, 'comment')
+  } else if (!liked && existingLike) {
+    await prisma.$transaction([
+      prisma.workoutCommentLike.delete({
+        where: { userId_commentId: { userId, commentId: targetId } },
+      }),
+      prisma.workoutComment.update({
+        where: { id: targetId },
+        data: { likesCount: { decrement: 1 } },
+      }),
+    ])
+    return { id: `${userId}_${targetId}`, userId, targetId, targetType: 'comment' as const, user: null as any }
+  }
+  throw new ApiError(400, 'Invalid comment like toggle')
 }
 
 /**
@@ -251,93 +280,9 @@ export async function toggleLike(
   const userName = user ? `${user.firstName} ${user.lastName}`.trim() : 'Someone'
 
   if (targetType === 'workout') {
-    const existingLike = await prisma.workoutLike.findUnique({
-      where: { userId_workoutId: { userId, workoutId: targetId } },
-    })
-
-    if (liked && !existingLike) {
-      const [like] = await prisma.$transaction([
-        prisma.workoutLike.create({
-          data: { userId, workoutId: targetId },
-          include: { user: { select: engagementUserSelect } },
-        }),
-        prisma.workoutLog.update({
-          where: { id: targetId },
-          data: { likesCount: { increment: 1 } },
-        }),
-      ])
-
-      // Send notification
-      const workout = await prisma.workoutLog.findUnique({
-        where: { id: targetId },
-        select: { userId: true },
-      })
-      if (workout && workout.userId !== userId) {
-        await NotificationService.sendPushToUsers(
-          [workout.userId],
-          'New Like',
-          `${userName} liked your workout`,
-          { type: 'workout_like', workoutId: targetId },
-        ).catch(() => {})
-      }
-
-      return formatLike(like, targetId, 'workout')
-    } else if (!liked && existingLike) {
-      await prisma.$transaction([
-        prisma.workoutLike.delete({
-          where: { userId_workoutId: { userId, workoutId: targetId } },
-        }),
-        prisma.workoutLog.update({
-          where: { id: targetId },
-          data: { likesCount: { decrement: 1 } },
-        }),
-      ])
-      return {
-        id: `${userId}_${targetId}`,
-        userId,
-        targetId,
-        targetType: 'workout',
-        user: null as any,
-      }
-    }
-  } else {
-    const existingLike = await prisma.workoutCommentLike.findUnique({
-      where: { userId_commentId: { userId, commentId: targetId } },
-    })
-
-    if (liked && !existingLike) {
-      const [like] = await prisma.$transaction([
-        prisma.workoutCommentLike.create({
-          data: { userId, commentId: targetId },
-          include: { user: { select: engagementUserSelect } },
-        }),
-        prisma.workoutComment.update({
-          where: { id: targetId },
-          data: { likesCount: { increment: 1 } },
-        }),
-      ])
-      return formatLike(like, targetId, 'comment')
-    } else if (!liked && existingLike) {
-      await prisma.$transaction([
-        prisma.workoutCommentLike.delete({
-          where: { userId_commentId: { userId, commentId: targetId } },
-        }),
-        prisma.workoutComment.update({
-          where: { id: targetId },
-          data: { likesCount: { decrement: 1 } },
-        }),
-      ])
-      return {
-        id: `${userId}_${targetId}`,
-        userId,
-        targetId,
-        targetType: 'comment',
-        user: null as any,
-      }
-    }
+    return handleWorkoutLike(userId, targetId, liked, userName)
   }
-
-  throw new ApiError(400, 'Invalid like status toggle')
+  return handleCommentLike(userId, targetId, liked)
 }
 
 /**
@@ -352,13 +297,13 @@ export async function getLikes(
       where: { workoutId: targetId },
       include: { user: { select: engagementUserSelect } },
     })
-    return likes.map((l: any) => formatLike(l, targetId, 'workout'))
+    return likes.map((l) => formatLike(l, targetId, 'workout'))
   } else {
     const likes = await prisma.workoutCommentLike.findMany({
       where: { commentId: targetId },
       include: { user: { select: engagementUserSelect } },
     })
-    return likes.map((l: any) => formatLike(l, targetId, 'comment'))
+    return likes.map((l) => formatLike(l, targetId, 'comment'))
   }
 }
 
@@ -489,7 +434,7 @@ export async function getComments(
     nextCursor = nextItem!.id
   }
 
-  const formattedComments = comments.map((c: any) => formatComment(c))
+  const formattedComments = comments.map((c) => formatComment(c))
 
   return isReply
     ? { replies: formattedComments, nextCursor }

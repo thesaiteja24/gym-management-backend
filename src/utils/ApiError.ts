@@ -3,12 +3,12 @@ export class ApiError extends Error {
   data: null
   success: false
   message: string
-  errors: any[]
+  errors: unknown[]
 
   constructor(
     statusCode: number,
     message: string = 'Something went wrong',
-    errors: any[] = [],
+    errors: unknown[] = [],
     stack: string = '',
   ) {
     super(message)

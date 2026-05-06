@@ -67,28 +67,27 @@ export const calculateAge = (dateOfBirth: Date): number => {
 }
 
 export const formatTimeAgo = (date: Date, daysOnly: boolean = false): string => {
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-
-  const seconds = Math.floor(diffMs / 1000)
-  const minutes = Math.floor(seconds / 60)
-  const hours = Math.floor(minutes / 60)
-  const days = Math.floor(hours / 24)
+  const diffMs = new Date().getTime() - date.getTime()
+  const days = Math.floor(diffMs / 86400000)
 
   if (days <= 0) return 'Today'
   if (days === 1) return 'Yesterday'
-  if (days < 7) return `${days} days ago`
+  if (days < 7 || daysOnly) return `${days} days ago`
 
-  if (daysOnly) return `${days} days ago`
+  const units = [
+    { label: 'year', value: 365 },
+    { label: 'month', value: 30 },
+    { label: 'week', value: 7 },
+  ]
 
-  const weeks = Math.floor(days / 7)
-  if (weeks < 4) return `${weeks} week${weeks > 1 ? 's' : ''} ago`
+  for (const { label, value } of units) {
+    if (days >= value) {
+      const count = Math.floor(days / value)
+      return `${count} ${label}${count > 1 ? 's' : ''} ago`
+    }
+  }
 
-  const months = Math.floor(days / 30)
-  if (months < 12) return `${months} month${months > 1 ? 's' : ''} ago`
-
-  const years = Math.floor(days / 365)
-  return `${years} year${years > 1 ? 's' : ''} ago`
+  return `${days} days ago`
 }
 
 /**

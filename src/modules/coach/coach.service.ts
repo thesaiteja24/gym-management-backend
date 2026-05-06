@@ -62,6 +62,30 @@ export const synthesizeSpeech = async (text: string): Promise<SynthesizeSpeechRe
   return { text, audio: buffer }
 }
 
+function getProfileValue(val: any, unit?: string | null) {
+  if (val === undefined || val === null) return 'Unknown'
+  return unit ? `${val} ${unit}` : val
+}
+
+function formatWorkoutTime(workout: any) {
+  if (!workout?.startTime) return 'No workouts recorded'
+  return formatTimeAgo(workout.startTime, true)
+}
+
+function formatProfileLines(user: any, prof: any, workout: any) {
+  return [
+    `Gender: ${user.gender || 'Unknown'}`,
+    `Age: ${user.dateOfBirth ? calculateAge(user.dateOfBirth) : 'Unknown'}`,
+    `Height: ${getProfileValue(user.height, user.preferredLengthUnit || 'cm')}`,
+    `Weight: ${getProfileValue(user.weight, user.preferredWeightUnit || 'kg')}`,
+    `Fitness level: ${prof.fitnessLevel || 'Unknown'}`,
+    `Fitness goal: ${prof.fitnessGoal || 'Unknown'}`,
+    `Available equipment: ${prof.availableEquipment?.join(', ') || 'Unknown'}`,
+    `Injuries: ${prof.injuries || 'Unknown'}`,
+    `Last workout: ${formatWorkoutTime(workout)}`,
+  ]
+}
+
 export const buildUserFitnessProfile = async (userId: string): Promise<string> => {
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -77,23 +101,22 @@ export const buildUserFitnessProfile = async (userId: string): Promise<string> =
       },
     },
   })
+  if (!user) return '--- USER FITNESS PROFILE ---\nNo user found\n--- END PROFILE ---'
+
   const workout = await prisma.workoutLog.findFirst({
     where: { userId },
     orderBy: { createdAt: 'desc' },
   })
 
-  return `--- USER FITNESS PROFILE ---
-Gender: ${user?.gender ?? 'Unknown'}
-Age: ${user?.dateOfBirth ? calculateAge(user.dateOfBirth) : 'Unknown'}
-Height: ${user?.height ? `${user.height} ${user.preferredLengthUnit || 'cm'}` : 'Unknown'}
-Weight: ${user?.weight ? `${user.weight} ${user.preferredWeightUnit || 'kg'}` : 'Unknown'}
-Fitness level: ${user?.fitnessProfile?.fitnessLevel ?? 'Unknown'}
-Fitness goal: ${user?.fitnessProfile?.fitnessGoal ?? 'Unknown'}
-Available equipment: ${user?.fitnessProfile?.availableEquipment?.join(', ') || 'Unknown'}
-Injuries: ${user?.fitnessProfile?.injuries || 'Unknown'}
-Last workout: ${workout?.startTime ? formatTimeAgo(workout.startTime, true) : 'No workouts recorded'}
---- END PROFILE ---
-`
+  const prof = user.fitnessProfile || {
+    fitnessGoal: null,
+    fitnessLevel: null,
+    injuries: null,
+    availableEquipment: [],
+  }
+
+  const lines = formatProfileLines(user, prof, workout)
+  return `--- USER FITNESS PROFILE ---\n${lines.join('\n')}\n--- END PROFILE ---`
 }
 
 interface ExtractedProfileUpdate {
@@ -124,11 +147,8 @@ export const extractProfileUpdates = async (
   }
 }
 
-export const applyProfileUpdates = async (
-  userId: string,
-  updates: Partial<ExtractedProfileUpdate>,
-) => {
-  const { gender, weight, height, ...fitnessUpdates } = updates
+async function updateCoreProfile(userId: string, updates: Partial<ExtractedProfileUpdate>) {
+  const { gender, weight, height } = updates
 
   if (gender) await prisma.user.update({ where: { id: userId }, data: { gender } })
 
@@ -141,6 +161,15 @@ export const applyProfileUpdates = async (
     const val = height.unit === 'inches' ? height.value * 2.54 : height.value
     await prisma.user.update({ where: { id: userId }, data: { height: val } })
   }
+}
+
+export const applyProfileUpdates = async (
+  userId: string,
+  updates: Partial<ExtractedProfileUpdate>,
+) => {
+  await updateCoreProfile(userId, updates)
+
+  const { gender: _, weight: __, height: ___, ...fitnessUpdates } = updates
 
   if (Object.keys(fitnessUpdates).length > 0) {
     await prisma.userFitnessProfile.upsert({

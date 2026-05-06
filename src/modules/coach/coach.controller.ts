@@ -125,78 +125,47 @@ export const transcribeMessage = asyncHandler(async (req: Request, res: Response
   return res.json(new ApiResponse(200, { text: transcription.text }, 'Audio transcribed'))
 })
 
+async function handleProfileUpdates(userId: string, question: string) {
+  const extractedDetails = await extractProfileUpdates(question.trim())
+  if (Object.keys(extractedDetails).length > 0) {
+    await applyProfileUpdates(userId, extractedDetails)
+  }
+}
+
 export const sendMessage = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.params.id as string
   const { question } = req.body
 
-  if (req.user?.id !== userId) {
-    throw new ApiError(400, 'User ID mismatch')
-  }
-
+  if (req.user?.id !== userId) throw new ApiError(400, 'User ID mismatch')
   if (!question || typeof question !== 'string' || !question.trim()) {
     throw new ApiError(400, 'Question is required and must be a non-empty string')
   }
 
-  const cacheKey = `coach:conversations:${req.user!.id}`
+  const cacheKey = `coach:conversations:${userId}`
   const history = (await getCache<ChatCompletionMessageParam[]>(cacheKey)) ?? []
-
-  // Add the new user question to history
   history.push({ role: 'user', content: question.trim() })
 
-  // Extract profile updates from the user's question
-  const extractedDetails = await extractProfileUpdates(question.trim())
+  await handleProfileUpdates(userId, question)
 
-  // Apply profile updates if any
-  if (Object.keys(extractedDetails).length > 0) {
-    await applyProfileUpdates(userId, extractedDetails)
-  }
-
-  const userFitnessProfile = await buildUserFitnessProfile(req.user!.id)
-
-  // Build model input: system prompt + recent history (excluding any stale system prompts)
+  const userFitnessProfile = await buildUserFitnessProfile(userId)
   const filteredHistory = history
     .filter((msg) => msg.role === 'user' || msg.role === 'assistant')
     .slice(-12)
 
-  const combinedPrompot = `${prompts.systemPrompt}\n${userFitnessProfile}`
-
   const messages: ChatCompletionMessageParam[] = [
-    { role: 'system', content: combinedPrompot },
+    { role: 'system', content: `${prompts.systemPrompt}\n${userFitnessProfile}` },
     ...filteredHistory,
   ]
 
-  let generatedText
-  try {
-    generatedText = await generateResponse(messages)
-  } catch (_error) {
-    throw new ApiError(500, 'Failed to generate chat response')
-  }
-
-  if (!generatedText) {
-    throw new ApiError(500, 'Failed to generate chat response')
-  }
-
-  let ttsResponse
-  try {
-    ttsResponse = await synthesizeSpeech(generatedText.text)
-  } catch (_error) {
-    throw new ApiError(500, 'Failed to synthesize speech')
-  }
-
-  if (!ttsResponse) {
-    throw new ApiError(500, 'TTS failed')
-  }
+  const generatedText = await generateResponse(messages)
+  const ttsResponse = await synthesizeSpeech(generatedText.text)
+  if (!ttsResponse) throw new ApiError(500, 'TTS failed')
 
   const ttsId = crypto.randomUUID()
   ttsCache.set(ttsId, ttsResponse.audio)
 
   history.push({ role: 'assistant', content: generatedText.text })
-
-  try {
-    await setCache(cacheKey, history, CONVERSATION_CACHE_TTL)
-  } catch (_error) {
-    // Silent failure for cache
-  }
+  await setCache(cacheKey, history, CONVERSATION_CACHE_TTL).catch(() => {})
 
   return res.json(
     new ApiResponse(200, { text: generatedText.text, ttsId }, 'Coach response generated'),

@@ -1,5 +1,6 @@
-import { PrismaClient } from '@prisma/client'
 import http from 'http'
+
+import { PrismaClient } from '@prisma/client'
 
 import { app } from './app.js'
 import { logger } from './utils/logger.js'
