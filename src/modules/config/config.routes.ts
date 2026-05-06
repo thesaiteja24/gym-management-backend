@@ -1,4 +1,5 @@
 import { Router } from 'express'
+
 import { getGoogleClientId } from './config.controller.js'
 
 const router = Router()

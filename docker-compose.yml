@@ -1,0 +1,14 @@
+services:
+  pump-api:
+    image: ghcr.io/thesaiteja24/pump-api:latest
+    container_name: pump-api
+    restart: always
+    ports:
+      - "${PORT}:${PORT}"
+    env_file: .env
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${PORT}/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

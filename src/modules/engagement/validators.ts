@@ -1,0 +1,100 @@
+import { z } from 'zod'
+
+export const createCommentSchema = z.object({
+  params: z
+    .object({
+      id: z.uuid('Invalid Workout ID'),
+    })
+    .strict(),
+  body: z
+    .object({
+      content: z
+        .string()
+        .min(1, 'Comment cannot be empty')
+        .max(1000, 'Comment cannot be longer than 1000 characters'),
+      parentId: z.uuid('Invalid Parent ID').optional(),
+    })
+    .strict(),
+})
+
+export const getCommentsSchema = z.object({
+  params: z
+    .object({
+      id: z.uuid('Invalid ID'),
+    })
+    .strict(),
+  query: z
+    .object({
+      limit: z.string().regex(/^\d+$/, 'Limit must be a number').optional(),
+      cursor: z.uuid('Invalid Cursor ID').optional(),
+      isReply: z.string().optional(),
+    })
+    .strict(),
+})
+
+export const editCommentSchema = z.object({
+  params: z
+    .object({
+      commentId: z.uuid('Invalid Comment ID'),
+    })
+    .strict(),
+  body: z
+    .object({
+      content: z
+        .string()
+        .min(1, 'Comment cannot be empty')
+        .max(1000, 'Comment cannot be longer than 1000 characters'),
+    })
+    .strict(),
+})
+
+export const deleteCommentSchema = z.object({
+  params: z
+    .object({
+      commentId: z.uuid('Invalid Comment ID'),
+    })
+    .strict(),
+})
+
+export const getRepliesSchema = getCommentsSchema
+
+export const toggleLikeSchema = z.object({
+  params: z
+    .object({
+      id: z.uuid('Invalid ID'),
+    })
+    .strict(),
+  query: z
+    .object({
+      type: z.enum(['workout', 'comment']),
+      liked: z.enum(['true', 'false']).transform((val) => val === 'true'),
+    })
+    .strict(),
+})
+
+export const getLikesSchema = z.object({
+  params: z
+    .object({
+      id: z.uuid('Invalid ID'),
+    })
+    .strict(),
+  query: z
+    .object({
+      type: z.enum(['workout', 'comment']),
+    })
+    .strict(),
+})
+
+export const getUserFollowSchema = z.object({
+  params: z
+    .object({
+      userId: z.uuid('Invalid User ID'),
+    })
+    .strict(),
+})
+
+export const searchUsersSchema = z.object({
+  query: z.object({
+    query: z.string().min(3, 'Search query must be at least 3 characters long'),
+  }),
+})
