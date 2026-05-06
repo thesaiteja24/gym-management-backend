@@ -1,71 +1,56 @@
 name: Deploy to Production
 
 on:
-    push:
-        branches:
-            - main
+  push:
+    branches:
+      - main
 
 jobs:
-    build-and-deploy:
-        runs-on: ubuntu-latest
-        environment: production
-        permissions:
-            contents: read
-            packages: write
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      packages: write
 
-        steps:
-            - name: Checkout repository
-              uses: actions/checkout@v4
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-            - name: Log in to GitHub Container Registry
-              uses: docker/login-action@v3
-              with:
-                  registry: ghcr.io
-                  username: ${{ github.actor }}
-                  password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-            - name: Set up Docker Buildx
-              uses: docker/setup-buildx-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-            - name: Build and push Docker image
-              uses: docker/build-push-action@v5
-              with:
-                  context: .
-                  push: true
-                  tags: ghcr.io/${{ github.repository }}:latest
-                  cache-from: type=gha
-                  cache-to: type=gha,mode=max
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/${{ github.repository }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-            - name: Deploy to Lightsail via SSH
-              uses: appleboy/ssh-action@v1.0.3
-              with:
-                  host: ${{ secrets.SERVER_HOST }}
-                  username: ${{ secrets.SERVER_USER }}
-                  key: ${{ secrets.SSH_PRIVATE_KEY }}
-                  script: |
-                      mkdir -p /var/www/pump-api
-                      cd /var/www/pump-api
+      - name: Deploy to Lightsail via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /var/www/pump-api
 
-                      # 1. Create the docker-compose.yml file directly on the server
-                      cat << 'EOF' > docker-compose.yml
-                      services:
-                        pump-api:
-                          image: ghcr.io/${{ github.repository }}:latest
-                          container_name: pump-api
-                          restart: always
-                          ports:
-                            - "${PORT}:${PORT}"
-                          env_file: .env
-                          healthcheck:
-                            test: ["CMD", "curl", "-f", "http://localhost:${PORT}/api/v1/health"]
-                      EOF
+            # 1. Log in to GitHub Registry
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-                      # 2. Log in to GHCR
-                      echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            # 2. Pull and restart the container
+            docker compose pull
+            docker compose up -d
 
-                      # 3. Pull and restart using the hyphenated command
-                      docker-compose pull
-                      docker-compose up -d
-
-                      # Cleanup
-                      docker image prune -f
+            # 3. Cleanup unused images
+            docker image prune -f
