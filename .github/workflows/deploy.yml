@@ -6,47 +6,51 @@ on:
             - main
 
 jobs:
-    deploy:
+    build-and-deploy:
         runs-on: ubuntu-latest
         environment: production
+        permissions:
+            contents: read
+            packages: write
 
         steps:
             - name: Checkout repository
               uses: actions/checkout@v4
 
-            - name: Setup SSH
-              run: |
-                  mkdir -p ~/.ssh
-                  echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
-                  chmod 600 ~/.ssh/id_ed25519
-                  ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+            - name: Log in to GitHub Container Registry
+              uses: docker/login-action@v3
+              with:
+                  registry: ghcr.io
+                  username: ${{ github.actor }}
+                  password: ${{ secrets.GITHUB_TOKEN }}
 
-            - name: Deploy on Lightsail
-              run: |
-                  ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
-                    set -ex
+            - name: Set up Docker Buildx
+              uses: docker/setup-buildx-action@v3
 
-                    export NVM_DIR="$HOME/.nvm"
-                    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+            - name: Build and push Docker image
+              uses: docker/build-push-action@v5
+              with:
+                  context: .
+                  push: true
+                  tags: ghcr.io/${{ github.repository }}:latest
+                  cache-from: type=gha
+                  cache-to: type=gha,mode=max
 
-                    node -v
-                    npm -v
-                    which pm2
-
-                    cd /var/www/pump-api
-
-                    git fetch --all
-                    git reset --hard origin/main
-
-                    npm ci
-
-                    npx prisma generate
-
-                    rm -rf dist
-                    npm run build
-
-                    npx prisma migrate deploy
-
-                    pm2 delete pump-api || true
-                    pm2 start npm --name pump-api -- start
-                  EOF
+            - name: Deploy to Lightsail via SSH
+              uses: appleboy/ssh-action@v1.0.3
+              with:
+                  host: ${{ secrets.SERVER_HOST }}
+                  username: ${{ secrets.SERVER_USER }}
+                  key: ${{ secrets.SSH_PRIVATE_KEY }}
+                  script: |
+                      cd /var/www/pump-api
+                      
+                      # Log in to GHCR on the server to pull the private image
+                      echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+                      
+                      # Pull the fresh image and restart the container
+                      docker compose pull
+                      docker compose up -d
+                      
+                      # Optional: Cleanup old unused images to save space
+                      docker image prune -f
