@@ -2,31 +2,51 @@ import { Redis } from 'ioredis'
 import type { StringValue } from 'ms'
 import ms from 'ms'
 
+import { logger } from '../utils/logger.js'
+
 const redisClient = new Redis(process.env.REDIS_URL!, {
   lazyConnect: true,
   maxRetriesPerRequest: 3,
   enableReadyCheck: true,
   tls: process.env.REDIS_TLS === 'true' ? {} : undefined,
+  retryStrategy: (times) => {
+    if (times > 3) {
+      logger.error('Redis connection retries exhausted (3/3)')
+      return null // Stop retrying after 3 times
+    }
+    logger.warn(`Redis connection failed, retrying... (${times}/3)`)
+    return 1500 // 1.5 seconds delay
+  },
 })
 
 // Eager connect for early failure detection
-redisClient.connect().catch(() => {
-  throw new Error(`Redis connection failed`)
+redisClient.connect().catch((err) => {
+  logger.error({ err }, 'Redis initial connection completely failed')
 })
 
-redisClient.on('connect', () => {})
+redisClient.on('connect', () => {
+  logger.info('Redis client successfully connected')
+})
 
-redisClient.on('error', () => {})
+redisClient.on('error', (err) => {
+  logger.error({ err }, 'Redis connection error')
+})
 
 redisClient.on('ready', async () => {
   // Health check ping
-  const pong = await redisClient.ping()
-  if (pong !== 'PONG') {
-    throw new Error('Redis ping failed')
+  try {
+    const pong = await redisClient.ping()
+    if (pong !== 'PONG') {
+      logger.error('Redis ping failed')
+    }
+  } catch (err) {
+    logger.error({ err }, 'Redis health check ping failed')
   }
 })
 
-redisClient.on('close', () => {})
+redisClient.on('close', () => {
+  logger.warn('Redis connection closed')
+})
 
 process.on('SIGINT', async () => {
   if (redisClient) {

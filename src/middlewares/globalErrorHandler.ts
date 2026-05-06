@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction, ErrorRequestHandler } from 'express'
 
 import { ApiError } from '../utils/ApiError.js'
+import { logger } from '../utils/logger.js'
 
 interface RequestWithSession extends Request {
   session?: {
@@ -28,6 +29,11 @@ export const globalErrorHandler: ErrorRequestHandler = async (
   }
 
   if (err instanceof ApiError) {
+    if (err.statusCode >= 500) {
+      logger.error({ err, url: req.originalUrl, method: req.method }, err.message)
+    } else {
+      logger.warn({ err, url: req.originalUrl, method: req.method }, err.message)
+    }
     res.status(err.statusCode).json({
       success: err.success,
       message: err.message,
@@ -35,6 +41,7 @@ export const globalErrorHandler: ErrorRequestHandler = async (
       data: err.data,
     })
   } else {
+    logger.error({ err, url: req.originalUrl, method: req.method }, 'Internal server error')
     res.status(500).json({
       success: false,
       message: 'Internal server error',
