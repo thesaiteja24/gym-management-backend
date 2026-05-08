@@ -22,8 +22,9 @@ export const createWorkout = asyncHandler(
 export const getAllWorkouts = asyncHandler(async (req: Request, res: Response) => {
   const page = parseInt(req.query.page as string) || 1
   const limit = parseInt(req.query.limit as string) || 10
+  const targetUserId = req.query.userId as string | undefined
 
-  const response = await workoutService.getAllWorkouts(req.user!.id, page, limit)
+  const response = await workoutService.getAllWorkouts(req.user!.id, page, limit, targetUserId)
   return res.json(new ApiResponse(200, response, 'Workouts fetched successfully'))
 })
 

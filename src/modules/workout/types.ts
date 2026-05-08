@@ -1,7 +1,7 @@
 import type { WorkoutLogVisibility, ExerciseGroupType, SetType } from '@prisma/client'
 
 import type { ExerciseResponse } from '../exercise/types.js'
-import type { PublicUser } from '../user/types.js'
+import type { PublicUser } from '../user/user.types.js'
 
 // MAIN
 

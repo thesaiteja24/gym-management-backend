@@ -54,12 +54,28 @@ export const logger = pino(
         return date.toISOString()
       },
     },
-    ignore: 'pid,hostname,req,res,responseTime,userId,action',
+    ignore: 'pid,hostname,req,res,action,method,url,ip,userId,responseTime',
     messageFormat: (log: Record<string, any>, messageKey: string) => {
-      const { userId = 'unknown', ip = '-', method: m = '-', url = '-', action = '-', [messageKey]: msg = '' } = log
-      const method = String(m).toUpperCase()
+      const { userId = 'unknown', ip = '-', [messageKey]: msg = '', responseTime, req, res, level } = log
+
+      const method = String(log.method || req?.method || '-').toUpperCase()
+      const url = log.url || req?.url || '-'
+      const rt = responseTime || res?.responseTime || log.res?.responseTime
+      const rtStr = rt ? ` ${bold(`${rt}ms`)}` : ''
+
       const color = methodColors[method] || ((text: string) => text)
-      return `${userId} ${ip} ${bold(color(method))} ${url} ${action} ${msg}`
+      const baseLine = `${bold(userId)} ${bold(color(method))} ${url}${rtStr} - ${msg}`
+
+      if (level < 50) {
+        const rest = { ...log }
+        const skipKeys = ['level', 'time', 'msg', 'pid', 'hostname', 'req', 'res', 'action', 'url', 'method', 'userId', 'ip', 'responseTime', messageKey]
+        skipKeys.forEach((k) => delete (rest as any)[k])
+        if (Object.keys(rest).length > 0) {
+          return `${baseLine} ${JSON.stringify(rest)}`
+        }
+      }
+
+      return baseLine
     },
   }),
 )
