@@ -53,6 +53,11 @@ export const selfUserSelect = {
   phoneE164: true,
   createdAt: true,
   updatedAt: true,
+  _count: {
+    select: {
+      workoutLogs: { where: { deletedAt: null } },
+    },
+  },
 }
 
 /**

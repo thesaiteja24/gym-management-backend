@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client'
 
 import { flattenExercise } from '../exercise/service.js'
-import { formatPublicUser } from '../user/service.js'
+import { formatPublicUser } from '../user/user.formatters.js'
 
 import type { workoutSelect } from './service.js'
 import type { Workout } from './types.js'

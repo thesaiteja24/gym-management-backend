@@ -4,7 +4,7 @@ import { withAccelerate } from '@prisma/extension-accelerate'
 import { ApiError } from '../../utils/ApiError.js'
 import { generateSecureToken } from '../../utils/helpers.js'
 import { invalidateUserProgramCache } from '../programs/service.js'
-import { publicUserSelect } from '../user/service.js'
+
 
 import { formatWorkout } from './formatter.js'
 import { advanceProgramProgress } from './programUtils.js'
@@ -16,6 +16,7 @@ import type {
   Workout,
   WorkoutResponse,
 } from './types.js'
+import { publicUserSelect } from '../user/user.selectors.js'
 
 const prisma = new PrismaClient().$extends(withAccelerate())
 
@@ -179,15 +180,27 @@ export async function createWorkout(
  * Fetches all workout logs for a user with pagination.
  */
 export async function getAllWorkouts(
-  userId: string,
+  requesterId: string,
   page: number,
   limit: number,
+  targetUserId?: string,
 ): Promise<PaginatedWorkoutsResponse> {
   const skip = (page - 1) * limit
+  const userId = targetUserId || requesterId
+
+  // If requesting someone else's workouts, only show public ones
+  const where: Prisma.WorkoutLogWhereInput = {
+    userId,
+    deletedAt: null,
+  }
+
+  if (targetUserId && targetUserId !== requesterId) {
+    where.visibility = 'public'
+  }
 
   try {
     const workouts = await prisma.workoutLog.findMany({
-      where: { userId, deletedAt: null },
+      where,
       orderBy: { createdAt: 'desc' },
       skip,
       take: limit,

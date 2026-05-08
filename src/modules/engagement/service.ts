@@ -3,8 +3,8 @@ import { withAccelerate } from '@prisma/extension-accelerate'
 
 import { NotificationService } from '../../service/notification.service.js'
 import { ApiError } from '../../utils/ApiError.js'
-import { formatPublicUser, getPublicUserSelect } from '../user/service.js'
-import type { PublicUser } from '../user/types.js'
+
+import type { PublicUser } from '../user/user.types.js'
 
 import { formatComment, formatLike } from './formatter.js'
 import type {
@@ -12,6 +12,8 @@ import type {
   CommentsListResponse,
   LikeResponse,
 } from './types.js'
+import { formatPublicUser } from '../user/user.formatters.js'
+import { getPublicUserSelect } from '../user/user.selectors.js'
 
 // CONSTANTS
 
