@@ -89,60 +89,6 @@ export async function dispatchNudge(
   return true
 }
 
-
-export async function getWorkoutActivity(userId: string, days: number = 30): Promise<WorkoutActivity> {
-  const startDate = new Date()
-  startDate.setDate(startDate.getDate() - (days - 1))
-  startDate.setHours(0, 0, 0, 0)
-
-  const workouts = await prisma.workoutLog.findMany({
-    where: {
-      userId,
-      deletedAt: null,
-      startTime: { gte: startDate },
-    },
-    include: {
-      exercises: {
-        include: {
-          sets: true,
-          exercise: { select: { exerciseType: true } },
-        },
-      },
-    },
-    orderBy: { startTime: 'asc' },
-  })
-
-  const activity: Record<string, { count: number; volume: number }> = {}
-
-  // Initialize all days in range with 0
-  for (let i = 0; i < days; i++) {
-    const d = new Date(startDate)
-    d.setDate(startDate.getDate() + i)
-    const dateKey = d.toISOString().split('T')[0]
-    activity[dateKey] = { count: 0, volume: 0 }
-  }
-
-  workouts.forEach((w) => {
-    if (!w.startTime)
-      return
-    const dateKey = w.startTime.toISOString().split('T')[0]
-    if (!activity[dateKey]) {
-      activity[dateKey] = { count: 0, volume: 0 }
-    }
-
-    activity[dateKey].count++
-    w.exercises.forEach((ex) => {
-      ex.sets.forEach((set) => {
-        if (ex.exercise.exerciseType === 'weighted' || ex.exercise.exerciseType === 'assisted') {
-          activity[dateKey].volume += (Number(set.weight) || 0) * (set.reps || 0)
-        }
-      })
-    })
-  })
-
-  return activity
-}
-
 export async function getTopLifts(userId: string, limit: number = 5): Promise<TopLift[]> {
   const allExercises = await prisma.workoutLogExercise.findMany({
     where: {
@@ -162,55 +108,94 @@ export async function getTopLifts(userId: string, limit: number = 5): Promise<To
     bestSet: any
     totalSets: number
     totalOccurrences: number
+    bestVolume: number
+    bestReps: number
+    bestDuration: number
   }> = {}
 
   allExercises.forEach((logEx) => {
     const exId = logEx.exerciseId
+    const workingSets = logEx.sets.filter(s => s.setType !== 'warmup')
+
+    if (workingSets.length === 0)
+      return
+
     if (!exercisesMap[exId]) {
       exercisesMap[exId] = {
         exercise: logEx.exercise,
         bestSet: null,
         totalSets: 0,
         totalOccurrences: 0,
+        bestVolume: 0,
+        bestReps: 0,
+        bestDuration: 0,
       }
     }
 
     exercisesMap[exId].totalOccurrences++
-    exercisesMap[exId].totalSets += logEx.sets.length
+    exercisesMap[exId].totalSets += workingSets.length
 
-    logEx.sets.forEach((set) => {
+    workingSets.forEach((set) => {
       const currentBest = exercisesMap[exId].bestSet
+      const type = logEx.exercise.exerciseType
+
+      let isNewBest = false
+      const setWeight = Number(set.weight) || 0
+      const setReps = set.reps || 0
+      const setDuration = set.durationSeconds || 0
+      const setVolume = setWeight * setReps
+
       if (!currentBest) {
-        exercisesMap[exId].bestSet = set
-        return
+        isNewBest = true
+      }
+      else {
+        if (type === 'weighted' || type === 'assisted') {
+          const currentVolume = (Number(currentBest.weight) || 0) * (currentBest.reps || 0)
+          if (setVolume > currentVolume) {
+            isNewBest = true
+          }
+          else if (setVolume === currentVolume && setWeight > (Number(currentBest.weight) || 0)) {
+            isNewBest = true
+          }
+        }
+        else if (type === 'durationOnly') {
+          if (setDuration > (currentBest.durationSeconds || 0)) {
+            isNewBest = true
+          }
+        }
+        else { // repsOnly
+          if (setReps > (currentBest.reps || 0)) {
+            isNewBest = true
+          }
+        }
       }
 
-      const type = logEx.exercise.exerciseType
-      if (type === 'weighted' || type === 'assisted') {
-        const currentScore = (Number(currentBest.weight) || 0) * (currentBest.reps || 0)
-        const newScore = (Number(set.weight) || 0) * (set.reps || 0)
-        if (newScore > currentScore) {
-          exercisesMap[exId].bestSet = set
-        }
-        else if (newScore === currentScore && (Number(set.weight) || 0) > (Number(currentBest.weight) || 0)) {
-          exercisesMap[exId].bestSet = set
-        }
-      }
-      else if (type === 'durationOnly') {
-        if ((set.durationSeconds || 0) > (currentBest.durationSeconds || 0)) {
-          exercisesMap[exId].bestSet = set
-        }
-      }
-      else { // repsOnly
-        if ((set.reps || 0) > (currentBest.reps || 0)) {
-          exercisesMap[exId].bestSet = set
-        }
+      if (isNewBest) {
+        exercisesMap[exId].bestSet = set
+        exercisesMap[exId].bestVolume = setVolume
+        exercisesMap[exId].bestReps = setReps
+        exercisesMap[exId].bestDuration = setDuration
       }
     })
   })
 
   const sortedExercises = Object.values(exercisesMap)
-    .sort((a, b) => b.totalOccurrences - a.totalOccurrences)
+    .sort((a, b) => {
+      // 1. Frequency (Most Frequent)
+      if (b.totalOccurrences !== a.totalOccurrences) {
+        return b.totalOccurrences - a.totalOccurrences
+      }
+      // 2. Weight Volume
+      if (b.bestVolume !== a.bestVolume) {
+        return b.bestVolume - a.bestVolume
+      }
+      // 3. Reps
+      if (b.bestReps !== a.bestReps) {
+        return b.bestReps - a.bestReps
+      }
+      // 4. Duration
+      return b.bestDuration - a.bestDuration
+    })
     .slice(0, limit)
 
   return sortedExercises.map(item => ({
