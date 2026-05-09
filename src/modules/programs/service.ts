@@ -1,5 +1,4 @@
-import { PrismaClient } from '@prisma/client'
-import { withAccelerate } from '@prisma/extension-accelerate'
+import { prisma, readPrisma } from '../../lib/prisma.js'
 
 import {
   deleteCache,
@@ -28,7 +27,7 @@ import {
 
 // SECTION: CONFIG
 
-const prisma = new PrismaClient().$extends(withAccelerate())
+
 
 // SECTION: CONSTANTS
 
@@ -58,14 +57,14 @@ export async function getAllPrograms(page: number, limit: number) {
   const skip = (page - 1) * limit
 
   const [programs, total] = await Promise.all([
-    prisma.program.findMany({
+    readPrisma.program.findMany({
       where: { deletedAt: null },
       include: { _count: { select: { userPrograms: true } } },
       skip,
       take: limit,
       orderBy: { createdAt: 'desc' },
     }),
-    prisma.program.count({ where: { deletedAt: null } }),
+    readPrisma.program.count({ where: { deletedAt: null } }),
   ])
 
   const results = programs.map((p) => ({
@@ -90,7 +89,7 @@ export async function getProgramById(programId: string): Promise<ProgramResponse
   const cached = await getCache<ProgramResponse>(cacheKey)
   if (cached) return cached
 
-  const program = await prisma.program.findUnique({
+  const program = await readPrisma.program.findUnique({
     where: { id: programId },
     include: {
       weeks: {

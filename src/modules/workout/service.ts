@@ -1,5 +1,6 @@
-import { PrismaClient, type Prisma } from '@prisma/client'
-import { withAccelerate } from '@prisma/extension-accelerate'
+import { type Prisma } from '@prisma/client'
+import { prisma, readPrisma } from '../../lib/prisma.js'
+import { withRetry } from '../../utils/dbUtils.js'
 
 import { ApiError } from '../../utils/ApiError.js'
 import { generateSecureToken } from '../../utils/helpers.js'
@@ -18,7 +19,7 @@ import type {
 } from './types.js'
 import { publicUserSelect } from '../user/user.selectors.js'
 
-const prisma = new PrismaClient().$extends(withAccelerate())
+
 
 // SECTION: CONFIG
 
@@ -112,10 +113,10 @@ export async function createWorkout(
 
   // Idempotency check for mobile clients
   if (clientId) {
-    const existing = await prisma.workoutLog.findUnique({
+    const existing = await withRetry(() => prisma.workoutLog.findUnique({
       where: { clientId },
       select: workoutSelect,
-    })
+    }))
     if (existing) {
       return {
         workout: formatWorkout(existing),
@@ -199,13 +200,13 @@ export async function getAllWorkouts(
   }
 
   try {
-    const workouts = await prisma.workoutLog.findMany({
+    const workouts = await withRetry(() => readPrisma.workoutLog.findMany({
       where,
       orderBy: { createdAt: 'desc' },
       skip,
       take: limit,
       select: workoutSelect,
-    })
+    }))
 
     const hasMore = workouts.length === limit
     return {
@@ -228,7 +229,7 @@ export async function getDiscoverWorkouts(
   const skip = (page - 1) * limit
 
   try {
-    const workouts = await prisma.workoutLog.findMany({
+    const workouts = await withRetry(() => readPrisma.workoutLog.findMany({
       where: {
         userId: { not: userId },
         deletedAt: null,
@@ -238,7 +239,7 @@ export async function getDiscoverWorkouts(
       skip,
       take: limit,
       select: workoutSelect,
-    })
+    }))
 
     const hasMore = workouts.length === limit
     return {
@@ -254,10 +255,10 @@ export async function getDiscoverWorkouts(
  * Fetches a single workout by ID.
  */
 export async function getWorkoutById(workoutId: string): Promise<Workout> {
-  const workout = await prisma.workoutLog.findUnique({
+  const workout = await withRetry(() => readPrisma.workoutLog.findUnique({
     where: { id: workoutId },
     select: workoutSelect,
-  })
+  }))
 
   if (!workout || workout.deletedAt) {
     throw new ApiError(404, 'Workout not found')
@@ -359,10 +360,10 @@ export async function updateWorkout(
  * Fetches a workout by its public share ID.
  */
 export async function getWorkoutByShareId(shareId: string): Promise<Workout> {
-  const workout = await prisma.workoutLog.findUnique({
+  const workout = await withRetry(() => readPrisma.workoutLog.findUnique({
     where: { shareId },
     select: workoutSelect,
-  })
+  }))
 
   if (!workout || workout.deletedAt || workout.visibility === 'private') {
     throw new ApiError(404, 'Shared workout not found')

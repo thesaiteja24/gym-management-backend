@@ -1,5 +1,4 @@
-import { PrismaClient } from '@prisma/client'
-import { withAccelerate } from '@prisma/extension-accelerate'
+import { prisma } from '../../lib/prisma.js'
 import type { Request, Response } from 'express'
 
 import { ApiError } from '../../utils/ApiError.js'
@@ -8,7 +7,7 @@ import { asyncHandler } from '../../utils/asyncHandler.js'
 
 import * as templateService from './template.service.js'
 
-const prisma = new PrismaClient().$extends(withAccelerate())
+
 
 const templateInclude = {
   exerciseGroups: { orderBy: { groupIndex: 'asc' as const } },

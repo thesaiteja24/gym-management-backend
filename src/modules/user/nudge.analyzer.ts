@@ -1,9 +1,8 @@
-import { PrismaClient } from '@prisma/client'
-import { withAccelerate } from '@prisma/extension-accelerate'
+import { prisma } from '../../lib/prisma.js'
 
 import type { RelationshipType, UserWorkoutState } from './nudge.types.js'
 
-const prisma = new PrismaClient().$extends(withAccelerate())
+
 
 export async function analyzeWorkoutState(userId: string): Promise<UserWorkoutState> {
   // Fetch last 10 workouts to understand frequency and recency

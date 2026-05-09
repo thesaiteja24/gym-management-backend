@@ -1,5 +1,4 @@
-import { PrismaClient } from '@prisma/client'
-import { withAccelerate } from '@prisma/extension-accelerate'
+import { prisma, readPrisma } from '../../lib/prisma.js'
 
 import {
   deleteCache,
@@ -15,7 +14,7 @@ import {
 } from './sync.js'
 import type { UserProgramResponse } from './types.js'
 
-const prisma = new PrismaClient().$extends(withAccelerate())
+
 
 const standardProgramSelect = {
   id: true,
@@ -193,7 +192,7 @@ export async function getActiveUserProgram(userId: string): Promise<UserProgramR
   const cached = await getCache<UserProgramResponse>(cacheKey)
   if (cached) return cached
 
-  let up = await prisma.userProgram.findFirst({
+  let up = await readPrisma.userProgram.findFirst({
     where: { userId, status: 'active' },
     orderBy: { createdAt: 'desc' },
     include: { program: { select: standardProgramSelect }, progress: true },
@@ -215,7 +214,7 @@ export async function listUserPrograms(userId: string): Promise<UserProgramRespo
   const cached = await getCache<UserProgramResponse[]>(cacheKey)
   if (cached) return cached
 
-  const ups = await prisma.userProgram.findMany({
+  const ups = await readPrisma.userProgram.findMany({
     where: { userId },
     orderBy: { createdAt: 'desc' },
     include: { program: { select: standardProgramSelect }, progress: true },

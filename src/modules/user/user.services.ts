@@ -1,5 +1,5 @@
-import { Exercise, PrismaClient } from '@prisma/client'
-import { withAccelerate } from '@prisma/extension-accelerate'
+import { Exercise } from '@prisma/client'
+import { prisma, readPrisma } from '../../lib/prisma.js'
 
 import { ApiError } from '../../utils/ApiError.js'
 
@@ -12,8 +12,9 @@ import { analyzeRelationship, analyzeWorkoutState } from './nudge.analyzer.js'
 import { resolveNudgeTemplate } from './nudge.templates.js'
 import { NudgeIntent } from './nudge.types.js'
 import { logger } from '../../utils/logger.js'
+import { withRetry } from '../../utils/dbUtils.js'
 
-const prisma = new PrismaClient().$extends(withAccelerate())
+
 
 
 
@@ -26,10 +27,10 @@ const prisma = new PrismaClient().$extends(withAccelerate())
  * @returns Formatted public user data
  */
 export async function getUserById(userId: string, currentUserId?: string): Promise<PublicUser> {
-  const user = await prisma.user.findUnique({
+  const user = await withRetry(() => readPrisma.user.findUnique({
     where: { id: userId },
     select: getPublicUserSelect(currentUserId),
-  })
+  }))
 
   if (!user) {
     throw new ApiError(404, 'User not found')
@@ -90,7 +91,7 @@ export async function dispatchNudge(
 }
 
 export async function getTopLifts(userId: string, limit: number = 5): Promise<TopLift[]> {
-  const allExercises = await prisma.workoutLogExercise.findMany({
+  const allExercises = await readPrisma.workoutLogExercise.findMany({
     where: {
       workout: {
         userId,
@@ -214,7 +215,7 @@ export async function getTopLifts(userId: string, limit: number = 5): Promise<To
 }
 
 export async function getTrainingAnalytics(userId: string, startDate: Date | null) {
-  const workoutLogs = await prisma.workoutLog.findMany({
+  const workoutLogs = await readPrisma.workoutLog.findMany({
     where: {
       userId,
       deletedAt: null,

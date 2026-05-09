@@ -1,5 +1,4 @@
-import { PrismaClient } from '@prisma/client'
-import { withAccelerate } from '@prisma/extension-accelerate'
+import { prisma } from '../../lib/prisma.js'
 
 import { getRefreshToken } from '../../service/caching.service.js'
 import { ApiError } from '../../utils/ApiError.js'
@@ -14,7 +13,7 @@ import {
 import type { AuthResponse } from './types.js'
 
 // CONSTANTS
-const prisma = new PrismaClient().$extends(withAccelerate())
+
 
 // QUERY HELPERS
 /**

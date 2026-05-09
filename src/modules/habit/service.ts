@@ -1,5 +1,5 @@
-import { PrismaClient, HabitSource } from '@prisma/client'
-import { withAccelerate } from '@prisma/extension-accelerate'
+import { HabitSource } from '@prisma/client'
+import { prisma, readPrisma } from '../../lib/prisma.js'
 
 import { ApiError } from '../../utils/ApiError.js'
 
@@ -7,7 +7,7 @@ import type { CreateHabitBody, Habit, HabitLog, HabitLogsMap, UpdateHabitBody } 
 
 // CONSTANTS
 
-const prisma = new PrismaClient().$extends(withAccelerate())
+
 
 // HELPERS
 
@@ -35,7 +35,7 @@ const formatHabitLog = (log: any): HabitLog => ({
  * Fetch all habits for a user.
  */
 export async function getHabits(userId: string): Promise<Habit[]> {
-  const habits = await prisma.habit.findMany({
+  const habits = await readPrisma.habit.findMany({
     where: { userId },
     orderBy: { createdAt: 'asc' },
   })
@@ -117,8 +117,8 @@ export async function getProcessedHabitLogs(
   start.setUTCHours(0, 0, 0, 0)
   end.setUTCHours(23, 59, 59, 999)
 
-  const habits = await prisma.habit.findMany({ where: { userId } })
-  const manualLogs = await prisma.habitLog.findMany({
+  const habits = await readPrisma.habit.findMany({ where: { userId } })
+  const manualLogs = await readPrisma.habitLog.findMany({
     where: { habit: { userId }, date: { gte: start, lte: end } },
   })
 
@@ -146,13 +146,13 @@ export async function getProcessedHabitLogs(
 
     const [measurements, workouts] = await Promise.all([
       needsMeasurements
-        ? prisma.userMeasurement.findMany({
+        ? readPrisma.userMeasurement.findMany({
             where: { userId, date: { gte: start, lte: end } },
             select: { date: true, weight: true, bodyFat: true, waist: true },
           })
         : Promise.resolve([]),
       needsWorkouts
-        ? prisma.workoutLog.findMany({
+        ? readPrisma.workoutLog.findMany({
             where: { userId, startTime: { gte: start, lte: end }, deletedAt: null },
             select: { startTime: true },
           })

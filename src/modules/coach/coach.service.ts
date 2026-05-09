@@ -1,6 +1,5 @@
 import type { EquipmentType, FitnessGoal, FitnessLevel, Gender } from '@prisma/client'
-import { PrismaClient } from '@prisma/client'
-import { withAccelerate } from '@prisma/extension-accelerate'
+import { prisma, readPrisma } from '../../lib/prisma.js'
 import { OpenAI } from 'openai'
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions'
 import { toFile } from 'openai/uploads.js'
@@ -8,7 +7,7 @@ import { toFile } from 'openai/uploads.js'
 import prompts from '../../utils/coachPrompts.js'
 import { calculateAge, formatTimeAgo } from '../../utils/helpers.js'
 
-const prisma = new PrismaClient().$extends(withAccelerate())
+
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 const FALLBACK_MESSAGE = 'I am having trouble right now. Could you try again in a moment?'
 
@@ -87,7 +86,7 @@ function formatProfileLines(user: any, prof: any, workout: any) {
 }
 
 export const buildUserFitnessProfile = async (userId: string): Promise<string> => {
-  const user = await prisma.user.findUnique({
+  const user = await readPrisma.user.findUnique({
     where: { id: userId },
     select: {
       height: true,
@@ -103,7 +102,7 @@ export const buildUserFitnessProfile = async (userId: string): Promise<string> =
   })
   if (!user) return '--- USER FITNESS PROFILE ---\nNo user found\n--- END PROFILE ---'
 
-  const workout = await prisma.workoutLog.findFirst({
+  const workout = await readPrisma.workoutLog.findFirst({
     where: { userId },
     orderBy: { createdAt: 'desc' },
   })

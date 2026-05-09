@@ -1,7 +1,6 @@
 import { randomUUID } from 'crypto'
 
-import { PrismaClient } from '@prisma/client'
-import { withAccelerate } from '@prisma/extension-accelerate'
+import { prisma, readPrisma } from '../../lib/prisma.js'
 
 import { deleteCache, getCache, setCache } from '../../service/caching.service.js'
 import { deleteMediaByKey, extractS3KeyFromUrl, uploadMedia } from '../../service/media.service.js'
@@ -12,17 +11,17 @@ import type { MetaItem, MetaResource, UpsertMetaBody } from './types.js'
 
 // CONSTANTS
 
-const prisma = new PrismaClient().$extends(withAccelerate())
+
 const META_CACHE_TTL = '365d'
 
 const RESOURCE_CONFIG: Record<MetaResource, any> = {
   equipment: {
-    model: prisma.equipment,
+    modelName: 'equipment',
     s3Path: 'gym-sass/equipment',
     label: 'Equipment',
   },
   'muscle-groups': {
-    model: prisma.muscleGroup,
+    modelName: 'muscleGroup',
     s3Path: 'gym-sass/muscle-group',
     label: 'Muscle Group',
   },
@@ -45,7 +44,7 @@ export async function getAllMeta(resource: MetaResource): Promise<MetaItem[]> {
   const cached = await getCache<MetaItem[]>(cacheKey)
   if (cached) return cached
 
-  const data = await RESOURCE_CONFIG[resource].model.findMany({
+  const data = await (readPrisma as any)[RESOURCE_CONFIG[resource].modelName].findMany({
     orderBy: { title: 'asc' },
   })
 
@@ -57,7 +56,7 @@ export async function getAllMeta(resource: MetaResource): Promise<MetaItem[]> {
  * Fetch a single meta item by ID.
  */
 export async function getMetaById(resource: MetaResource, id: string): Promise<MetaItem> {
-  const item = await RESOURCE_CONFIG[resource].model.findUnique({ where: { id } })
+  const item = await (readPrisma as any)[RESOURCE_CONFIG[resource].modelName].findUnique({ where: { id } })
   if (!item) throw new ApiError(404, `${RESOURCE_CONFIG[resource].label} not found`)
   return item
 }
@@ -110,15 +109,15 @@ interface UpsertMetaOptions {
 }
 
 async function validateUpsert(config: any, id?: string) {
-  const existing = id ? await config.model.findUnique({ where: { id } }) : null
+  const existing = id ? await (prisma as any)[config.modelName].findUnique({ where: { id } }) : null
   if (id && !existing) throw new ApiError(404, `${config.label} not found`)
   return existing
 }
 
 async function persistMeta(config: any, id: string | undefined, data: any, body: UpsertMetaBody) {
   return id
-    ? config.model.update({ where: { id }, data })
-    : config.model.create({
+    ? (prisma as any)[config.modelName].update({ where: { id }, data })
+    : (prisma as any)[config.modelName].create({
         data: { ...data, title: titleizeString(body.title!) },
       })
 }
@@ -162,10 +161,10 @@ export async function deleteMeta(
   userId: string,
 ): Promise<MetaItem> {
   const config = RESOURCE_CONFIG[resource]
-  const existing = await config.model.findUnique({ where: { id } })
+  const existing = await (prisma as any)[config.modelName].findUnique({ where: { id } })
   if (!existing) throw new ApiError(404, `${config.label} not found`)
 
-  const deleted = await config.model.delete({ where: { id } })
+  const deleted = await (prisma as any)[config.modelName].delete({ where: { id } })
 
   if (existing.thumbnailUrl) {
     const key = extractS3KeyFromUrl(existing.thumbnailUrl)
