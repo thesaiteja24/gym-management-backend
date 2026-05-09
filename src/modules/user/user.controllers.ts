@@ -6,6 +6,7 @@ import { asyncHandler } from '../../utils/asyncHandler.js'
 import * as userService from './user.services.js'
 
 import type { NudgeIntent } from './nudge.types.js'
+import { parseDurationToStartDate } from '../me/me.services.js'
 
 // FUNCTIONS
 
@@ -38,4 +39,13 @@ export const getTopLifts = asyncHandler(async (req: Request<{ userId: string }>,
   const lifts = await userService.getTopLifts(userId, limit)
 
   return res.status(200).json(new ApiResponse(200, lifts, 'Top lifts fetched successfully'))
+})
+
+export const getTrainingAnalytics = asyncHandler(async (req: Request<{ userId: string }>, res: Response) => {
+  const { userId } = req.params
+  const duration = (req.query.duration as string) || 'all'
+  const startDate = parseDurationToStartDate(duration)
+  const analytics = await userService.getTrainingAnalytics(userId, startDate)
+
+  return res.status(200).json(new ApiResponse(200, analytics, 'Training analytics fetched successfully'))
 })

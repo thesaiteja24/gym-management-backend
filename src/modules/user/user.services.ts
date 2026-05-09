@@ -212,3 +212,69 @@ export async function getTopLifts(userId: string, limit: number = 5): Promise<To
     },
   }))
 }
+
+export async function getTrainingAnalytics(userId: string, startDate: Date | null) {
+  const workoutLogs = await prisma.workoutLog.findMany({
+    where: {
+      userId,
+      deletedAt: null,
+      ...(startDate ? { startTime: { gte: startDate } } : {}),
+    },
+    include: {
+      exercises: {
+        include: {
+          exercise: { select: { exerciseType: true } },
+          sets: true,
+        },
+      },
+    },
+    orderBy: { startTime: 'asc' },
+  })
+
+  const analytics: Record<
+    string,
+    { volume: number; reps: number; duration: number; workouts: number }
+  > = {}
+
+  workoutLogs.forEach((w) => {
+    if (!w.startTime) {
+      return
+    }
+    const dateKey = w.startTime.toISOString().split('T')[0]
+    if (!analytics[dateKey]) {
+      analytics[dateKey] = { volume: 0, reps: 0, duration: 0, workouts: 0 }
+    }
+
+    analytics[dateKey].workouts++
+    if (w.startTime && w.endTime) {
+      analytics[dateKey].duration += Math.floor(
+        (new Date(w.endTime).getTime() - new Date(w.startTime).getTime()) / 1000,
+      )
+    }
+
+    w.exercises.forEach((ex) => {
+      ex.sets.forEach((set) => {
+        if (ex.exercise.exerciseType === 'weighted' || ex.exercise.exerciseType === 'assisted') {
+          analytics[dateKey].volume += (Number(set.weight) || 0) * (set.reps || 0)
+        }
+        analytics[dateKey].reps += set.reps || 0
+      })
+    })
+  })
+
+  // Transform to the format expected by the frontend
+  const volume = Object.entries(analytics).map(([date, data]) => ({
+    date,
+    value: data.volume,
+  }))
+  const reps = Object.entries(analytics).map(([date, data]) => ({
+    date,
+    value: data.reps,
+  }))
+  const duration = Object.entries(analytics).map(([date, data]) => ({
+    date,
+    value: data.duration,
+  }))
+
+  return { volume, reps, duration }
+}
