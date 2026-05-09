@@ -5,6 +5,8 @@ import { asyncHandler } from '../../utils/asyncHandler.js'
 
 import * as userService from './user.services.js'
 
+import type { NudgeIntent } from './nudge.types.js'
+
 // FUNCTIONS
 
 export const getUser = asyncHandler(async (req: Request<{ userId: string }>, res: Response) => {
@@ -15,11 +17,17 @@ export const getUser = asyncHandler(async (req: Request<{ userId: string }>, res
   return res.status(200).json(new ApiResponse(200, user, 'User fetched successfully'))
 })
 
-export const nudgeUser = asyncHandler(async (req: Request<{ userId: string }, object, { note?: string }>, res: Response) => {
+export const nudgeUser = asyncHandler(async (req: Request<{ userId: string }, object, { note?: string, intent?: NudgeIntent }>, res: Response) => {
   const userId = req.params.userId
   const currentUserId = req.user?.id
-  const note = req.body?.note
-  await userService.nudgeUser(userId, currentUserId, note)
+  const note = req.body?.note?.trim()
+  const intent = req.body?.intent
+
+  if (!currentUserId) {
+    return res.status(401).json(new ApiResponse(401, null, 'Unauthorized'))
+  }
+
+  await userService.dispatchNudge(currentUserId, userId, intent, note)
 
   return res.status(200).json(new ApiResponse(200, null, 'User nudged successfully'))
 })

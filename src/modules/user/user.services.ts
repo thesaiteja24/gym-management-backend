@@ -4,11 +4,14 @@ import { withAccelerate } from '@prisma/extension-accelerate'
 import { ApiError } from '../../utils/ApiError.js'
 
 import type { PublicUser } from './user.types.js'
-import { buildNudgeNotification } from './nudge.util.js'
 import { NotificationService } from '../../service/notification.service.js'
 import { formatPublicUser } from './user.formatters.js'
 import { getPublicUserSelect, publicUserSelect } from './user.selectors.js'
 import type { TopLift, WorkoutActivity } from './user.types.js'
+import { analyzeRelationship, analyzeWorkoutState } from './nudge.analyzer.js'
+import { resolveNudgeTemplate } from './nudge.templates.js'
+import { NudgeIntent } from './nudge.types.js'
+import { logger } from '../../utils/logger.js'
 
 const prisma = new PrismaClient().$extends(withAccelerate())
 
@@ -35,66 +38,57 @@ export async function getUserById(userId: string, currentUserId?: string): Promi
   return formatPublicUser(user, currentUserId)
 }
 
-/**
- * Function to nudge a user.
- * @param userId The ID of the user to nudge
- * @param currentUserId The ID of the user making the request
- * @param note The optional note to send to the user
- */
-export async function nudgeUser(userId: string, currentUserId: string, note?: string) {
-  const currentUser = await prisma.user.findUnique({
-    where: { id: currentUserId },
+export async function dispatchNudge(
+  senderId: string,
+  receiverId: string,
+  intent?: NudgeIntent,
+  note?: string
+): Promise<boolean> {
+  const sender = await prisma.user.findUnique({
+    where: { id: senderId },
+    select: { firstName: true },
   })
 
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      ...publicUserSelect,
-      workoutLogs: {
-        where: { deletedAt: null },
-        orderBy: { startTime: 'desc' },
-        take: 1,
-        select: { startTime: true },
-      },
-    },
-  })
-
-  if (!user) {
-    throw new ApiError(404, 'Receiver not found')
-  }
-
-  if (!currentUser) {
+  if (!sender) {
     throw new ApiError(404, 'Sender not found')
   }
 
-  // Calculate if the user has an active streak (workout today or yesterday)
-  const toDateKey = (date: Date) => date.toISOString().split('T')[0]
-  const now = new Date()
-  const today = toDateKey(now)
-  const yesterdayDate = new Date(now)
-  yesterdayDate.setDate(now.getDate() - 1)
-  const yesterday = toDateKey(yesterdayDate)
+  const receiver = await prisma.user.findUnique({
+    where: { id: receiverId },
+    select: { id: true },
+  })
 
-  const lastWorkoutDate = (user as any).workoutLogs?.[0]?.startTime
-    ? toDateKey(new Date((user as any).workoutLogs[0].startTime))
-    : null
+  if (!receiver) {
+    throw new ApiError(404, 'Receiver not found')
+  }
 
-  const hasActiveStreak = !!lastWorkoutDate && (lastWorkoutDate === today || lastWorkoutDate === yesterday)
+  // Analyze Context
+  const [workoutState, relationship] = await Promise.all([
+    analyzeWorkoutState(receiverId),
+    analyzeRelationship(senderId, receiverId),
+  ])
 
-  const message = buildNudgeNotification({
-    senderName: currentUser.firstName ?? 'Pump user',
-    hasActiveStreak,
+  // Resolve Template
+  const message = resolveNudgeTemplate({
+    senderName: sender.firstName ?? 'Pump user',
+    state: workoutState,
+    relationship,
+    intent,
     personalNote: note,
   })
 
+  // Dispatch Notification
   await NotificationService.sendPushToUsers(
-    [userId],
+    [receiverId],
     message.title,
     message.content
-  ).catch(() => {})
+  ).catch((error) => {
+    console.error('Failed to send nudge push notification:', error)
+  })
 
   return true
 }
+
 
 export async function getWorkoutActivity(userId: string, days: number = 30): Promise<WorkoutActivity> {
   const startDate = new Date()
