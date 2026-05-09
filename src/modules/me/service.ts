@@ -341,74 +341,20 @@ export async function getTrainingAnalytics(userId: string, startDate: Date | nul
     })
   })
 
-  return analytics
+  // Transform to the format expected by the frontend
+  const volume = Object.entries(analytics).map(([date, data]) => ({
+    date,
+    value: data.volume,
+  }))
+  const reps = Object.entries(analytics).map(([date, data]) => ({
+    date,
+    value: data.reps,
+  }))
+  const duration = Object.entries(analytics).map(([date, data]) => ({
+    date,
+    value: data.duration,
+  }))
+
+  return { volume, reps, duration }
 }
 
-/**
- * Get strength trend (Estimated 1RM) for top exercises.
- */
-export async function getStrengthTrend(
-  userId: string,
-  startDate: Date | null,
-  top: number | 'all',
-) {
-  const exerciseSets = await prisma.workoutLogExerciseSet.findMany({
-    where: {
-      workoutExercise: {
-        workout: {
-          userId,
-          deletedAt: null,
-          ...(startDate ? { startTime: { gte: startDate } } : {}),
-        },
-        exercise: {
-          exerciseType: { in: ['weighted', 'assisted'] },
-        },
-      },
-    },
-    include: {
-      workoutExercise: {
-        include: {
-          exercise: { select: { id: true, title: true } },
-          workout: { select: { startTime: true } },
-        },
-      },
-    },
-    orderBy: { workoutExercise: { workout: { startTime: 'asc' } } },
-  })
-
-  const trends: Record<string, { title: string; history: { date: string; estimated1RM: number }[] }> = {}
-
-  exerciseSets.forEach((set: any) => {
-    const ex = set.workoutExercise.exercise
-    const startTime = set.workoutExercise.workout.startTime
-    if (!startTime) return
-
-    if (!trends[ex.id]) {
-      trends[ex.id] = { title: ex.title, history: [] }
-    }
-
-    const weight = Number(set.weight) || 0
-    const reps = set.reps || 0
-    if (weight <= 0 || reps <= 0) return
-
-    const estimated1RM = weight * (1 + reps / 30) // Epley formula
-    const date = startTime.toISOString().split('T')[0]
-
-    const existing = trends[ex.id].history.find((h) => h.date === date)
-    if (existing) {
-      if (estimated1RM > existing.estimated1RM) {
-        existing.estimated1RM = estimated1RM
-      }
-    } else {
-      trends[ex.id].history.push({ date, estimated1RM })
-    }
-  })
-
-  let result = Object.values(trends)
-  if (top !== 'all') {
-    result.sort((a, b) => b.history.length - a.history.length)
-    result = result.slice(0, top as number)
-  }
-
-  return result
-}

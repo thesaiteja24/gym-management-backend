@@ -10,7 +10,6 @@ import {
   getMe,
   getMeasurements,
   getNutritionPlan,
-  getStrengthTrend,
   getTrainingAnalytics,
   getUserAnalytics,
   updateFitnessProfile,
@@ -21,7 +20,6 @@ import {
 import {
   addDailyMeasurementSchema,
   getMeasurementsSchema,
-  getStrengthTrendSchema,
   getTrainingAnalyticsSchema,
   updateFitnessProfileSchema,
   updateMeSchema,
@@ -67,8 +65,6 @@ router
   .route('/analytics/training')
   .get(validateResource(getTrainingAnalyticsSchema), getTrainingAnalytics)
 
-router
-  .route('/analytics/strength-trend')
-  .get(validateResource(getStrengthTrendSchema), getStrengthTrend)
+
 
 export const meRoutes = router

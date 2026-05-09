@@ -19,7 +19,23 @@ export const nudgeUser = asyncHandler(async (req: Request<{ userId: string }, ob
   const userId = req.params.userId
   const currentUserId = req.user?.id
   const note = req.body?.note
- await userService.nudgeUser(userId, currentUserId, note)
+  await userService.nudgeUser(userId, currentUserId, note)
 
-  return res.status(200).json(new ApiResponse(200,null, 'User nudged successfully'))
+  return res.status(200).json(new ApiResponse(200, null, 'User nudged successfully'))
+})
+
+export const getWorkoutActivity = asyncHandler(async (req: Request<{ userId: string }>, res: Response) => {
+  const { userId } = req.params
+  const days = req.query.days ? parseInt(req.query.days as string) : 30
+  const activity = await userService.getWorkoutActivity(userId, days)
+
+  return res.status(200).json(new ApiResponse(200, activity, 'Workout activity fetched successfully'))
+})
+
+export const getTopLifts = asyncHandler(async (req: Request<{ userId: string }>, res: Response) => {
+  const { userId } = req.params
+  const limit = req.query.limit ? parseInt(req.query.limit as string) : 5
+  const lifts = await userService.getTopLifts(userId, limit)
+
+  return res.status(200).json(new ApiResponse(200, lifts, 'Top lifts fetched successfully'))
 })

@@ -90,16 +90,8 @@ export const getTrainingAnalytics = asyncHandler(async (req: Request, res: Respo
   const duration = (req.query.duration as string) || '1m'
   const startDate = meService.parseDurationToStartDate(duration)
   const analytics = await meService.getTrainingAnalytics(userId, startDate)
+  console.log(JSON.stringify(analytics))
   return res.status(200).json(new ApiResponse(200, analytics, 'Training analytics fetched'))
-})
-
-export const getStrengthTrend = asyncHandler(async (req: Request, res: Response) => {
-  const userId = req.user?.id as string
-  const duration = (req.query.duration as string) || '1m'
-  const top = (req.query.top as any) || 4
-  const startDate = meService.parseDurationToStartDate(duration)
-  const trend = await meService.getStrengthTrend(userId, startDate, top)
-  return res.status(200).json(new ApiResponse(200, trend, 'Strength trend fetched'))
 })
 
 // MEDIA HANDLERS

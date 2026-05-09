@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client'
+import { Exercise, PrismaClient } from '@prisma/client'
 import { withAccelerate } from '@prisma/extension-accelerate'
 
 import { ApiError } from '../../utils/ApiError.js'
@@ -8,6 +8,7 @@ import { buildNudgeNotification } from './nudge.util.js'
 import { NotificationService } from '../../service/notification.service.js'
 import { formatPublicUser } from './user.formatters.js'
 import { getPublicUserSelect, publicUserSelect } from './user.selectors.js'
+import type { TopLift, WorkoutActivity } from './user.types.js'
 
 const prisma = new PrismaClient().$extends(withAccelerate())
 
@@ -95,3 +96,140 @@ export async function nudgeUser(userId: string, currentUserId: string, note?: st
   return true
 }
 
+export async function getWorkoutActivity(userId: string, days: number = 30): Promise<WorkoutActivity> {
+  const startDate = new Date()
+  startDate.setDate(startDate.getDate() - (days - 1))
+  startDate.setHours(0, 0, 0, 0)
+
+  const workouts = await prisma.workoutLog.findMany({
+    where: {
+      userId,
+      deletedAt: null,
+      startTime: { gte: startDate },
+    },
+    include: {
+      exercises: {
+        include: {
+          sets: true,
+          exercise: { select: { exerciseType: true } },
+        },
+      },
+    },
+    orderBy: { startTime: 'asc' },
+  })
+
+  const activity: Record<string, { count: number; volume: number }> = {}
+
+  // Initialize all days in range with 0
+  for (let i = 0; i < days; i++) {
+    const d = new Date(startDate)
+    d.setDate(startDate.getDate() + i)
+    const dateKey = d.toISOString().split('T')[0]
+    activity[dateKey] = { count: 0, volume: 0 }
+  }
+
+  workouts.forEach((w) => {
+    if (!w.startTime)
+      return
+    const dateKey = w.startTime.toISOString().split('T')[0]
+    if (!activity[dateKey]) {
+      activity[dateKey] = { count: 0, volume: 0 }
+    }
+
+    activity[dateKey].count++
+    w.exercises.forEach((ex) => {
+      ex.sets.forEach((set) => {
+        if (ex.exercise.exerciseType === 'weighted' || ex.exercise.exerciseType === 'assisted') {
+          activity[dateKey].volume += (Number(set.weight) || 0) * (set.reps || 0)
+        }
+      })
+    })
+  })
+
+  return activity
+}
+
+export async function getTopLifts(userId: string, limit: number = 5): Promise<TopLift[]> {
+  const allExercises = await prisma.workoutLogExercise.findMany({
+    where: {
+      workout: {
+        userId,
+        deletedAt: null,
+      },
+    },
+    include: {
+      exercise: true,
+      sets: true,
+    },
+  })
+
+  const exercisesMap: Record<string, {
+    exercise: Exercise
+    bestSet: any
+    totalSets: number
+    totalOccurrences: number
+  }> = {}
+
+  allExercises.forEach((logEx) => {
+    const exId = logEx.exerciseId
+    if (!exercisesMap[exId]) {
+      exercisesMap[exId] = {
+        exercise: logEx.exercise,
+        bestSet: null,
+        totalSets: 0,
+        totalOccurrences: 0,
+      }
+    }
+
+    exercisesMap[exId].totalOccurrences++
+    exercisesMap[exId].totalSets += logEx.sets.length
+
+    logEx.sets.forEach((set) => {
+      const currentBest = exercisesMap[exId].bestSet
+      if (!currentBest) {
+        exercisesMap[exId].bestSet = set
+        return
+      }
+
+      const type = logEx.exercise.exerciseType
+      if (type === 'weighted' || type === 'assisted') {
+        const currentScore = (Number(currentBest.weight) || 0) * (currentBest.reps || 0)
+        const newScore = (Number(set.weight) || 0) * (set.reps || 0)
+        if (newScore > currentScore) {
+          exercisesMap[exId].bestSet = set
+        }
+        else if (newScore === currentScore && (Number(set.weight) || 0) > (Number(currentBest.weight) || 0)) {
+          exercisesMap[exId].bestSet = set
+        }
+      }
+      else if (type === 'durationOnly') {
+        if ((set.durationSeconds || 0) > (currentBest.durationSeconds || 0)) {
+          exercisesMap[exId].bestSet = set
+        }
+      }
+      else { // repsOnly
+        if ((set.reps || 0) > (currentBest.reps || 0)) {
+          exercisesMap[exId].bestSet = set
+        }
+      }
+    })
+  })
+
+  const sortedExercises = Object.values(exercisesMap)
+    .sort((a, b) => b.totalOccurrences - a.totalOccurrences)
+    .slice(0, limit)
+
+  return sortedExercises.map(item => ({
+    exerciseId: item.exercise.id,
+    title: item.exercise.title,
+    thumbnailUrl: item.exercise.thumbnailUrl,
+    totalSets: item.totalSets,
+    bestSet: {
+      weight: item.bestSet ? Number(item.bestSet.weight) : null,
+      reps: item.bestSet ? item.bestSet.reps : null,
+      durationSeconds: item.bestSet ? item.bestSet.durationSeconds : null,
+      setType: item.bestSet ? item.bestSet.setType : 'working',
+      createdAt: item.bestSet ? item.bestSet.createdAt : new Date(),
+    },
+  }))
+}

@@ -111,9 +111,3 @@ export const getTrainingAnalyticsSchema = z.object({
   }),
 })
 
-export const getStrengthTrendSchema = z.object({
-  query: z.object({
-    duration: z.string().default('1M'),
-    top: z.union([z.literal('all'), z.coerce.number().positive()]).default(4),
-  }),
-})
