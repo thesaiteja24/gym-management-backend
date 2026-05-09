@@ -3,7 +3,7 @@ import { withAccelerate } from '@prisma/extension-accelerate'
 
 import { getRefreshToken } from '../../service/caching.service.js'
 import { ApiError } from '../../utils/ApiError.js'
-import { formatSelfUser, selfUserSelect } from '../me/service.js'
+import { formatSelfUser, selfUserSelect } from '../me/me.services.js'
 
 import { verifyGoogleToken } from './providers/google.provider.js'
 import {

@@ -1,4 +1,4 @@
-import type { SelfUser } from './types.js'
+import type { SelfUser } from './me.types.js'
 
 /**
  * Helper to format Prisma Decimal types to numbers.

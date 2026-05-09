@@ -1,6 +1,6 @@
 import type { UserRole } from '@prisma/client'
 
-import type { SelfUser } from '../me/types.js'
+import type { SelfUser } from '../me/me.types.js'
 
 // MAIN
 
