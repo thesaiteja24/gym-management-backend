@@ -19,7 +19,6 @@ import {
 import {
   addDailyMeasurementSchema,
   getMeasurementsSchema,
-  getTrainingAnalyticsSchema,
   updateFitnessProfileSchema,
   updateMeSchema,
   updateNutritionPlanSchema,

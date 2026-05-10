@@ -1,9 +1,9 @@
 import type { EquipmentType, FitnessGoal, FitnessLevel, Gender } from '@prisma/client'
-import { prisma, readPrisma } from '../../lib/prisma.js'
 import { OpenAI } from 'openai'
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions'
 import { toFile } from 'openai/uploads.js'
 
+import { prisma, readPrisma } from '../../lib/prisma.js'
 import prompts from '../../utils/coachPrompts.js'
 import { calculateAge, formatTimeAgo } from '../../utils/helpers.js'
 

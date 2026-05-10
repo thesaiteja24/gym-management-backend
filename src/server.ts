@@ -1,8 +1,7 @@
 import http from 'http'
 
-import { prisma } from './lib/prisma.js'
-
 import { app } from './app.js'
+import { prisma } from './lib/prisma.js'
 import { logger } from './utils/logger.js'
 
 const PORT = process.env.PORT || 9999

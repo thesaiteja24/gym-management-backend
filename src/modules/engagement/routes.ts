@@ -32,7 +32,7 @@ import {
 const router = Router()
 
 router
-  .route('/:id/follow')
+  .route('/:userId/follow')
   .post(
     authorize('systemAdmin', 'gymAdmin', 'trainer', 'member'),
     validateResource(followUserSchema),

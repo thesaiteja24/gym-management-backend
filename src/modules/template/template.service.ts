@@ -1,7 +1,7 @@
 import type { SetType, ExerciseGroupType } from '@prisma/client'
-import { prisma } from '../../lib/prisma.js'
 
 import { FREE_LIMITS } from '../../constants/limits.js'
+import { prisma } from '../../lib/prisma.js'
 import { ApiError } from '../../utils/ApiError.js'
 import { generateSecureToken } from '../../utils/helpers.js'
 

@@ -1,6 +1,6 @@
-import { prisma } from '../lib/prisma.js'
 import type { Request, Response, NextFunction, RequestHandler } from 'express'
 
+import { prisma } from '../lib/prisma.js'
 import type { UserRole } from '../types/index.js'
 import { ApiError } from '../utils/ApiError.js'
 

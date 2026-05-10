@@ -1,6 +1,6 @@
-import { prisma } from '../lib/prisma.js'
 import type { Request, Response, NextFunction } from 'express'
 
+import { prisma } from '../lib/prisma.js'
 import { verifyAccessToken } from '../modules/auth/providers/token.provider.js'
 import { ApiError } from '../utils/ApiError.js'
 

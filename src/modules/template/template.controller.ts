@@ -1,6 +1,6 @@
-import { prisma } from '../../lib/prisma.js'
 import type { Request, Response } from 'express'
 
+import { prisma } from '../../lib/prisma.js'
 import { ApiError } from '../../utils/ApiError.js'
 import { ApiResponse } from '../../utils/ApiResponse.js'
 import { asyncHandler } from '../../utils/asyncHandler.js'

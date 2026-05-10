@@ -1,5 +1,4 @@
 import { prisma } from '../../lib/prisma.js'
-
 import { getRefreshToken } from '../../service/caching.service.js'
 import { ApiError } from '../../utils/ApiError.js'
 import { formatSelfUser, selfUserSelect } from '../me/me.services.js'

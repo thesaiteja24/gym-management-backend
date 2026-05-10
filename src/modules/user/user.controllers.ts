@@ -2,11 +2,11 @@ import type { Request, Response } from 'express'
 
 import { ApiResponse } from '../../utils/ApiResponse.js'
 import { asyncHandler } from '../../utils/asyncHandler.js'
-
-import * as userService from './user.services.js'
+import { parseDurationToStartDate } from '../me/me.services.js'
 
 import type { NudgeIntent } from './nudge.types.js'
-import { parseDurationToStartDate } from '../me/me.services.js'
+import * as userService from './user.services.js'
+
 
 // FUNCTIONS
 

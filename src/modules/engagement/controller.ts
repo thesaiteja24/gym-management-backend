@@ -13,7 +13,7 @@ import type { GetCommentsQuery, GetLikesQuery, ToggleLikeQuery } from './types.j
  */
 export const followUser = asyncHandler(async (req: Request, res: Response) => {
   const followerId = req.user!.id
-  const followingId = req.params.id as string
+  const followingId = req.params.userId as string
   const user = await engagementService.followUser(followerId, followingId)
   return res
     .status(200)
@@ -25,7 +25,7 @@ export const followUser = asyncHandler(async (req: Request, res: Response) => {
  */
 export const unFollowUser = asyncHandler(async (req: Request, res: Response) => {
   const followerId = req.user!.id
-  const followingId = req.params.id as string
+  const followingId = req.params.userId as string
   const user = await engagementService.unFollowUser(followerId, followingId)
   return res
     .status(200)

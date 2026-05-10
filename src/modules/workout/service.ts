@@ -1,11 +1,11 @@
 import { type Prisma } from '@prisma/client'
-import { prisma, readPrisma } from '../../lib/prisma.js'
-import { withRetry } from '../../utils/dbUtils.js'
 
+import { prisma, readPrisma } from '../../lib/prisma.js'
 import { ApiError } from '../../utils/ApiError.js'
+import { withRetry } from '../../utils/dbUtils.js'
 import { generateSecureToken } from '../../utils/helpers.js'
 import { invalidateUserProgramCache } from '../programs/service.js'
-
+import { publicUserSelect } from '../user/user.selectors.js'
 
 import { formatWorkout } from './formatter.js'
 import { advanceProgramProgress } from './programUtils.js'
@@ -17,7 +17,6 @@ import type {
   Workout,
   WorkoutResponse,
 } from './types.js'
-import { publicUserSelect } from '../user/user.selectors.js'
 
 
 
@@ -82,6 +81,67 @@ export const workoutSelect = {
           durationSeconds: true,
           restSeconds: true,
           note: true,
+        },
+      },
+    },
+  },
+  user: {
+    select: publicUserSelect,
+  },
+} satisfies Prisma.WorkoutLogSelect
+
+export const workoutListSelect = {
+  id: true,
+  clientId: true,
+  shareId: true,
+  title: true,
+  startTime: true,
+  endTime: true,
+  createdAt: true,
+  updatedAt: true,
+  isEdited: true,
+  editedAt: true,
+  deletedAt: true,
+  visibility: true,
+  likesCount: true,
+  commentsCount: true,
+  exerciseGroups: {
+    orderBy: { groupIndex: 'asc' },
+    select: {
+      id: true,
+      groupType: true,
+      groupIndex: true,
+      restSeconds: true,
+      note: true,
+    },
+  },
+  exercises: {
+    orderBy: { exerciseIndex: 'asc' },
+    select: {
+      id: true,
+      exerciseId: true,
+      exerciseIndex: true,
+      exerciseGroupId: true,
+      exercise: {
+        select: {
+          id: true,
+          title: true,
+          thumbnailUrl: true,
+          exerciseType: true,
+          primaryMuscleGroup: true,
+          otherMuscleGroups: { select: { muscleGroup: true } },
+        },
+      },
+      sets: {
+        orderBy: { setIndex: 'asc' },
+        select: {
+          id: true,
+          setIndex: true,
+          setType: true,
+          weight: true,
+          reps: true,
+          rpe: true,
+          durationSeconds: true,
         },
       },
     },
@@ -205,7 +265,7 @@ export async function getAllWorkouts(
       orderBy: { createdAt: 'desc' },
       skip,
       take: limit,
-      select: workoutSelect,
+      select: workoutListSelect,
     }))
 
     const hasMore = workouts.length === limit
@@ -238,7 +298,7 @@ export async function getDiscoverWorkouts(
       orderBy: { createdAt: 'desc' },
       skip,
       take: limit,
-      select: workoutSelect,
+      select: workoutListSelect,
     }))
 
     const hasMore = workouts.length === limit

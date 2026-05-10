@@ -1,18 +1,18 @@
-import { Exercise } from '@prisma/client'
+import type { Exercise } from '@prisma/client'
+
 import { prisma, readPrisma } from '../../lib/prisma.js'
-
-import { ApiError } from '../../utils/ApiError.js'
-
-import type { PublicUser } from './user.types.js'
 import { NotificationService } from '../../service/notification.service.js'
-import { formatPublicUser } from './user.formatters.js'
-import { getPublicUserSelect, publicUserSelect } from './user.selectors.js'
-import type { TopLift, WorkoutActivity } from './user.types.js'
+import { ApiError } from '../../utils/ApiError.js'
+import { withRetry } from '../../utils/dbUtils.js'
+
 import { analyzeRelationship, analyzeWorkoutState } from './nudge.analyzer.js'
 import { resolveNudgeTemplate } from './nudge.templates.js'
-import { NudgeIntent } from './nudge.types.js'
-import { logger } from '../../utils/logger.js'
-import { withRetry } from '../../utils/dbUtils.js'
+import type { NudgeIntent } from './nudge.types.js'
+import { formatPublicUser } from './user.formatters.js'
+import { getPublicUserSelect } from './user.selectors.js'
+import type { PublicUser } from './user.types.js'
+import type { TopLift } from './user.types.js'
+
 
 
 

@@ -1,8 +1,8 @@
 import { prisma, readPrisma } from '../../lib/prisma.js'
-
 import { NotificationService } from '../../service/notification.service.js'
 import { ApiError } from '../../utils/ApiError.js'
-
+import { formatPublicUser } from '../user/user.formatters.js'
+import { getPublicUserSelect } from '../user/user.selectors.js'
 import type { PublicUser } from '../user/user.types.js'
 
 import { formatComment, formatLike } from './formatter.js'
@@ -11,8 +11,7 @@ import type {
   CommentsListResponse,
   LikeResponse,
 } from './types.js'
-import { formatPublicUser } from '../user/user.formatters.js'
-import { getPublicUserSelect } from '../user/user.selectors.js'
+
 
 // CONSTANTS
 

@@ -1,4 +1,4 @@
-import { PublicUser } from "./user.types.js"
+import type { PublicUser } from "./user.types.js"
 
 /**
  * Formats a raw Prisma user object into a PublicUser response.

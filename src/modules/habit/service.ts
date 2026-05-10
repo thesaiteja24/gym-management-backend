@@ -1,6 +1,6 @@
 import { HabitSource } from '@prisma/client'
-import { prisma, readPrisma } from '../../lib/prisma.js'
 
+import { prisma, readPrisma } from '../../lib/prisma.js'
 import { ApiError } from '../../utils/ApiError.js'
 
 import type { CreateHabitBody, Habit, HabitLog, HabitLogsMap, UpdateHabitBody } from './types.js'
