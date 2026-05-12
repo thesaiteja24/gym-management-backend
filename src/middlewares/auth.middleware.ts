@@ -1,11 +1,10 @@
-import { PrismaClient } from '@prisma/client'
-import { withAccelerate } from '@prisma/extension-accelerate'
 import type { Request, Response, NextFunction } from 'express'
 
+import { prisma } from '../lib/prisma.js'
 import { verifyAccessToken } from '../modules/auth/providers/token.provider.js'
 import { ApiError } from '../utils/ApiError.js'
 
-const prisma = new PrismaClient().$extends(withAccelerate())
+
 
 export const authenticate = async (
   req: Request,

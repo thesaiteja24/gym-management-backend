@@ -1,8 +1,6 @@
 import { randomUUID } from 'crypto'
 
-import { PrismaClient } from '@prisma/client'
-import { withAccelerate } from '@prisma/extension-accelerate'
-
+import { prisma, readPrisma } from '../../lib/prisma.js'
 import { deleteCache, getCache, setCache } from '../../service/caching.service.js'
 import type { UploadedFile } from '../../service/media.service.js'
 import {
@@ -17,7 +15,7 @@ import type { CreateExerciseBody, ExerciseResponse, UpdateExerciseBody } from '.
 
 // CONSTANTS
 
-const prisma = new PrismaClient().$extends(withAccelerate())
+
 const GET_ALL_EXERCISES_CACHE_KEY = 'exercises:all'
 const EXERCISES_CACHE_TTL = '365d'
 
@@ -54,7 +52,7 @@ export async function getAllExercises(): Promise<ExerciseResponse[]> {
   const cached = await getCache<ExerciseResponse[]>(GET_ALL_EXERCISES_CACHE_KEY)
   if (cached) return cached
 
-  const list = await prisma.exercise.findMany({
+  const list = await readPrisma.exercise.findMany({
     orderBy: { title: 'asc' },
     include: exerciseSelect,
   })
@@ -68,7 +66,7 @@ export async function getAllExercises(): Promise<ExerciseResponse[]> {
  * Fetch a single exercise by ID.
  */
 export async function getExerciseById(id: string): Promise<ExerciseResponse> {
-  const exercise = await prisma.exercise.findUnique({
+  const exercise = await readPrisma.exercise.findUnique({
     where: { id },
     include: exerciseSelect,
   })

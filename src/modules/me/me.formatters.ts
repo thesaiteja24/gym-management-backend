@@ -1,4 +1,4 @@
-import type { SelfUser } from './types.js'
+import type { SelfUser } from './me.types.js'
 
 /**
  * Helper to format Prisma Decimal types to numbers.
@@ -29,6 +29,7 @@ export function formatSelfUser(user: any): SelfUser {
     profilePicUrl: user.profilePicUrl ?? null,
     followersCount: user.followersCount ?? 0,
     followingCount: user.followingCount ?? 0,
+    workoutsCount: user._count?.workoutLogs ?? 0,
     isPro: user.isPro ?? false,
     proSubscriptionType: user.proSubscriptionType ?? null,
     email: user.email ?? null,

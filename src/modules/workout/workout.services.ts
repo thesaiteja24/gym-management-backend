@@ -1,10 +1,11 @@
-import { PrismaClient, type Prisma } from '@prisma/client'
-import { withAccelerate } from '@prisma/extension-accelerate'
+import { type Prisma } from '@prisma/client'
 
+import { prisma, readPrisma } from '../../lib/prisma.js'
 import { ApiError } from '../../utils/ApiError.js'
+import { withRetry } from '../../utils/dbUtils.js'
 import { generateSecureToken } from '../../utils/helpers.js'
 import { invalidateUserProgramCache } from '../programs/service.js'
-import { publicUserSelect } from '../user/service.js'
+import { publicUserSelect } from '../user/user.selectors.js'
 
 import { formatWorkout } from './formatter.js'
 import { advanceProgramProgress } from './programUtils.js'
@@ -17,7 +18,7 @@ import type {
   WorkoutResponse,
 } from './types.js'
 
-const prisma = new PrismaClient().$extends(withAccelerate())
+
 
 // SECTION: CONFIG
 
@@ -89,6 +90,67 @@ export const workoutSelect = {
   },
 } satisfies Prisma.WorkoutLogSelect
 
+export const workoutListSelect = {
+  id: true,
+  clientId: true,
+  shareId: true,
+  title: true,
+  startTime: true,
+  endTime: true,
+  createdAt: true,
+  updatedAt: true,
+  isEdited: true,
+  editedAt: true,
+  deletedAt: true,
+  visibility: true,
+  likesCount: true,
+  commentsCount: true,
+  exerciseGroups: {
+    orderBy: { groupIndex: 'asc' },
+    select: {
+      id: true,
+      groupType: true,
+      groupIndex: true,
+      restSeconds: true,
+      note: true,
+    },
+  },
+  exercises: {
+    orderBy: { exerciseIndex: 'asc' },
+    select: {
+      id: true,
+      exerciseId: true,
+      exerciseIndex: true,
+      exerciseGroupId: true,
+      exercise: {
+        select: {
+          id: true,
+          title: true,
+          thumbnailUrl: true,
+          exerciseType: true,
+          primaryMuscleGroup: true,
+          otherMuscleGroups: { select: { muscleGroup: true } },
+        },
+      },
+      sets: {
+        orderBy: { setIndex: 'asc' },
+        select: {
+          id: true,
+          setIndex: true,
+          setType: true,
+          weight: true,
+          reps: true,
+          rpe: true,
+          durationSeconds: true,
+        },
+      },
+    },
+  },
+  user: {
+    select: publicUserSelect,
+  },
+} satisfies Prisma.WorkoutLogSelect
+
 // SECTION: HIGH-LEVEL SERVICES
 
 /**
@@ -111,10 +173,10 @@ export async function createWorkout(
 
   // Idempotency check for mobile clients
   if (clientId) {
-    const existing = await prisma.workoutLog.findUnique({
+    const existing = await withRetry(() => prisma.workoutLog.findUnique({
       where: { clientId },
       select: workoutSelect,
-    })
+    }))
     if (existing) {
       return {
         workout: formatWorkout(existing),
@@ -176,23 +238,49 @@ export async function createWorkout(
 }
 
 /**
- * Fetches all workout logs for a user with pagination.
+ * Generic listing for workouts based on scope (personal, specific user, or discovery).
  */
-export async function getAllWorkouts(
-  userId: string,
-  page: number,
-  limit: number,
+export async function listWorkouts(
+  requesterId: string,
+  params: {
+    page: number
+    limit: number
+    userId?: string
+  },
 ): Promise<PaginatedWorkoutsResponse> {
+  const { page, limit, userId: targetUserId } = params
   const skip = (page - 1) * limit
 
+  const where: Prisma.WorkoutLogWhereInput = {
+    deletedAt: null,
+  }
+
+  // LOGIC:
+  // 1. If targetUserId is provided and it is NOT the requester -> fetch public workouts of that user.
+  // 2. If targetUserId is provided and it IS the requester -> fetch all workouts of the requester.
+  // 3. If targetUserId is NOT provided -> fetch public workouts of EVERYONE ELSE (Discovery).
+  
+  if (targetUserId) {
+    where.userId = targetUserId
+    if (targetUserId !== requesterId) {
+      where.visibility = 'public'
+    }
+  } else {
+    // Discovery Mode: Everything public not by me
+    where.userId = { not: requesterId }
+    where.visibility = 'public'
+  }
+
   try {
-    const workouts = await prisma.workoutLog.findMany({
-      where: { userId, deletedAt: null },
-      orderBy: { createdAt: 'desc' },
-      skip,
-      take: limit,
-      select: workoutSelect,
-    })
+    const workouts = await withRetry(() =>
+      readPrisma.workoutLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+        select: workoutListSelect,
+      }),
+    )
 
     const hasMore = workouts.length === limit
     return {
@@ -205,46 +293,13 @@ export async function getAllWorkouts(
 }
 
 /**
- * Fetches public workouts for discovery.
- */
-export async function getDiscoverWorkouts(
-  userId: string,
-  page: number,
-  limit: number,
-): Promise<PaginatedWorkoutsResponse> {
-  const skip = (page - 1) * limit
-
-  try {
-    const workouts = await prisma.workoutLog.findMany({
-      where: {
-        userId: { not: userId },
-        deletedAt: null,
-        visibility: 'public',
-      },
-      orderBy: { createdAt: 'desc' },
-      skip,
-      take: limit,
-      select: workoutSelect,
-    })
-
-    const hasMore = workouts.length === limit
-    return {
-      workouts: workouts.map(formatWorkout),
-      meta: { currentPage: page, limit, hasMore },
-    }
-  } catch (_error) {
-    throw new ApiError(500, 'Failed to fetch discovery workouts')
-  }
-}
-
-/**
  * Fetches a single workout by ID.
  */
 export async function getWorkoutById(workoutId: string): Promise<Workout> {
-  const workout = await prisma.workoutLog.findUnique({
+  const workout = await withRetry(() => readPrisma.workoutLog.findUnique({
     where: { id: workoutId },
     select: workoutSelect,
-  })
+  }))
 
   if (!workout || workout.deletedAt) {
     throw new ApiError(404, 'Workout not found')
@@ -346,10 +401,10 @@ export async function updateWorkout(
  * Fetches a workout by its public share ID.
  */
 export async function getWorkoutByShareId(shareId: string): Promise<Workout> {
-  const workout = await prisma.workoutLog.findUnique({
+  const workout = await withRetry(() => readPrisma.workoutLog.findUnique({
     where: { shareId },
     select: workoutSelect,
-  })
+  }))
 
   if (!workout || workout.deletedAt || workout.visibility === 'private') {
     throw new ApiError(404, 'Shared workout not found')

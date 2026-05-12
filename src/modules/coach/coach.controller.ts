@@ -1,11 +1,10 @@
 import { Readable } from 'stream'
 
-import { PrismaClient } from '@prisma/client'
-import { withAccelerate } from '@prisma/extension-accelerate'
 import type { Request, Response } from 'express'
 import NodeCache from 'node-cache'
 import type { ChatCompletionMessageParam } from 'openai/resources'
 
+import { prisma } from '../../lib/prisma.js'
 import { getCache, setCache } from '../../service/caching.service.js'
 import { ApiError } from '../../utils/ApiError.js'
 import { ApiResponse } from '../../utils/ApiResponse.js'
@@ -21,7 +20,7 @@ import {
   transcribeAudio,
 } from './coach.service.js'
 
-const prisma = new PrismaClient().$extends(withAccelerate())
+
 
 const ttsCache = new NodeCache({
   stdTTL: 300, // 5 minutes

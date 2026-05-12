@@ -1,8 +1,7 @@
 import http from 'http'
 
-import { PrismaClient } from '@prisma/client'
-
 import { app } from './app.js'
+import { prisma } from './lib/prisma.js'
 import { logger } from './utils/logger.js'
 
 const PORT = process.env.PORT || 9999
@@ -10,12 +9,10 @@ const PORT = process.env.PORT || 9999
 const server = http.createServer(app)
 
 const checkDbConnection = async (retries = 3, delay = 1500) => {
-  const prisma = new PrismaClient()
   for (let i = 1; i <= retries; i++) {
     try {
       await prisma.$connect()
       logger.info('Database connection successfully established')
-      await prisma.$disconnect()
       return
     } catch (err) {
       if (i === retries) {

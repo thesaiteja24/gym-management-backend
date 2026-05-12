@@ -10,23 +10,19 @@ import {
   getMe,
   getMeasurements,
   getNutritionPlan,
-  getStrengthTrend,
-  getTrainingAnalytics,
   getUserAnalytics,
   updateFitnessProfile,
   updateMe,
   updateMyProfilePic,
   updateNutritionPlan,
-} from './controller.js'
+} from './me.controllers.js'
 import {
   addDailyMeasurementSchema,
   getMeasurementsSchema,
-  getStrengthTrendSchema,
-  getTrainingAnalyticsSchema,
   updateFitnessProfileSchema,
   updateMeSchema,
   updateNutritionPlanSchema,
-} from './validators.js'
+} from './me.validators.js'
 
 const router = Router()
 
@@ -63,12 +59,6 @@ router
 // Analytics
 router.route('/analytics').get(getUserAnalytics)
 
-router
-  .route('/analytics/training')
-  .get(validateResource(getTrainingAnalyticsSchema), getTrainingAnalytics)
 
-router
-  .route('/analytics/strength-trend')
-  .get(validateResource(getStrengthTrendSchema), getStrengthTrend)
 
 export const meRoutes = router

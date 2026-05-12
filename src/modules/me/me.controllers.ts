@@ -13,7 +13,7 @@ import {
 import { ApiResponse } from '../../utils/ApiResponse.js'
 import { asyncHandler } from '../../utils/asyncHandler.js'
 
-import * as meService from './service.js'
+import * as meService from './me.services.js'
 
 // FUNCTIONS
 
@@ -65,7 +65,7 @@ export const updateNutritionPlan = asyncHandler(async (req: Request, res: Respon
 
 export const getMeasurements = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user?.id as string
-  const duration = (req.query.duration as string) || '1m'
+  const duration = (req.query.duration as string) || 'all'
   const startDate = meService.parseDurationToStartDate(duration)
   const payload = await meService.buildMeasurementPayload(userId, startDate)
   return res.status(200).json(new ApiResponse(200, payload, 'Measurements fetched'))
@@ -83,23 +83,6 @@ export const getUserAnalytics = asyncHandler(async (req: Request, res: Response)
   const userId = req.user?.id as string
   const analytics = await meService.getUserAnalytics(userId)
   return res.status(200).json(new ApiResponse(200, analytics, 'User analytics fetched'))
-})
-
-export const getTrainingAnalytics = asyncHandler(async (req: Request, res: Response) => {
-  const userId = req.user?.id as string
-  const duration = (req.query.duration as string) || '1m'
-  const startDate = meService.parseDurationToStartDate(duration)
-  const analytics = await meService.getTrainingAnalytics(userId, startDate)
-  return res.status(200).json(new ApiResponse(200, analytics, 'Training analytics fetched'))
-})
-
-export const getStrengthTrend = asyncHandler(async (req: Request, res: Response) => {
-  const userId = req.user?.id as string
-  const duration = (req.query.duration as string) || '1m'
-  const top = (req.query.top as any) || 4
-  const startDate = meService.parseDurationToStartDate(duration)
-  const trend = await meService.getStrengthTrend(userId, startDate, top)
-  return res.status(200).json(new ApiResponse(200, trend, 'Strength trend fetched'))
 })
 
 // MEDIA HANDLERS

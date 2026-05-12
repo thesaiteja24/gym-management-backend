@@ -1,13 +1,11 @@
-import { PrismaClient } from '@prisma/client'
-import { withAccelerate } from '@prisma/extension-accelerate'
-
+import { prisma } from '../../lib/prisma.js'
 import {
   deleteCache,
   invalidateCachePattern,
   redisClient,
 } from '../../service/caching.service.js'
 
-const prisma = new PrismaClient().$extends(withAccelerate())
+
 
 const getDateStr = () => new Date().toISOString().split('T')[0]
 const getActiveUserProgramCacheKey = (userId: string) =>

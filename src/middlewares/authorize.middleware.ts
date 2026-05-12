@@ -1,11 +1,10 @@
-import { PrismaClient } from '@prisma/client'
-import { withAccelerate } from '@prisma/extension-accelerate'
 import type { Request, Response, NextFunction, RequestHandler } from 'express'
 
+import { prisma } from '../lib/prisma.js'
 import type { UserRole } from '../types/index.js'
 import { ApiError } from '../utils/ApiError.js'
 
-const prisma = new PrismaClient().$extends(withAccelerate())
+
 
 export const authorize = (...allowedRoles: UserRole[]): RequestHandler => {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {

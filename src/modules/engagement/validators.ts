@@ -56,8 +56,6 @@ export const deleteCommentSchema = z.object({
     .strict(),
 })
 
-export const getRepliesSchema = getCommentsSchema
-
 export const toggleLikeSchema = z.object({
   params: z
     .object({

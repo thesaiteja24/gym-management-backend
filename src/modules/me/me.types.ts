@@ -11,6 +11,7 @@ export interface SelfUser {
   profilePicUrl: string | null
   followersCount: number
   followingCount: number
+  workoutsCount: number
   isPro: boolean
   proSubscriptionType: string | null
   email: string | null

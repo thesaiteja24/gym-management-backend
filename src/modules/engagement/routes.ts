@@ -2,7 +2,7 @@ import { Router } from 'express'
 
 import { authorize } from '../../middlewares/authorize.middleware.js'
 import { validateResource } from '../../middlewares/validate.middleware.js'
-import { followUserSchema } from '../user/validators.js'
+import { followUserSchema } from '../user/user.validators.js'
 
 import {
   createComment,
@@ -32,7 +32,7 @@ import {
 const router = Router()
 
 router
-  .route('/:id/follow')
+  .route('/:userId/follow')
   .post(
     authorize('systemAdmin', 'gymAdmin', 'trainer', 'member'),
     validateResource(followUserSchema),

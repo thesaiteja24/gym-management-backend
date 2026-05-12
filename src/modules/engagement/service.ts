@@ -1,10 +1,9 @@
-import { PrismaClient } from '@prisma/client'
-import { withAccelerate } from '@prisma/extension-accelerate'
-
+import { prisma, readPrisma } from '../../lib/prisma.js'
 import { NotificationService } from '../../service/notification.service.js'
 import { ApiError } from '../../utils/ApiError.js'
-import { formatPublicUser, getPublicUserSelect } from '../user/service.js'
-import type { PublicUser } from '../user/types.js'
+import { formatPublicUser } from '../user/user.formatters.js'
+import { getPublicUserSelect } from '../user/user.selectors.js'
+import type { PublicUser } from '../user/user.types.js'
 
 import { formatComment, formatLike } from './formatter.js'
 import type {
@@ -13,9 +12,10 @@ import type {
   LikeResponse,
 } from './types.js'
 
+
 // CONSTANTS
 
-const prisma = new PrismaClient().$extends(withAccelerate())
+
 
 // QUERY HELPERS
 
@@ -126,7 +126,7 @@ export async function getUserFollowers(
   userId: string,
   currentUserId: string,
 ): Promise<PublicUser[]> {
-  const followers = await prisma.follow.findMany({
+  const followers = await readPrisma.follow.findMany({
     where: { followingId: userId },
     include: {
       follower: { select: getEngagementUserSelect(currentUserId) },
@@ -142,7 +142,7 @@ export async function getUserFollowing(
   userId: string,
   currentUserId: string,
 ): Promise<PublicUser[]> {
-  const following = await prisma.follow.findMany({
+  const following = await readPrisma.follow.findMany({
     where: { followerId: userId },
     include: {
       following: { select: getEngagementUserSelect(currentUserId) },
@@ -155,7 +155,7 @@ export async function getUserFollowing(
  * Search users by name or email.
  */
 export async function searchUsers(query: string, currentUserId: string): Promise<PublicUser[]> {
-  const users = await prisma.user.findMany({
+  const users = await readPrisma.user.findMany({
     where: {
       OR: [
         { firstName: { contains: query, mode: 'insensitive' } },
@@ -174,7 +174,7 @@ export async function searchUsers(query: string, currentUserId: string): Promise
  * Get suggested users (users not followed by current user).
  */
 export async function getSuggestedUsers(currentUserId: string): Promise<PublicUser[]> {
-  const users = await prisma.user.findMany({
+  const users = await readPrisma.user.findMany({
     where: {
       id: { not: currentUserId },
     },
@@ -293,13 +293,13 @@ export async function getLikes(
   targetType: 'workout' | 'comment',
 ): Promise<LikeResponse[]> {
   if (targetType === 'workout') {
-    const likes = await prisma.workoutLike.findMany({
+    const likes = await readPrisma.workoutLike.findMany({
       where: { workoutId: targetId },
       include: { user: { select: engagementUserSelect } },
     })
     return likes.map((l) => formatLike(l, targetId, 'workout'))
   } else {
-    const likes = await prisma.workoutCommentLike.findMany({
+    const likes = await readPrisma.workoutCommentLike.findMany({
       where: { commentId: targetId },
       include: { user: { select: engagementUserSelect } },
     })
@@ -417,7 +417,7 @@ export async function getComments(
   limit: number,
   cursor?: string,
 ): Promise<CommentsListResponse> {
-  const comments = await prisma.workoutComment.findMany({
+  const comments = await readPrisma.workoutComment.findMany({
     where: isReply ? { parentId: targetId } : { workoutId: targetId, parentId: null },
     take: limit + 1,
     cursor: cursor ? { id: cursor } : undefined,

@@ -1,12 +1,11 @@
 import type { SetType, ExerciseGroupType } from '@prisma/client'
-import { PrismaClient } from '@prisma/client'
-import { withAccelerate } from '@prisma/extension-accelerate'
 
 import { FREE_LIMITS } from '../../constants/limits.js'
+import { prisma } from '../../lib/prisma.js'
 import { ApiError } from '../../utils/ApiError.js'
 import { generateSecureToken } from '../../utils/helpers.js'
 
-const prisma = new PrismaClient().$extends(withAccelerate())
+
 
 export interface TemplateSetInput {
   setIndex: number
