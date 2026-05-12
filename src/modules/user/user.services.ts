@@ -1,4 +1,4 @@
-import type { Exercise } from '@prisma/client'
+import { Exercise, Prisma, WorkoutLogExerciseSet } from '@prisma/client'
 
 import { prisma, readPrisma } from '../../lib/prisma.js'
 import { NotificationService } from '../../service/notification.service.js'
@@ -115,9 +115,9 @@ export async function getTopLifts(userId: string, currentUserId?: string, limit:
     bestDuration: number
   }> = {}
 
-  allExercises.forEach((logEx) => {
+  ;(allExercises as any[]).forEach((logEx: any) => {
     const exId = logEx.exerciseId
-    const workingSets = logEx.sets.filter(s => s.setType !== 'warmup')
+    const workingSets = logEx.sets.filter((s: WorkoutLogExerciseSet) => s.setType !== 'warmup')
 
     if (workingSets.length === 0)
       return
@@ -137,7 +137,7 @@ export async function getTopLifts(userId: string, currentUserId?: string, limit:
     exercisesMap[exId].totalOccurrences++
     exercisesMap[exId].totalSets += workingSets.length
 
-    workingSets.forEach((set) => {
+    workingSets.forEach((set: WorkoutLogExerciseSet) => {
       const currentBest = exercisesMap[exId].bestSet
       const type = logEx.exercise.exerciseType
 
