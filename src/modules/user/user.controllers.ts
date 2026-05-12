@@ -36,7 +36,8 @@ export const nudgeUser = asyncHandler(async (req: Request<{ userId: string }, ob
 export const getTopLifts = asyncHandler(async (req: Request<{ userId: string }>, res: Response) => {
   const { userId } = req.params
   const limit = req.query.limit ? parseInt(req.query.limit as string) : 5
-  const lifts = await userService.getTopLifts(userId, limit)
+  const currentUserId = req.user?.id
+  const lifts = await userService.getTopLifts(userId, currentUserId, limit)
 
   return res.status(200).json(new ApiResponse(200, lifts, 'Top lifts fetched successfully'))
 })
@@ -45,7 +46,8 @@ export const getTrainingAnalytics = asyncHandler(async (req: Request<{ userId: s
   const { userId } = req.params
   const duration = (req.query.duration as string) || 'all'
   const startDate = parseDurationToStartDate(duration)
-  const analytics = await userService.getTrainingAnalytics(userId, startDate)
+  const currentUserId = req.user?.id
+  const analytics = await userService.getTrainingAnalytics(userId, startDate, currentUserId)
 
   return res.status(200).json(new ApiResponse(200, analytics, 'Training analytics fetched successfully'))
 })

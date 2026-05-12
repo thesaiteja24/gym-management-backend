@@ -90,12 +90,13 @@ export async function dispatchNudge(
   return true
 }
 
-export async function getTopLifts(userId: string, limit: number = 5): Promise<TopLift[]> {
+export async function getTopLifts(userId: string, currentUserId?: string, limit: number = 5): Promise<TopLift[]> {
   const allExercises = await readPrisma.workoutLogExercise.findMany({
     where: {
       workout: {
         userId,
         deletedAt: null,
+        ...(currentUserId !== userId ? { visibility: 'public' } : {}),
       },
     },
     include: {
@@ -214,12 +215,13 @@ export async function getTopLifts(userId: string, limit: number = 5): Promise<To
   }))
 }
 
-export async function getTrainingAnalytics(userId: string, startDate: Date | null) {
+export async function getTrainingAnalytics(userId: string, startDate: Date | null, currentUserId?: string) {
   const workoutLogs = await readPrisma.workoutLog.findMany({
     where: {
       userId,
       deletedAt: null,
       ...(startDate ? { startTime: { gte: startDate } } : {}),
+      ...(currentUserId !== userId ? { visibility: 'public' } : {}),
     },
     include: {
       exercises: {

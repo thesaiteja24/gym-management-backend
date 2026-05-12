@@ -46,6 +46,21 @@ export async function analyzeWorkoutState(userId: string): Promise<UserWorkoutSt
   ).length
 
   // State Logic
+  // Returning users: recently worked out again after a long break.
+  if (diffDays <= 2 && recentWorkouts.length > 1) {
+    const secondLastWorkoutDate = recentWorkouts[1].startTime!
+    const secondLastWorkoutDay = new Date(secondLastWorkoutDate)
+    secondLastWorkoutDay.setHours(0, 0, 0, 0)
+
+    const diffBetweenLastTwo = Math.floor(
+      Math.abs(lastWorkoutDay.getTime() - secondLastWorkoutDay.getTime()) / (1000 * 60 * 60 * 24)
+    )
+
+    if (diffBetweenLastTwo > 14) {
+      return 'returning'
+    }
+  }
+
   if (diffDays <= 1) {
     if (workoutsLast14Days >= 6) {
       return 'highly_active' // Working out almost every other day or more
@@ -53,33 +68,11 @@ export async function analyzeWorkoutState(userId: string): Promise<UserWorkoutSt
     return 'consistent'
   }
 
-  if (diffDays > 1 && diffDays <= 6) {
+  if (diffDays <= 6) {
     return 'cooling_off' // Hasn't worked out in a few days
   }
 
-  if (diffDays > 6 && diffDays <= 30) {
-    return 'inactive'
-  }
-
-  // If they just worked out today/yesterday after a long break (> 14 days), 
-  // it would be caught earlier, but what if they just came back?
-  // Let's refine "returning": They have a workout in the last 2 days, 
-  // but before that, their previous workout was > 14 days ago.
-  if (recentWorkouts.length > 1) {
-    const secondLastWorkoutDate = recentWorkouts[1].startTime!
-    const secondLastWorkoutDay = new Date(secondLastWorkoutDate)
-    secondLastWorkoutDay.setHours(0, 0, 0, 0)
-    
-    const diffBetweenLastTwo = Math.floor(
-      Math.abs(lastWorkoutDay.getTime() - secondLastWorkoutDay.getTime()) / (1000 * 60 * 60 * 24)
-    )
-
-    if (diffDays <= 2 && diffBetweenLastTwo > 14) {
-      return 'returning'
-    }
-  }
-
-  // Fallback for > 30 days
+  // Fallback for users inactive for over a week
   return 'inactive'
 }
 
