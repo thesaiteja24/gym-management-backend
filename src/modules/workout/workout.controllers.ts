@@ -3,7 +3,7 @@ import type { Request, Response } from 'express'
 import { ApiResponse } from '../../utils/ApiResponse.js'
 import { asyncHandler } from '../../utils/asyncHandler.js'
 
-import * as workoutService from './service.js'
+import * as workoutService from './workout.services.js'
 import type { CreateWorkoutBody, UpdateWorkoutBody } from './types.js'
 
 /**
@@ -17,26 +17,19 @@ export const createWorkout = asyncHandler(
 )
 
 /**
- * Fetches all workout logs for the authenticated user with pagination.
+ * Fetches workout logs based on query (personal history, user history, or discovery).
  */
-export const getAllWorkouts = asyncHandler(async (req: Request, res: Response) => {
+export const listWorkouts = asyncHandler(async (req: Request, res: Response) => {
   const page = parseInt(req.query.page as string) || 1
   const limit = parseInt(req.query.limit as string) || 10
-  const targetUserId = req.query.userId as string | undefined
+  const userId = req.query.userId as string | undefined
 
-  const response = await workoutService.getAllWorkouts(req.user!.id, page, limit, targetUserId)
+  const response = await workoutService.listWorkouts(req.user!.id, {
+    page,
+    limit,
+    userId,
+  })
   return res.json(new ApiResponse(200, response, 'Workouts fetched successfully'))
-})
-
-/**
- * Fetches public workouts for discovery.
- */
-export const getDiscoverWorkouts = asyncHandler(async (req: Request, res: Response) => {
-  const page = parseInt(req.query.page as string) || 1
-  const limit = parseInt(req.query.limit as string) || 10
-
-  const response = await workoutService.getDiscoverWorkouts(req.user!.id, page, limit)
-  return res.json(new ApiResponse(200, response, 'Discovery workouts fetched successfully'))
 })
 
 /**

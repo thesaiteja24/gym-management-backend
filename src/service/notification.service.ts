@@ -7,6 +7,7 @@ import { ApiError } from '../utils/ApiError.js'
  */
 const ONESIGNAL_API_KEY = process.env.ONESIGNAL_API_KEY as string
 const ONESIGNAL_APP_ID = process.env.ONESIGNAL_APP_ID as string
+const ONESIGNAL_ANDROID_CHANNEL_ID = process.env.ONESIGNAL_ANDROID_CHANNEL_ID as string
 
 const configuration = OneSignal.createConfiguration({
   restApiKey: ONESIGNAL_API_KEY,
@@ -37,6 +38,7 @@ export const NotificationService = {
       notification.contents = { en: message }
       notification.data = data
       notification.target_channel = 'push'
+      notification.android_channel_id = ONESIGNAL_ANDROID_CHANNEL_ID
 
       // Target users by their external_id (which is their DB userId)
       notification.include_aliases = {
@@ -73,6 +75,7 @@ export const NotificationService = {
       notification.contents = { en: message }
       notification.data = data
       notification.included_segments = segments
+      notification.priority = 10
 
       await client.createNotification(notification)
     } catch (error: any) {

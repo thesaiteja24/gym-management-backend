@@ -238,35 +238,49 @@ export async function createWorkout(
 }
 
 /**
- * Fetches all workout logs for a user with pagination.
+ * Generic listing for workouts based on scope (personal, specific user, or discovery).
  */
-export async function getAllWorkouts(
+export async function listWorkouts(
   requesterId: string,
-  page: number,
-  limit: number,
-  targetUserId?: string,
+  params: {
+    page: number
+    limit: number
+    userId?: string
+  },
 ): Promise<PaginatedWorkoutsResponse> {
+  const { page, limit, userId: targetUserId } = params
   const skip = (page - 1) * limit
-  const userId = targetUserId || requesterId
 
-  // If requesting someone else's workouts, only show public ones
   const where: Prisma.WorkoutLogWhereInput = {
-    userId,
     deletedAt: null,
   }
 
-  if (targetUserId && targetUserId !== requesterId) {
+  // LOGIC:
+  // 1. If targetUserId is provided and it is NOT the requester -> fetch public workouts of that user.
+  // 2. If targetUserId is provided and it IS the requester -> fetch all workouts of the requester.
+  // 3. If targetUserId is NOT provided -> fetch public workouts of EVERYONE ELSE (Discovery).
+  
+  if (targetUserId) {
+    where.userId = targetUserId
+    if (targetUserId !== requesterId) {
+      where.visibility = 'public'
+    }
+  } else {
+    // Discovery Mode: Everything public not by me
+    where.userId = { not: requesterId }
     where.visibility = 'public'
   }
 
   try {
-    const workouts = await withRetry(() => readPrisma.workoutLog.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      skip,
-      take: limit,
-      select: workoutListSelect,
-    }))
+    const workouts = await withRetry(() =>
+      readPrisma.workoutLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+        select: workoutListSelect,
+      }),
+    )
 
     const hasMore = workouts.length === limit
     return {
@@ -275,39 +289,6 @@ export async function getAllWorkouts(
     }
   } catch (_error) {
     throw new ApiError(500, 'Failed to fetch workouts')
-  }
-}
-
-/**
- * Fetches public workouts for discovery.
- */
-export async function getDiscoverWorkouts(
-  userId: string,
-  page: number,
-  limit: number,
-): Promise<PaginatedWorkoutsResponse> {
-  const skip = (page - 1) * limit
-
-  try {
-    const workouts = await withRetry(() => readPrisma.workoutLog.findMany({
-      where: {
-        userId: { not: userId },
-        deletedAt: null,
-        visibility: 'public',
-      },
-      orderBy: { createdAt: 'desc' },
-      skip,
-      take: limit,
-      select: workoutListSelect,
-    }))
-
-    const hasMore = workouts.length === limit
-    return {
-      workouts: workouts.map(formatWorkout),
-      meta: { currentPage: page, limit, hasMore },
-    }
-  } catch (_error) {
-    throw new ApiError(500, 'Failed to fetch discovery workouts')
   }
 }
 
