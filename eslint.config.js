@@ -1,67 +1,73 @@
-import js from '@eslint/js'
-import tseslint from 'typescript-eslint'
-import unusedImports from 'eslint-plugin-unused-imports'
-import importX from 'eslint-plugin-import-x'
-import prettier from 'eslint-config-prettier'
+// @ts-check
+import antfu from '@antfu/eslint-config'
+import checkFile from 'eslint-plugin-check-file'
 
-export default tseslint.config(
-  // Base JS rules
-  js.configs.recommended,
-
-  // TypeScript rules
-  ...tseslint.configs.recommended,
-
+export default antfu(
   {
-    files: ['**/*.ts'],
-    languageOptions: {
-      parser: tseslint.parser,
-      ecmaVersion: 'latest',
-      sourceType: 'module',
+    typescript: true,
+    // ESLint handles formatting — no Prettier needed
+    stylistic: {
+      indent: 2,
+      semi: false,
+      quotes: 'single',
     },
-    plugins: {
-      'unused-imports': unusedImports,
-      import: importX,
-    },
+    // Perfectionist (bundled) handles sorted imports automatically
+    ignores: ['dist/**', 'node_modules/**', 'scripts/**'],
+  },
+  // File & folder naming conventions
+  // KEBAB_CASE pattern allows dots so multi-segment names (e.g. health.routes.ts) are valid
+  {
+    plugins: { 'check-file': checkFile },
     rules: {
-      // Core backend rules
-      'no-console': 'off', // logging is fine in backend
-      'no-debugger': 'warn',
-
-      // Unused imports (AUTO FIX)
-      'unused-imports/no-unused-imports': 'error',
-      '@typescript-eslint/no-unused-vars': [
+      'check-file/filename-naming-convention': [
         'error',
-        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
-      ],
-
-      // TypeScript sanity
-      '@typescript-eslint/no-explicit-any': 'warn',
-      '@typescript-eslint/consistent-type-imports': 'warn',
-
-      // Code quality limits
-      'max-lines': ['warn', { max: 350, skipBlankLines: true, skipComments: true }],
-      'max-lines-per-function': ['warn', { max: 80, skipBlankLines: true, skipComments: true }],
-      complexity: ['warn', 10],
-      'max-depth': ['warn', 4],
-      'max-params': ['warn', 4],
-
-      // Imports organization
-      'import/order': [
-        'warn',
         {
-          groups: ['builtin', 'external', 'internal', 'parent', 'sibling', 'index'],
-          'newlines-between': 'always',
-          alphabetize: { order: 'asc', caseInsensitive: true },
+          // Regex: lowercase letters, numbers, dots and hyphens only
+          'src/**/*.ts': 'KEBAB_CASE',
+          'test/**/*.ts': 'KEBAB_CASE',
+        },
+        { ignoreMiddleExtensions: true },
+      ],
+      'check-file/folder-naming-convention': [
+        'error',
+        {
+          'src/**/': 'KEBAB_CASE',
         },
       ],
     },
   },
-
-  // Ignore build output
+  // Node.js environment — allow process global in ESM files
   {
-    ignores: ['dist', 'node_modules', '.gemini'],
+    rules: {
+      'node/prefer-global/process': 'off',
+    },
   },
-
-  // Disable formatting conflicts
-  prettier,
+  // Custom strictness rules
+  {
+    rules: {
+      // No any
+      '@typescript-eslint/no-explicit-any': 'error',
+      // No unused variables (allow _ prefix for intentionally unused)
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      // Cyclomatic complexity — keep functions simple
+      'complexity': ['error', 10],
+      // Max lines per file (excluding blanks and comments)
+      'max-lines': ['error', { max: 300, skipBlankLines: true, skipComments: true }],
+      // Max lines per function
+      'max-lines-per-function': ['error', { max: 60, skipBlankLines: true, skipComments: true }],
+      // Max parameters — prefer option objects
+      'max-params': ['error', 4],
+      // No console — use the Pino logger (only server.ts entry-point is exempt via override below)
+      'no-console': 'error',
+      // Prefer const
+      'prefer-const': 'error',
+    },
+  },
+  // server.ts is the process entry point — allow console for startup banners
+  {
+    files: ['src/server.ts'],
+    rules: {
+      'no-console': 'off',
+    },
+  },
 )

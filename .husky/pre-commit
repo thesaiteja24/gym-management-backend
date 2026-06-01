@@ -1,0 +1,9 @@
+#!/bin/sh
+# Run lint-staged — only lints/fixes our staged src + test files
+bunx lint-staged --config .lintstagedrc.json
+
+# Check test file existence for staged modules
+bun run scripts/check-tests.js
+
+# Run all tests — commit is blocked if any test fails
+bun run test

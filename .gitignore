@@ -1,51 +1,33 @@
-# Node.js
+# ─── Dependencies ───────────────────────────────────────────────
 node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
 
-# dotenv environment variables
-.env
-.env.local
-.env.*.local
-
-# Logs
-logs/
-*.log
-log/
-*.gz
-
-# OS junk
-.DS_Store
-Thumbs.db
-
-# Coverage
-coverage/
-
-# Build outputs
+# ─── Build Output ────────────────────────────────────────────────
 dist/
 build/
-tmp/
-temp/
 
-# TypeScript (if using)
+# ─── Environment Variables ────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ─── Logs ────────────────────────────────────────────────────────
+logs/
+*.log
+npm-debug.log*
+pino.log
+
+# ─── OS & Editor Artifacts ───────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# ─── IDE (local overrides only — shared config is in .vscode/) ───
+.idea/
+
+# ─── Test & Coverage ─────────────────────────────────────────────
+coverage/
+.nyc_output/
+
+
 *.tsbuildinfo
-
-# PM2 logs (if using PM2 process manager)
-pids/
-*.pid
-*.seed
-
-# VSCode
-.vscode/
-
-# Docker
-docker-compose.override.yml
-*.local.yml
-
-# Optional: MongoDB data
-/data/db
-/src/generated/prisma
-
-/src/generated/prisma

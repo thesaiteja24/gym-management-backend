@@ -1,0 +1,21 @@
+{
+  "editor.formatOnSave": false,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit",
+    "source.organizeImports": "never"
+  },
+  "eslint.useFlatConfig": true,
+  "eslint.validate": ["typescript", "javascript"],
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "editor.defaultFormatter": "dbaeumer.vscode-eslint",
+  "editor.tabSize": 2,
+  "editor.rulers": [100],
+  "files.insertFinalNewline": true,
+  "files.trimTrailingWhitespace": true,
+  "[typescript]": {
+    "editor.defaultFormatter": "dbaeumer.vscode-eslint"
+  },
+  "[javascript]": {
+    "editor.defaultFormatter": "dbaeumer.vscode-eslint"
+  }
+}

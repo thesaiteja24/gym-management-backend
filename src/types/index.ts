@@ -1,38 +1,41 @@
-import type { Request, Response, NextFunction } from 'express'
+import type { FastifyRedis } from '@fastify/redis'
+import type { PrismaClient, UserRole } from '@prisma/client'
+import type {
+  FastifyBaseLogger,
+  FastifyInstance,
+  RawReplyDefaultExpression,
+  RawRequestDefaultExpression,
+  RawServerDefault,
+} from 'fastify'
+import type { ZodTypeProvider } from 'fastify-type-provider-zod'
+import type { AppConfig } from '@/config/env'
 
-import type { TokenPayload } from '../modules/auth/types.js'
+declare module 'fastify' {
+  interface FastifyInstance {
+    prisma: PrismaClient
+    redis: FastifyRedis
+    config: AppConfig
+    authService: import('@/modules/auth/auth.service').AuthService
+    authenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<void>
+  }
 
-// User role enum (mirrors Prisma enum)
-export type UserRole = 'systemAdmin' | 'gymAdmin' | 'trainer' | 'member'
-
-// Express Request with authenticated user
-export interface AuthenticatedRequest extends Request {
-  user: TokenPayload
+  interface FastifyRequest {
+    user: {
+      id: string
+      role: UserRole
+    }
+    sessionId: string
+  }
 }
 
-// Async controller handler type
-export type AsyncRequestHandler<
-  P = Record<string, string>,
-  ResBody = unknown,
-  ReqBody = unknown,
-  ReqQuery = qs.ParsedQs,
-> = (
-  req: Request<P, ResBody, ReqBody, ReqQuery>,
-  res: Response<ResBody>,
-  next: NextFunction,
-) => Promise<void | Response>
-
-// API Response structure
-export interface ApiResponseData<T = unknown> {
-  statusCode: number
-  data: T
-  message: string
-  success: boolean
-}
-
-// Logger request type (for optional request context)
-export interface LoggerRequest {
-  user?: { id: string } | null
-  ip?: string
-  ips?: string[]
-}
+/**
+ * A FastifyInstance type that is pre-configured with the TypeBox type provider, PrismaClient type, Redis type, and AppConfig type.
+ * Use this in route definitions and plugins to get full type safety for schemas.
+ */
+export type FastifyTypedInstance = FastifyInstance<
+  RawServerDefault,
+  RawRequestDefaultExpression<RawServerDefault>,
+  RawReplyDefaultExpression<RawServerDefault>,
+  FastifyBaseLogger,
+  ZodTypeProvider
+>

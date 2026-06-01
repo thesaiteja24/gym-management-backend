@@ -1,48 +1,28 @@
-import http from 'http'
+import { buildApp } from './app'
 
-import { app } from './app.js'
-import { prisma } from './lib/prisma.js'
-import { logger } from './utils/logger.js'
+async function start() {
+  const app = await buildApp()
+  const port = Number(app.config.PORT) || 3000
 
-const PORT = process.env.PORT || 9999
-
-const server = http.createServer(app)
-
-const checkDbConnection = async (retries = 3, delay = 1500) => {
-  for (let i = 1; i <= retries; i++) {
-    try {
-      await prisma.$connect()
-      logger.info('Database connection successfully established')
-      return
-    } catch (err) {
-      if (i === retries) {
-        logger.fatal({ err }, 'CRITICAL: Database connection failed after 3 retries')
-        process.exit(1)
-      }
-      logger.warn(`Database connection failed, retrying... (${i}/3)`)
-      await new Promise((res) => setTimeout(res, delay))
-    }
+  try {
+    await app.listen({ port, host: '0.0.0.0' })
+    console.log(`🚀 Server ready at http://localhost:${port}`)
+    console.log(`📄 Documentation available at http://localhost:${port}/docs`)
   }
+  catch (err) {
+    app.log.error(err)
+    process.exit(1)
+  }
+
+  // Graceful shutdown
+  const signals: NodeJS.Signals[] = ['SIGTERM', 'SIGINT']
+  signals.forEach((signal) => {
+    process.on(signal, async () => {
+      app.log.info(`Received ${signal}, shutting down...`)
+      await app.close()
+      process.exit(0)
+    })
+  })
 }
 
-server.listen(PORT, async () => {
-  logger.info(`Server successfully started on port ${PORT} in ${process.env.NODE_ENV || 'dev'} mode`)
-  await checkDbConnection()
-})
-
-process.on('unhandledRejection', (reason: unknown) => {
-  logger.fatal({ err: reason }, 'Unhandled Rejection')
-  server.close(() => process.exit(1))
-})
-
-process.on('uncaughtException', (err: Error) => {
-  logger.fatal({ err }, 'Uncaught Exception')
-  server.close(() => process.exit(1))
-})
-
-process.on('SIGINT', () => {
-  server.close(() => {
-    logger.info('Server gracefully closed via SIGINT')
-    process.exit(0)
-  })
-})
+start()

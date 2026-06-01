@@ -1,38 +1,31 @@
-# Stage 1: Build
-FROM node:22-alpine AS builder
+# Build stage
+FROM oven/bun:1.3-alpine AS builder
 
 WORKDIR /app
 
-# Install dependencies first for better caching
-COPY package*.json ./
+COPY package.json bun.lock ./
 COPY prisma ./prisma/
+RUN bun install --frozen-lockfile
 
-RUN npm ci
+# Generate Prisma Client
+RUN bunx prisma generate
 
-# Copy the rest of the source code
 COPY . .
+RUN bun run build
 
-# Generate Prisma client
-RUN npx prisma generate
-
-# Build the TypeScript app
-RUN npm run build
-
-# Stage 2: Runtime
-FROM node:22-alpine
+# Production stage
+FROM oven/bun:1.3-alpine
 
 WORKDIR /app
 
-# Copy built assets and production dependencies
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile --production --ignore-scripts
+
+# Copy generated client and build artifacts
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma/client ./node_modules/@prisma/client
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/docs ./docs
 
-# Environment variables
-ENV NODE_ENV=production
-
-# Run migrations and start the app
-CMD ["sh", "-c", "npx prisma migrate deploy && npm start"]
+# Run migrations and start the fastify server
+CMD ["sh", "-c", "bunx prisma migrate deploy && bun run dist/src/server.js"]

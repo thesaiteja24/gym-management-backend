@@ -1,44 +1,160 @@
-// app.ts
-import cors from 'cors'
-import type { Express, Request } from 'express'
-import express from 'express'
-import { pinoHttp } from 'pino-http'
+import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
+import type { ZodTypeProvider } from 'fastify-type-provider-zod'
+import cors from '@fastify/cors'
+import helmet from '@fastify/helmet'
+import fastify from 'fastify'
+import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod'
 
-import { indexRoutes } from './index.routes.js'
-import { globalErrorHandler } from './middlewares/globalErrorHandler.js'
-import { logger } from './utils/logger.js'
-import { mountSwagger } from './utils/swagger.js'
+import { envPlugin } from './config/env'
+import { authRoutes } from './modules/auth'
+import { healthRoutes } from './modules/health'
+import { meRoutes } from './modules/me'
+import { authPlugin } from './plugins/auth'
+import { prismaPlugin } from './plugins/prisma'
+import { redisPlugin } from './plugins/redis'
+import { swaggerPlugin } from './plugins/swagger'
 
-const app: Express = express()
+import { HttpError } from './utils/response'
 
-const corsOptions = {
-  origin: process.env.CORS_ORIGIN,
+interface ValidationError {
+  keyword: string
+  params: unknown
+  instancePath: string
+  message?: string
 }
 
-app.use(cors(corsOptions))
+function formatAdditionalPropertiesError(params: Record<string, unknown>) {
+  const additionalProps = params?.additionalProperties as string[] | undefined
+  const propName = (additionalProps || []).join(', ') || 'unknown'
+  const label = (additionalProps || []).length > 1 ? 'properties' : 'property'
+  return {
+    path: propName,
+    message: `Unexpected ${label} '${propName}'`,
+  }
+}
 
-app.use(
-  pinoHttp({
-    logger,
-    customProps: (req: Request) => ({
-      userId: (req as any).user?.id,
-    }),
+function formatValidationError(v: ValidationError) {
+  if (v.keyword === 'additionalProperties') {
+    return formatAdditionalPropertiesError(v.params as Record<string, unknown>)
+  }
+
+  const params = v.params as Record<string, unknown>
+  const missingProp = params?.missingProperty as string | undefined
+  const path = v.instancePath.replace(/^\//, '') || missingProp || 'body'
+  const message = v.message || 'Invalid value'
+
+  return { path, message }
+}
+
+function errorHandler(this: FastifyInstance, error: FastifyError, _request: FastifyRequest, reply: FastifyReply) {
+  this.log.error(error)
+
+  const timestamp = new Date().toISOString()
+
+  if (error instanceof HttpError) {
+    return reply.status(error.statusCode).send({
+      success: false,
+      message: error.message,
+      error: {
+        code: error.code,
+        details: error.details,
+      },
+      meta: { timestamp },
+    })
+  }
+
+  if (error.validation) {
+    const details = error.validation.map(v => formatValidationError(v as unknown as ValidationError))
+    return reply.status(400).send({
+      success: false,
+      message: 'Validation failed',
+      error: {
+        code: 'BAD_REQUEST',
+        details,
+      },
+      meta: { timestamp },
+    })
+  }
+
+  const statusCode = error.statusCode ?? 500
+  const message = statusCode >= 500 ? 'Internal Server Error' : error.message
+  const errorCode = (error as unknown as Record<string, unknown>).code as string || 'INTERNAL_SERVER_ERROR'
+
+  reply.status(statusCode).send({
+    success: false,
+    message,
+    error: {
+      code: errorCode,
+      details: null,
+    },
+    meta: { timestamp },
   })
-)
+}
 
-app.use(express.json({ limit: '16kb' }))
-app.use(express.urlencoded({ extended: true, limit: '16kb' }))
-app.use(express.static('public'))
+export async function buildApp() {
+  const isDev = process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test'
 
-// mount swagger docs
-mountSwagger(app)
+  const app = fastify({
+    logger: isDev
+      ? {
+          level: 'info',
+          transport: {
+            target: 'pino-pretty',
+            options: {
+              colorize: true,
+              translateTime: 'HH:MM:ss',
+              ignore: 'pid,hostname,reqId',
+            },
+          },
+        }
+      : {
+          level: 'info',
+        },
+  }).withTypeProvider<ZodTypeProvider>()
 
-// routes declaration
-app.use('/api/v1', indexRoutes)
-app.use('/delete-account', express.static('public/delete-account.html'))
-app.use('/privacy-policy', express.static('public/privacy-policy.html'))
+  app.setValidatorCompiler(validatorCompiler)
+  app.setSerializerCompiler(serializerCompiler)
 
-// global error handler
-app.use(globalErrorHandler)
+  app.addHook('onResponse', (request, reply, done) => {
+    request.log.info({
+      ip: request.ip,
+      user: request.user?.id ?? 'anonymous',
+      method: request.method,
+      url: request.url,
+      statusCode: reply.statusCode,
+      responseTime: `${reply.elapsedTime.toFixed(2)}ms`,
+    })
+    done()
+  })
 
-export { app }
+  // Register Plugins
+  await app.register(helmet, {
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ['\'self\'', 'unpkg.com'],
+        scriptSrc: ['\'self\'', '\'unsafe-inline\'', '\'unsafe-eval\'', 'cdn.jsdelivr.net', 'unpkg.com'],
+        styleSrc: ['\'self\'', '\'unsafe-inline\'', 'cdn.jsdelivr.net', 'fonts.googleapis.com', 'unpkg.com'],
+        fontSrc: ['\'self\'', 'fonts.gstatic.com', 'data:'],
+        imgSrc: ['\'self\'', 'data:', 'cdn.jsdelivr.net'],
+      },
+    },
+  })
+  await app.register(cors)
+  await app.register(envPlugin)
+  await app.register(redisPlugin)
+  await app.register(prismaPlugin)
+  await app.register(authPlugin)
+  await app.register(swaggerPlugin)
+
+  // Global Error Handler
+  app.setErrorHandler(errorHandler)
+
+  // Register Routes
+  await app.register(async (v1) => {
+    await v1.register(healthRoutes)
+    await v1.register(authRoutes)
+    await v1.register(meRoutes)
+  }, { prefix: '/api/v1' })
+
+  return app
+}

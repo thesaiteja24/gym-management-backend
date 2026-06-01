@@ -4,32 +4,29 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 model User {
   id                      String               @id @default(uuid(7))
-  countryCode             String?
-  phone                   String?              @unique
-  phoneE164               String?              @unique
-  firstName               String?
-  lastName                String?
+  firstName               String
+  lastName                String
   dateOfBirth             DateTime?            @db.Date
   height                  Decimal?             @db.Decimal(6, 2)
   weight                  Decimal?             @db.Decimal(6, 2)
-  profilePicUrl           String?
+  profilePicUrl           String
   role                    UserRole             @default(member)
   createdAt               DateTime             @default(now())
   updatedAt               DateTime             @updatedAt
   preferredLengthUnit     LengthUnits          @default(cm)
   preferredWeightUnit     WeightUnits          @default(kg)
   gender                  Gender?
-  email                   String?              @unique
-  googleId                String?              @unique
-  privacyPolicyAcceptedAt DateTime?
-  privacyPolicyVersion    String?              @default("1.0")
+  email                   String               @unique
+  googleId                String               @unique
+  privacyPolicyAcceptedAt DateTime
+  privacyPolicyVersion    String               @default("1.0")
   followersCount          Int                  @default(0)
   followingCount          Int                  @default(0)
+  workoutsCount           Int                  @default(0)
   isPro                   Boolean              @default(false)
   proExpirationDate       DateTime?
   proSubscriptionId       String?
@@ -40,7 +37,6 @@ model User {
   habits                  Habit[]
   memberships             Membership[]
   programs                Program[]
-  sessions                Session[]
   fitnessProfile          UserFitnessProfile?
   measurements            UserMeasurement[]
   nutritionPlan           UserNutritionPlan?
@@ -51,7 +47,6 @@ model User {
   workoutLogs             WorkoutLog[]
   workoutTemplates        WorkoutTemplate[]
 
-  @@index([countryCode])
   @@index([role])
   @@index([firstName])
   @@index([lastName])
@@ -93,7 +88,7 @@ model UserNutritionPlan {
 model UserMeasurement {
   id              String   @id @default(uuid(7))
   userId          String
-  date            DateTime @db.Date
+  date            DateTime
   weight          Decimal? @db.Decimal(6, 2)
   waist           Decimal? @db.Decimal(6, 2)
   bodyFat         Decimal? @db.Decimal(5, 2)
@@ -162,6 +157,7 @@ model WorkoutLog {
   @@index([userId, deletedAt, createdAt])
   @@index([visibility, deletedAt, userId, createdAt])
   @@index([userId, createdAt])
+  @@index([userId, deletedAt, startTime])
 }
 
 /// *
@@ -284,23 +280,6 @@ model Membership {
 
   @@unique([gymId, userId])
   @@index([userId])
-}
-
-model Session {
-  id               String    @id @default(uuid(7))
-  userId           String
-  jwtId            String?
-  refreshTokenHash String
-  deviceId         String?
-  ipAddress        String?
-  userAgent        String?
-  expiresAt        DateTime
-  lastUsed         DateTime?
-  createdAt        DateTime  @default(now())
-  user             User      @relation(fields: [userId], references: [id])
-
-  @@index([userId])
-  @@index([expiresAt])
 }
 
 model WorkoutTemplate {

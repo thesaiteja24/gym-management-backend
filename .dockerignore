@@ -1,9 +1,8 @@
 node_modules
 dist
-.env
-.DS_Store
+test
 .git
-.github
-*.md
+.env
 Dockerfile
 docker-compose.yml
+README.md
