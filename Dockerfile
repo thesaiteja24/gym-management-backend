@@ -16,6 +16,8 @@ RUN bun run build
 # Production stage
 FROM oven/bun:1.3-alpine
 
+RUN apk add --no-cache curl
+
 WORKDIR /app
 
 COPY package.json bun.lock ./
