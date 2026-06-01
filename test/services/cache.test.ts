@@ -1,6 +1,7 @@
+/* eslint-disable max-lines-per-function */
 import type { FastifyTypedInstance } from '@/types/index'
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
-import { cacheDelete, cacheGet, cacheSet } from '@/services/cache.service'
+import { cacheDelete, cacheGet, cacheSet, evictCache, getOrSetCache } from '@/services/cache.service'
 import { getTestApp } from '../helper'
 
 describe('Cache Service: Actual Redis', () => {
@@ -63,18 +64,51 @@ describe('Cache Service: Actual Redis', () => {
       expect(result).toBeNull()
     })
 
-    it('should throw error on invalid JSON in cache', async () => {
+    it('should evict and return null on invalid JSON in cache', async () => {
       const key = 'test-invalid-json'
       await app.redis.set(key, 'invalid-json{')
 
-      await expect(cacheGet(app.redis, key)).rejects.toThrow()
-      await cacheDelete(app.redis, key) // Cleanup
+      await expect(cacheGet(app.redis, key)).resolves.toBeNull()
+      expect(await app.redis.get(key)).toBeNull()
     })
   })
 
   describe('cacheDelete Robustness (Actual Redis)', () => {
     it('should handle deleting non-existent keys gracefully', async () => {
       await expect(cacheDelete(app.redis, 'ghost-key-123')).resolves.toBeUndefined()
+    })
+  })
+
+  describe('Cache invalidation races', () => {
+    it('should not repopulate stale data after an eviction during a database read', async () => {
+      const key = `test-race-${Date.now()}`
+      let releaseFactory!: () => void
+      let markFactoryStarted!: () => void
+      const factoryStarted = new Promise<void>((resolve) => {
+        markFactoryStarted = resolve
+      })
+      const release = new Promise<void>((resolve) => {
+        releaseFactory = resolve
+      })
+
+      const staleRead = getOrSetCache(app.redis, key, 60, async () => {
+        markFactoryStarted()
+        await release
+        return { value: 'stale' }
+      })
+
+      await factoryStarted
+      await evictCache(app, key)
+      releaseFactory()
+      await expect(staleRead).resolves.toEqual({ value: 'stale' })
+      expect(await app.redis.get(key)).toBeNull()
+
+      await expect(
+        getOrSetCache(app.redis, key, 60, async () => ({ value: 'fresh' })),
+      )
+        .resolves
+        .toEqual({ value: 'fresh' })
+      expect(await cacheGet<{ value: string }>(app.redis, key)).toEqual({ value: 'fresh' })
     })
   })
 })

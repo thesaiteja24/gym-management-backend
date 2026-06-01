@@ -1,4 +1,12 @@
 services:
+  # Run before deploying the API:
+  # docker compose --profile migrate run --rm pump-api-migrate
+  pump-api-migrate:
+    image: ghcr.io/thesaiteja24/pump-api:latest
+    profiles: [migrate]
+    env_file: .env
+    command: [bun, run, migrate:deploy]
+
   pump-api:
     image: ghcr.io/thesaiteja24/pump-api:latest
     container_name: pump-api

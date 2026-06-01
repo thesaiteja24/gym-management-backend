@@ -2,7 +2,8 @@ node_modules
 dist
 test
 .git
-.env
+.env*
+!.env.example
 Dockerfile
 docker-compose.yml
 README.md

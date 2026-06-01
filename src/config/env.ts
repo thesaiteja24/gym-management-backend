@@ -10,71 +10,61 @@ export interface AppConfig {
 
   REDIS_URL: string
 
+  SESSION_SECRET: string
+
   GOOGLE_WEB_CLIENT_ID: string
   GOOGLE_IOS_CLIENT_ID?: string
   GOOGLE_ANDROID_CLIENT_ID?: string
 
   LOG_LEVEL: string
+  CORS_ORIGINS?: string
+  AUTH_LOGIN_RATE_LIMIT_MAX: number
+  AUTH_LOGIN_RATE_LIMIT_WINDOW_MS: number
+  SESSION_MAX_PER_USER: number
+  DB_POOL_MAX: number
+  DB_POOL_IDLE_TIMEOUT_MS: number
+  DB_POOL_CONNECTION_TIMEOUT_MS: number
+}
+
+const envProperties = {
+  NODE_ENV: { type: 'string', default: 'development' },
+  PORT: { type: 'number', minimum: 1, maximum: 65535, default: 3000 },
+  MASTER_URL: { type: 'string' },
+  REPLICA_URL: { type: 'string' },
+  SHADOW_URL: { type: 'string' },
+  REDIS_URL: { type: 'string' },
+  SESSION_SECRET: { type: 'string', minLength: 32 },
+  GOOGLE_WEB_CLIENT_ID: { type: 'string' },
+  GOOGLE_IOS_CLIENT_ID: { type: 'string' },
+  GOOGLE_ANDROID_CLIENT_ID: { type: 'string' },
+  LOG_LEVEL: { type: 'string', default: 'info' },
+  CORS_ORIGINS: { type: 'string' },
+  AUTH_LOGIN_RATE_LIMIT_MAX: { type: 'number', minimum: 1, maximum: 100, default: 10 },
+  AUTH_LOGIN_RATE_LIMIT_WINDOW_MS: { type: 'number', minimum: 1000, maximum: 3600000, default: 60000 },
+  SESSION_MAX_PER_USER: { type: 'number', minimum: 1, maximum: 100, default: 10 },
+  DB_POOL_MAX: { type: 'number', minimum: 1, maximum: 100, default: 10 },
+  DB_POOL_IDLE_TIMEOUT_MS: { type: 'number', minimum: 1000, maximum: 300000, default: 30000 },
+  DB_POOL_CONNECTION_TIMEOUT_MS: { type: 'number', minimum: 1000, maximum: 60000, default: 5000 },
+}
+
+const envSchema = {
+  type: 'object',
+  required: [
+    'MASTER_URL',
+    'REDIS_URL',
+    'GOOGLE_WEB_CLIENT_ID',
+    'SESSION_SECRET',
+  ],
+  properties: envProperties,
+}
+
+function buildEnvSchema() {
+  return envSchema
 }
 
 export const envPlugin = fp(async (app) => {
-  const schema = {
-    type: 'object',
-
-    required: [
-      'MASTER_URL',
-      'REDIS_URL',
-      'GOOGLE_WEB_CLIENT_ID',
-    ],
-
-    properties: {
-      NODE_ENV: {
-        type: 'string',
-        default: 'development',
-      },
-
-      PORT: {
-        type: 'number',
-        default: 3000,
-      },
-
-      MASTER_URL: {
-        type: 'string',
-      },
-
-      REPLICA_URL: {
-        type: 'string',
-      },
-
-      SHADOW_URL: {
-        type: 'string',
-      },
-
-      REDIS_URL: {
-        type: 'string',
-      },
-
-      GOOGLE_WEB_CLIENT_ID: {
-        type: 'string',
-      },
-
-      GOOGLE_IOS_CLIENT_ID: {
-        type: 'string',
-      },
-
-      GOOGLE_ANDROID_CLIENT_ID: {
-        type: 'string',
-      },
-
-      LOG_LEVEL: {
-        type: 'string',
-        default: 'info',
-      },
-    },
-  }
-
   await app.register(import('@fastify/env'), {
-    schema,
-    dotenv: true,
+    schema: buildEnvSchema(),
+    dotenv: process.env.NODE_ENV !== 'test',
   })
 })

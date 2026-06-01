@@ -31,15 +31,24 @@ export const authPlugin = fp(async (app) => {
       throw new HttpError(401, 'UNAUTHORIZED', 'Session expired or invalid')
     }
 
+    const currentRole = await authService.getCurrentUserRole(sessionData.userId)
+    if (!currentRole) {
+      await authService.revokeSession(sessionId)
+      throw new HttpError(401, 'UNAUTHORIZED', 'Session user no longer exists')
+    }
+
     // Populate user on request
     request.user = {
       id: sessionData.userId,
-      role: sessionData.role,
+      role: currentRole,
     }
     request.sessionId = sessionId
 
     // Handle Rotation (7-day trigger)
-    const newSessionId = await authService.rotateSession(sessionId, sessionData)
+    const newSessionId = await authService.rotateSession(sessionId, {
+      ...sessionData,
+      role: currentRole,
+    })
 
     if (newSessionId !== sessionId) {
       // Send new token in header if rotated

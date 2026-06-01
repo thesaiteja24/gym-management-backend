@@ -11,6 +11,7 @@ mock.module('google-auth-library', () => {
         getPayload: () => ({
           sub: 'google-me-user',
           email: 'me-test@example.com',
+          email_verified: true,
           given_name: 'Me',
           family_name: 'Tester',
           picture: 'https://example.com/me.jpg',
@@ -236,6 +237,23 @@ describe('Me Module: Profile, Fitness, Nutrition, and Measurements', () => {
     const { data: nutrition } = JSON.parse(res.body)
     expect(nutrition.caloriesTarget).toBe(3300)
     expect(nutrition.proteinTarget).toBe(190)
+  })
+
+  it('7b. should preserve an existing nutrition plan when fitness is patched independently', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/v1/users/me/fitness',
+      headers: { authorization: `Bearer ${sessionId}` },
+      payload: {
+        fitnessLevel: 'advanced',
+      },
+    })
+
+    expect(res.statusCode).toBe(200)
+    const { data: fitness } = JSON.parse(res.body)
+    expect(fitness.fitnessLevel).toBe('advanced')
+    expect(fitness.nutritionPlan.caloriesTarget).toBe(3300)
+    expect(fitness.nutritionPlan.proteinTarget).toBe(190)
   })
 
   it('8. should successfully create daily body measurement entries', async () => {

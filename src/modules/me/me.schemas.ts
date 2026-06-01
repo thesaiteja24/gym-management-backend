@@ -13,6 +13,11 @@ import { z } from 'zod'
 
 import * as self from './me.schemas'
 
+const SHORT_TEXT_MAX = 128
+const MEDIUM_TEXT_MAX = 512
+const LONG_TEXT_MAX = 2000
+const URL_LIST_MAX = 8
+
 // Hoisted functions to avoid use-before-define lint errors with lazy circular references
 function resolveNutritionRes(): typeof self.NutritionResSchema {
   return self.NutritionResSchema
@@ -53,10 +58,10 @@ export const ProfileResSchema = z.object({
  * Zod schema for validating request bodies for updating user profile details.
  */
 export const ProfileUpdateReqSchema = z.object({
-  firstName: z.string().optional(),
-  lastName: z.string().optional(),
-  height: z.number().positive({ message: 'Height must be greater than 0' }).optional(),
-  weight: z.number().positive({ message: 'Weight must be greater than 0' }).optional(),
+  firstName: z.string().trim().min(1).max(SHORT_TEXT_MAX).optional(),
+  lastName: z.string().trim().min(1).max(SHORT_TEXT_MAX).optional(),
+  height: z.number().positive({ message: 'Height must be greater than 0' }).max(300).optional(),
+  weight: z.number().positive({ message: 'Weight must be greater than 0' }).max(1000).optional(),
   preferredLengthUnit: z.enum(LengthUnits, { message: 'Preferred length unit must be one of the allowed values' }).optional(),
   preferredWeightUnit: z.enum(WeightUnits, { message: 'Preferred weight unit must be one of the allowed values' }).optional(),
   dateOfBirth: z.iso.date().refine(d => d.toString() <= new Date().toISOString(), { message: 'Date cannot be in the future' }).optional(),
@@ -96,14 +101,14 @@ export const FitnessResSchema = z.object({
 export const FitnessUpsertReqSchema = z.object({
   fitnessGoal: z.enum(FitnessGoal).optional(),
   fitnessLevel: z.enum(FitnessLevel).optional(),
-  injuries: z.string().optional(),
-  availableEquipment: z.array(z.enum(EquipmentType)).optional(),
+  injuries: z.string().trim().max(LONG_TEXT_MAX).optional(),
+  availableEquipment: z.array(z.enum(EquipmentType)).max(Object.values(EquipmentType).length).optional(),
   targetDate: z.iso.date().optional(),
-  targetWeight: z.number().positive().optional(),
+  targetWeight: z.number().positive().max(1000).optional(),
   activityLevel: z.enum(ActivityLevel).optional(),
-  targetBodyFat: z.number().positive().optional(),
+  targetBodyFat: z.number().positive().max(100).optional(),
   targetType: z.enum(TargetType).optional(),
-  weeklyWeightChange: z.number().optional(),
+  weeklyWeightChange: z.number().min(-10).max(10).optional(),
   nutritionPlan: z.lazy(resolveNutritionUpsertReq).optional(),
 }).strict().refine(data => Object.keys(data).length > 0, {
   message: 'At least one field must be provided',
@@ -134,12 +139,12 @@ export const NutritionResSchema = z.object({
  * Zod schema for validating request bodies for updating a user nutrition plan.
  */
 export const NutritionUpsertReqSchema = z.object({
-  caloriesTarget: z.number().positive().optional(),
-  proteinTarget: z.number().positive().optional(),
-  carbsTarget: z.number().positive().optional(),
-  fatsTarget: z.number().positive().optional(),
-  calculatedTDEE: z.number().positive().optional(),
-  deficitOrSurplus: z.number().optional(),
+  caloriesTarget: z.number().positive().max(20000).optional(),
+  proteinTarget: z.number().positive().max(2000).optional(),
+  carbsTarget: z.number().positive().max(3000).optional(),
+  fatsTarget: z.number().positive().max(2000).optional(),
+  calculatedTDEE: z.number().positive().max(20000).optional(),
+  deficitOrSurplus: z.number().min(-10000).max(10000).optional(),
   startDate: z.iso.date().optional(),
 }).strict().refine(data => Object.keys(data).length > 0, {
   message: 'At least one field must be provided',
@@ -152,23 +157,23 @@ export type NutritionUpsertInput = z.infer<typeof NutritionUpsertReqSchema>
 
 // Definition of standard measurement fields
 const measurementMetrics = {
-  weight: z.coerce.number(),
-  waist: z.coerce.number(),
-  bodyFat: z.coerce.number(),
-  leanBodyMass: z.coerce.number(),
-  neck: z.coerce.number(),
-  shoulders: z.coerce.number(),
-  chest: z.coerce.number(),
-  abdomen: z.coerce.number(),
-  hips: z.coerce.number(),
-  leftBicep: z.coerce.number(),
-  rightBicep: z.coerce.number(),
-  leftForearm: z.coerce.number(),
-  rightForearm: z.coerce.number(),
-  leftThigh: z.coerce.number(),
-  rightThigh: z.coerce.number(),
-  leftCalf: z.coerce.number(),
-  rightCalf: z.coerce.number(),
+  weight: z.coerce.number().max(1000),
+  waist: z.coerce.number().max(300),
+  bodyFat: z.coerce.number().max(100),
+  leanBodyMass: z.coerce.number().max(1000),
+  neck: z.coerce.number().max(200),
+  shoulders: z.coerce.number().max(300),
+  chest: z.coerce.number().max(300),
+  abdomen: z.coerce.number().max(300),
+  hips: z.coerce.number().max(300),
+  leftBicep: z.coerce.number().max(200),
+  rightBicep: z.coerce.number().max(200),
+  leftForearm: z.coerce.number().max(200),
+  rightForearm: z.coerce.number().max(200),
+  leftThigh: z.coerce.number().max(250),
+  rightThigh: z.coerce.number().max(250),
+  leftCalf: z.coerce.number().max(200),
+  rightCalf: z.coerce.number().max(200),
 }
 
 // Convert metrics to coerced number nullable forms for outputs
@@ -211,8 +216,8 @@ export const MeasurementReqSchema = z.object({
       { message: 'Date cannot be in the future' },
     ),
   ...inputMeasurementMetrics,
-  notes: z.string().optional(),
-  progressPicUrls: z.array(z.string()).optional(),
+  notes: z.string().trim().max(MEDIUM_TEXT_MAX).optional(),
+  progressPicUrls: z.array(z.url()).max(URL_LIST_MAX).optional(),
 }).strict().refine(data => Object.keys(data).length > 0, {
   message: 'At least one field must be provided',
 })

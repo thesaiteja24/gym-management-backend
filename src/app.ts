@@ -2,6 +2,7 @@ import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from
 import type { ZodTypeProvider } from 'fastify-type-provider-zod'
 import cors from '@fastify/cors'
 import helmet from '@fastify/helmet'
+import rateLimit from '@fastify/rate-limit'
 import fastify from 'fastify'
 import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod'
 
@@ -91,6 +92,46 @@ function errorHandler(this: FastifyInstance, error: FastifyError, _request: Fast
   })
 }
 
+function parseCorsOrigins(value?: string) {
+  if (!value) {
+    return []
+  }
+
+  return value
+    .split(',')
+    .map(origin => origin.trim())
+    .filter(Boolean)
+}
+
+async function registerSecurityPlugins(app: FastifyInstance) {
+  const allowedCorsOrigins = parseCorsOrigins(app.config.CORS_ORIGINS)
+
+  await app.register(helmet, {
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ['\'self\''],
+        scriptSrc: ['\'self\''],
+        styleSrc: ['\'self\''],
+        fontSrc: ['\'self\''],
+        imgSrc: ['\'self\'', 'data:'],
+        objectSrc: ['\'none\''],
+        baseUri: ['\'self\''],
+        frameAncestors: ['\'none\''],
+      },
+    },
+  })
+  await app.register(cors, {
+    origin: (origin, callback) => {
+      if (!origin) {
+        callback(null, true)
+        return
+      }
+
+      callback(null, allowedCorsOrigins.includes(origin))
+    },
+  })
+}
+
 export async function buildApp() {
   const isDev = process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test'
 
@@ -128,21 +169,11 @@ export async function buildApp() {
   })
 
   // Register Plugins
-  await app.register(helmet, {
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ['\'self\'', 'unpkg.com'],
-        scriptSrc: ['\'self\'', '\'unsafe-inline\'', '\'unsafe-eval\'', 'cdn.jsdelivr.net', 'unpkg.com'],
-        styleSrc: ['\'self\'', '\'unsafe-inline\'', 'cdn.jsdelivr.net', 'fonts.googleapis.com', 'unpkg.com'],
-        fontSrc: ['\'self\'', 'fonts.gstatic.com', 'data:'],
-        imgSrc: ['\'self\'', 'data:', 'cdn.jsdelivr.net'],
-      },
-    },
-  })
-  await app.register(cors)
   await app.register(envPlugin)
+  await registerSecurityPlugins(app)
   await app.register(redisPlugin)
   await app.register(prismaPlugin)
+  await app.register(rateLimit, { global: false })
   await app.register(authPlugin)
   await app.register(swaggerPlugin)
 

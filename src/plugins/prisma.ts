@@ -11,7 +11,12 @@ export const prismaPlugin = fp(async (app) => {
   }
 
   // Prisma 7 recommends using driver adapters for direct database connections
-  const pool = new pg.Pool({ connectionString: url })
+  const pool = new pg.Pool({
+    connectionString: url,
+    max: app.config.DB_POOL_MAX,
+    idleTimeoutMillis: app.config.DB_POOL_IDLE_TIMEOUT_MS,
+    connectionTimeoutMillis: app.config.DB_POOL_CONNECTION_TIMEOUT_MS,
+  })
   const adapter = new PrismaPg(pool)
   const prisma = new PrismaClient({ adapter })
 
@@ -21,6 +26,7 @@ export const prismaPlugin = fp(async (app) => {
   }
   catch (error) {
     app.log.error({ error }, 'Failed to connect to the database')
+    await pool.end()
     throw error
   }
 

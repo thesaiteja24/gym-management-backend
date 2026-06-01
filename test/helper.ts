@@ -24,9 +24,12 @@ ServerResponse.prototype.end = function (
 }
 
 export async function getTestApp() {
-  if (!process.env.GOOGLE_WEB_CLIENT_ID) {
-    process.env.GOOGLE_WEB_CLIENT_ID = 'test-client-id'
-  }
+  process.env.NODE_ENV = 'test'
+  process.env.MASTER_URL = 'postgresql://postgres:password@localhost:5433/pump_fastify_test?sslmode=disable'
+  process.env.REDIS_URL = 'redis://localhost:6380'
+  process.env.GOOGLE_WEB_CLIENT_ID = 'test-client-id'
+  process.env.SESSION_SECRET = 'test-session-secret-that-is-at-least-32-characters'
+
   const app = await buildApp()
   await app.ready()
   return app

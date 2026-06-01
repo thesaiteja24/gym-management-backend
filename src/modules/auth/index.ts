@@ -16,7 +16,7 @@ const GoogleLoginResponseDataSchema = z.object({
 
 const GoogleLoginSchema = {
   body: z.object({
-    idToken: z.string(),
+    idToken: z.string().min(1).max(8192),
   }).strict(),
   response: {
     200: ApiResponseSchema(GoogleLoginResponseDataSchema),
@@ -40,6 +40,12 @@ export async function authRoutes(app: FastifyTypedInstance) {
         ...GoogleLoginSchema,
         description: 'Login or signup with Google ID Token',
         tags: ['Authentication'],
+      },
+      config: {
+        rateLimit: {
+          max: app.config.AUTH_LOGIN_RATE_LIMIT_MAX,
+          timeWindow: app.config.AUTH_LOGIN_RATE_LIMIT_WINDOW_MS,
+        },
       },
     },
     async (request, reply) => {

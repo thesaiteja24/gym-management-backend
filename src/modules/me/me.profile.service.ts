@@ -5,8 +5,32 @@ import type {
   ProfileUpdateInput,
 } from './me.schemas'
 import { CACHE_KEYS, CACHE_TTL } from '@/config/cache'
-import { cacheDelete, getOrSetCache } from '@/services/cache.service'
+import { evictCache, getOrSetCache } from '@/services/cache.service'
 import { HttpError } from '@/utils/response'
+
+const userProfileSelect = {
+  id: true,
+  firstName: true,
+  lastName: true,
+  profilePicUrl: true,
+  followersCount: true,
+  followingCount: true,
+  workoutsCount: true,
+  isPro: true,
+  proSubscriptionType: true,
+  email: true,
+  height: true,
+  weight: true,
+  preferredLengthUnit: true,
+  preferredWeightUnit: true,
+  dateOfBirth: true,
+  gender: true,
+  role: true,
+  privacyPolicyAcceptedAt: true,
+  privacyPolicyVersion: true,
+  createdAt: true,
+  updatedAt: true,
+} as const
 
 /**
  * Fetches the user profile by user ID.
@@ -21,29 +45,7 @@ export async function queryUserProfile(app: FastifyInstance, userId: string) {
   return getOrSetCache(app.redis, cacheKey, CACHE_TTL.week, async () => {
     const user = await app.prisma.user.findUnique({
       where: { id: userId },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        profilePicUrl: true,
-        followersCount: true,
-        followingCount: true,
-        workoutsCount: true,
-        isPro: true,
-        proSubscriptionType: true,
-        email: true,
-        height: true,
-        weight: true,
-        preferredLengthUnit: true,
-        preferredWeightUnit: true,
-        dateOfBirth: true,
-        gender: true,
-        role: true,
-        privacyPolicyAcceptedAt: true,
-        privacyPolicyVersion: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      select: userProfileSelect,
     })
     if (!user) {
       throw new HttpError(404, 'NOT_FOUND', 'User not found')
@@ -62,18 +64,19 @@ export async function queryUserProfile(app: FastifyInstance, userId: string) {
 export async function updateUserProfile(app: FastifyInstance, userId: string, data: ProfileUpdateInput) {
   const { dateOfBirth, ...rest } = data
 
-  await app.prisma.user.update({
+  const profile = await app.prisma.user.update({
     where: { id: userId },
     data: {
       ...rest,
       dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : undefined,
     },
+    select: userProfileSelect,
   })
 
   // Evict cache on update
-  await cacheDelete(app.redis, CACHE_KEYS.profile(userId))
+  await evictCache(app, CACHE_KEYS.profile(userId))
 
-  return queryUserProfile(app, userId)
+  return profile
 }
 
 /**
@@ -110,40 +113,47 @@ export async function queryFitnessProfile(app: FastifyInstance, userId: string) 
 export async function upsertFitnessProfile(app: FastifyInstance, userId: string, data: FitnessUpsertInput) {
   const { targetDate, nutritionPlan, ...profileData } = data
 
-  const profile = await app.prisma.userFitnessProfile.upsert({
-    where: { userId },
-    create: {
-      ...profileData,
-      userId,
-      targetDate: targetDate ? new Date(targetDate) : undefined,
-    },
-    update: {
-      ...profileData,
-      targetDate: targetDate ? new Date(targetDate) : undefined,
-    },
-  })
-
-  let updatedNutritionPlan = null
-  if (nutritionPlan) {
-    const { startDate, ...nutritionData } = nutritionPlan
-    updatedNutritionPlan = await app.prisma.userNutritionPlan.upsert({
+  const { profile, updatedNutritionPlan } = await app.prisma.$transaction(async (tx) => {
+    const profile = await tx.userFitnessProfile.upsert({
       where: { userId },
       create: {
-        ...nutritionData,
+        ...profileData,
         userId,
-        startDate: startDate ? new Date(startDate) : new Date(),
+        targetDate: targetDate ? new Date(targetDate) : undefined,
       },
       update: {
-        ...nutritionData,
-        startDate: startDate ? new Date(startDate) : undefined,
+        ...profileData,
+        targetDate: targetDate ? new Date(targetDate) : undefined,
       },
     })
-  }
+
+    let updatedNutritionPlan
+    if (nutritionPlan) {
+      const { startDate, ...nutritionData } = nutritionPlan
+      updatedNutritionPlan = await tx.userNutritionPlan.upsert({
+        where: { userId },
+        create: {
+          ...nutritionData,
+          userId,
+          startDate: startDate ? new Date(startDate) : new Date(),
+        },
+        update: {
+          ...nutritionData,
+          startDate: startDate ? new Date(startDate) : undefined,
+        },
+      })
+    }
+    else {
+      updatedNutritionPlan = await tx.userNutritionPlan.findUnique({ where: { userId } })
+    }
+
+    return { profile, updatedNutritionPlan }
+  })
 
   // Evict both fitness profile and nutrition caches
   await Promise.all([
-    cacheDelete(app.redis, CACHE_KEYS.fitness(userId)),
-    cacheDelete(app.redis, CACHE_KEYS.nutrition(userId)),
+    evictCache(app, CACHE_KEYS.fitness(userId)),
+    evictCache(app, CACHE_KEYS.nutrition(userId)),
   ])
 
   return {
@@ -191,8 +201,8 @@ export async function upsertNutritionPlan(app: FastifyInstance, userId: string, 
 
   // Evict both nutrition and fitness profile caches (since fitness profile embeds nutrition plan)
   await Promise.all([
-    cacheDelete(app.redis, CACHE_KEYS.nutrition(userId)),
-    cacheDelete(app.redis, CACHE_KEYS.fitness(userId)),
+    evictCache(app, CACHE_KEYS.nutrition(userId)),
+    evictCache(app, CACHE_KEYS.fitness(userId)),
   ])
 
   return plan

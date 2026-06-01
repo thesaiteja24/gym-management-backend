@@ -23,7 +23,8 @@ async function getStreakDays(app: FastifyInstance, userId: string): Promise<numb
         FROM "WorkoutLog"
         WHERE "userId" = ${userId} AND "deletedAt" IS NULL AND "startTime" IS NOT NULL
       ) d
-      WHERE workout_date = CURRENT_DATE OR workout_date = CURRENT_DATE - 1
+      WHERE workout_date = (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date
+        OR workout_date = (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date - 1
 
       UNION ALL
 
@@ -135,7 +136,14 @@ async function getDaysSinceLastWorkout(
     LIMIT 1;
   `
   const lwd = lastWorkoutResult[0]?.startTime
-  return lwd ? Math.floor((today.getTime() - new Date(lwd).getTime()) / 86400000) : 0
+  if (!lwd) {
+    return 0
+  }
+
+  const lastWorkout = new Date(lwd)
+  const todayUtc = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
+  const lastWorkoutUtc = Date.UTC(lastWorkout.getUTCFullYear(), lastWorkout.getUTCMonth(), lastWorkout.getUTCDate())
+  return Math.floor((todayUtc - lastWorkoutUtc) / 86400000)
 }
 
 interface DateResult {
@@ -149,8 +157,9 @@ interface DateResult {
  * @returns Formatted workout date strings.
  */
 async function getWorkoutDates(app: FastifyInstance, userId: string): Promise<string[]> {
+  // TODO: Bound this query by a requested date range before long-term users accumulate large histories.
   const datesResult = await app.prisma.$queryRaw<DateResult[]>`
-    SELECT DISTINCT TO_CHAR("startTime", 'YYYY-MM-DD') AS wdate
+    SELECT DISTINCT TO_CHAR("startTime" AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS wdate
     FROM "WorkoutLog"
     WHERE "userId" = ${userId} AND "deletedAt" IS NULL AND "startTime" IS NOT NULL
     ORDER BY wdate DESC;
@@ -170,9 +179,9 @@ export async function queryUserAnalytics(app: FastifyInstance, userId: string) {
   return getOrSetCache(app.redis, cacheKey, CACHE_TTL.day, async () => {
     const today = new Date()
     const currentWeekStart = new Date(today)
-    const day = today.getDay()
-    currentWeekStart.setDate(today.getDate() - day + (day === 0 ? -6 : 1))
-    currentWeekStart.setHours(0, 0, 0, 0)
+    const day = today.getUTCDay()
+    currentWeekStart.setUTCDate(today.getUTCDate() - day + (day === 0 ? -6 : 1))
+    currentWeekStart.setUTCHours(0, 0, 0, 0)
     const lastWeekStart = new Date(currentWeekStart.getTime() - 7 * 86400000)
 
     const [streakDays, metrics, daysSinceLastWorkout, workoutDates] = await Promise.all([

@@ -16,7 +16,7 @@ RUN bun run build
 # Production stage
 FROM oven/bun:1.3-alpine
 
-RUN apk add --no-cache curl
+RUN apk add --no-cache wget
 
 WORKDIR /app
 
@@ -31,5 +31,5 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
 COPY --from=builder /app/tsconfig.json ./tsconfig.json
 
-# Run migrations and start the fastify server
-CMD ["sh", "-c", "bunx prisma migrate deploy && bun run dist/src/server.js"]
+# Database migrations run as an explicit deployment job.
+CMD ["bun", "run", "dist/src/server.js"]

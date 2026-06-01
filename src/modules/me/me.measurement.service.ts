@@ -1,8 +1,9 @@
 import type { UserMeasurement } from '@prisma/client'
 import type { FastifyInstance } from 'fastify'
 import type { MeasurementInput } from './me.schemas'
+import { Prisma } from '@prisma/client'
 import { CACHE_KEYS, CACHE_TTL } from '@/config/cache'
-import { cacheDelete, getOrSetCache } from '@/services/cache.service'
+import { evictCache, getOrSetCache } from '@/services/cache.service'
 import { HttpError } from '@/utils/response'
 
 /**
@@ -48,6 +49,10 @@ interface MeasurementsPayload {
   history: UserMeasurement[]
   latestValues: Record<string, unknown>
   dailyWeightChange: { diff: number, isPositive: boolean } | null
+}
+
+function isUniqueConstraintError(error: unknown) {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002'
 }
 
 /**
@@ -172,12 +177,21 @@ export async function createMeasurement(app: FastifyInstance, userId: string, da
     throw new HttpError(409, 'CONFLICT', 'Measurement already exists for this date')
   }
 
-  const measurement = await app.prisma.userMeasurement.create({
-    data: { ...metrics, userId, date: entryDate },
-  })
+  let measurement
+  try {
+    measurement = await app.prisma.userMeasurement.create({
+      data: { ...metrics, userId, date: entryDate },
+    })
+  }
+  catch (error) {
+    if (isUniqueConstraintError(error)) {
+      throw new HttpError(409, 'CONFLICT', 'Measurement already exists for this date')
+    }
+    throw error
+  }
 
   // Evict cache on write
-  await cacheDelete(app.redis, CACHE_KEYS.measurements(userId))
+  await evictCache(app, CACHE_KEYS.measurements(userId))
 
   return measurement
 }
@@ -217,13 +231,22 @@ export async function updateMeasurement(
     updateData.date = new Date(date)
   }
 
-  const updated = await app.prisma.userMeasurement.update({
-    where: { id },
-    data: updateData,
-  })
+  let updated
+  try {
+    updated = await app.prisma.userMeasurement.update({
+      where: { id },
+      data: updateData,
+    })
+  }
+  catch (error) {
+    if (isUniqueConstraintError(error)) {
+      throw new HttpError(409, 'CONFLICT', 'Measurement already exists for this date')
+    }
+    throw error
+  }
 
   // Evict cache on update
-  await cacheDelete(app.redis, CACHE_KEYS.measurements(userId))
+  await evictCache(app, CACHE_KEYS.measurements(userId))
 
   return updated
 }
@@ -258,5 +281,5 @@ export async function deleteMeasurement(
   })
 
   // Evict cache on delete
-  await cacheDelete(app.redis, CACHE_KEYS.measurements(userId))
+  await evictCache(app, CACHE_KEYS.measurements(userId))
 }

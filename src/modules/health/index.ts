@@ -24,6 +24,7 @@ export async function healthRoutes(app: FastifyTypedInstance) {
     async (_request, reply) => {
       // Check database connection
       await app.prisma.$queryRaw`SELECT 1`
+      await app.redis.ping()
 
       return sendSuccess(reply, {
         status: 'OK',

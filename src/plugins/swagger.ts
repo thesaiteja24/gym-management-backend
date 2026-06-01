@@ -33,6 +33,26 @@ function setupRouteSwagger(routeOptions: RouteOptions) {
 }
 
 export const swaggerPlugin = fp(async (app) => {
+  app.addHook('onSend', async (request, reply, payload) => {
+    if (request.url.startsWith('/docs')) {
+      reply.header(
+        'Content-Security-Policy',
+        [
+          'default-src \'self\'',
+          'script-src \'self\' \'unsafe-inline\' \'unsafe-eval\' cdn.jsdelivr.net unpkg.com',
+          'style-src \'self\' \'unsafe-inline\' cdn.jsdelivr.net fonts.googleapis.com unpkg.com',
+          'font-src \'self\' fonts.gstatic.com data:',
+          'img-src \'self\' data: cdn.jsdelivr.net',
+          'object-src \'none\'',
+          'base-uri \'self\'',
+          'frame-ancestors \'none\'',
+        ].join('; '),
+      )
+    }
+
+    return payload
+  })
+
   await app.register(swagger, {
     openapi: {
       info: {
