@@ -54,17 +54,19 @@ jobs:
 
             # 3. Verify container health status
             echo "Waiting for the container to become healthy..."
-            for i in {1..10}; do
-              HEALTH_STATUS=$(docker inspect --format='{{json .State.Health.Status}}' pump-api 2>/dev/null || echo '"unhealthy"')
-              if [ "$HEALTH_STATUS" = '"healthy"' ]; then
+            HEALTH_OK=false
+            for i in {1..15}; do
+              CONTAINER_PORT=$(docker exec pump-api printenv PORT || echo "3000")
+              if docker exec pump-api wget --no-verbose --tries=1 --spider "http://localhost:${CONTAINER_PORT}/api/v1/health" >/dev/null 2>&1; then
                 echo "Container is healthy!"
+                HEALTH_OK=true
                 break
               fi
-              echo "Still waiting ($i/10)... status is $HEALTH_STATUS"
-              sleep 3
+              echo "Still waiting ($i/15)..."
+              sleep 2
             done
 
-            if [ "$HEALTH_STATUS" != '"healthy"' ]; then
+            if [ "$HEALTH_OK" != "true" ]; then
               echo "Error: Container failed to become healthy!"
               docker compose logs pump-api
               exit 1
