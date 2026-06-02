@@ -98,6 +98,28 @@ export class AuthService {
     })
   }
 
+  /**
+   * Returns an existing app user for documentation access without creating an account.
+   */
+  async findExistingUserForDocs(payload: TokenPayload) {
+    const { sub: googleId, email, email_verified } = payload
+
+    if (!googleId) {
+      throw new HttpError(400, 'INVALID_GOOGLE_TOKEN', 'Google subject is required')
+    }
+
+    if (!email || email_verified !== true) {
+      throw new HttpError(400, 'UNVERIFIED_GOOGLE_EMAIL', 'A verified Google email is required')
+    }
+
+    const user = await this.prisma.user.findUnique({ where: { googleId } })
+    if (!user) {
+      throw new HttpError(403, 'DOCS_ACCESS_DENIED', 'Sign in through the Pump app before accessing the API docs')
+    }
+
+    return user
+  }
+
   private async createOrReloadUserAfterSignupRace(data: {
     email: string
     googleId: string

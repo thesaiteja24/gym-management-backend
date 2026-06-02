@@ -11,8 +11,8 @@ mock.module('google-auth-library', () => {
         ? Promise.reject(new Error('Invalid token'))
         : Promise.resolve({
             getPayload: () => ({
-              sub: 'google-123',
-              email: 'test@example.com',
+              sub: idToken === 'new-docs-user-token' ? 'google-docs-new' : 'google-123',
+              email: idToken === 'new-docs-user-token' ? 'new-docs-user@example.com' : 'test@example.com',
               email_verified: true,
               given_name: 'Test',
               family_name: 'User',
@@ -82,6 +82,69 @@ describe('Auth Module: Google Login', () => {
 
     expect(first.id).toBe(second.id)
     await app.prisma.user.delete({ where: { id: first.id } })
+  })
+})
+
+describe('Auth Module: Docs Google Login', () => {
+  let app: FastifyTypedInstance
+
+  beforeAll(async () => {
+    app = (await getTestApp()) as FastifyTypedInstance
+  })
+
+  afterAll(async () => {
+    if (app) {
+      await app.close()
+    }
+  })
+
+  it('should issue a docs session for an existing Pump user', async () => {
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/google',
+      payload: { idToken: 'fake-google-token' },
+    })
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/docs/google',
+      payload: { idToken: 'fake-google-token' },
+    })
+
+    expect(response.statusCode).toBe(200)
+    expect(JSON.parse(response.body).data.sessionId).toBeDefined()
+  })
+
+  it('should reject docs login for a Google user who has not used the Pump app', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/docs/google',
+      payload: { idToken: 'new-docs-user-token' },
+    })
+
+    expect(response.statusCode).toBe(403)
+    expect(JSON.parse(response.body).error.code).toBe('DOCS_ACCESS_DENIED')
+    expect(await app.prisma.user.findUnique({ where: { googleId: 'google-docs-new' } })).toBeNull()
+  })
+
+  it('should render a docs token after the Google redirect callback', async () => {
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/google',
+      payload: { idToken: 'fake-google-token' },
+    })
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/docs/login/callback',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: 'credential=fake-google-token',
+    })
+
+    expect(response.statusCode).toBe(200)
+    expect(response.headers['content-type']).toContain('text/html')
+    expect(response.headers['cache-control']).toBe('no-store')
+    expect(response.body).toContain('Copy API Token')
   })
 })
 

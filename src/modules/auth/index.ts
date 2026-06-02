@@ -10,7 +10,7 @@ const GoogleLoginResponseDataSchema = z.object({
     email: z.string().nullable(),
     firstName: z.string().nullable(),
     lastName: z.string().nullable(),
-    role: z.nativeEnum(UserRole),
+    role: z.enum(UserRole).default('member'),
   }),
 })
 
@@ -27,6 +27,45 @@ const LogoutSchema = {
   response: {
     200: ApiResponseSchema(z.null()),
   },
+}
+
+function registerDocsGoogleLoginRoute(app: FastifyTypedInstance) {
+  app.post(
+    '/auth/docs/google',
+    {
+      schema: {
+        ...GoogleLoginSchema,
+        description: 'Login to the API docs as an existing Pump user with a Google ID Token',
+        tags: ['Authentication'],
+      },
+      config: {
+        rateLimit: {
+          max: app.config.AUTH_LOGIN_RATE_LIMIT_MAX,
+          timeWindow: app.config.AUTH_LOGIN_RATE_LIMIT_WINDOW_MS,
+        },
+      },
+    },
+    async (request, reply) => {
+      const payload = await app.authService.verifyGoogleToken(request.body.idToken)
+      if (!payload) {
+        throw new HttpError(400, 'INVALID_GOOGLE_TOKEN', 'Invalid Google Token')
+      }
+
+      const user = await app.authService.findExistingUserForDocs(payload)
+      const sessionId = await app.authService.createSession(user.id, user.role)
+
+      return sendSuccess(reply, {
+        sessionId,
+        user: {
+          id: user.id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          role: user.role,
+        },
+      }, 'Logged in successfully')
+    },
+  )
 }
 
 export async function authRoutes(app: FastifyTypedInstance) {
@@ -79,6 +118,8 @@ export async function authRoutes(app: FastifyTypedInstance) {
       )
     },
   )
+
+  registerDocsGoogleLoginRoute(app)
 
   /**
    * Revoke current session

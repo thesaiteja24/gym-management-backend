@@ -35,4 +35,19 @@ describe('API Documentation (Scalar)', () => {
     expect(response.statusCode).toBe(200)
     expect(response.headers['content-type']).toContain('text/html')
   })
+
+  it('should load the docs login helper without caching session tokens', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/docs/login',
+    })
+
+    expect(response.statusCode).toBe(200)
+    expect(response.headers['content-type']).toContain('text/html')
+    expect(response.headers['cache-control']).toBe('no-store')
+    expect(response.body).toContain('https://accounts.google.com/gsi/client')
+    expect(response.body).toContain('ux_mode: \'redirect\'')
+    expect(response.body).toContain('/docs/login/callback')
+    expect(response.body).toContain('test-client-id')
+  })
 })
