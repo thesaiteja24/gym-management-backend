@@ -11,6 +11,7 @@ import { authRoutes } from './modules/auth'
 import { healthRoutes } from './modules/health'
 import { meRoutes } from './modules/me'
 import { authPlugin } from './plugins/auth'
+import { pagesPlugin } from './plugins/pages'
 import { prismaPlugin } from './plugins/prisma'
 import { redisPlugin } from './plugins/redis'
 import { swaggerPlugin } from './plugins/swagger'
@@ -176,6 +177,7 @@ export async function buildApp() {
   await app.register(rateLimit, { global: false })
   await app.register(authPlugin)
   await app.register(swaggerPlugin)
+  await app.register(pagesPlugin)
 
   // Global Error Handler
   app.setErrorHandler(errorHandler)
