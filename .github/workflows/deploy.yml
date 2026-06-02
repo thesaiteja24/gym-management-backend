@@ -52,5 +52,23 @@ jobs:
             docker compose pull
             docker compose up -d
 
-            # 3. Cleanup unused images
+            # 3. Verify container health status
+            echo "Waiting for the container to become healthy..."
+            for i in {1..10}; do
+              HEALTH_STATUS=$(docker inspect --format='{{json .State.Health.Status}}' pump-api 2>/dev/null || echo '"unhealthy"')
+              if [ "$HEALTH_STATUS" = '"healthy"' ]; then
+                echo "Container is healthy!"
+                break
+              fi
+              echo "Still waiting ($i/10)... status is $HEALTH_STATUS"
+              sleep 3
+            done
+
+            if [ "$HEALTH_STATUS" != '"healthy"' ]; then
+              echo "Error: Container failed to become healthy!"
+              docker compose logs pump-api
+              exit 1
+            fi
+
+            # 4. Cleanup unused images
             docker image prune -f
