@@ -12,6 +12,8 @@ import {
   MeasurementsResSchema,
   NutritionResSchema,
   NutritionUpsertReqSchema,
+  PreferencesResSchema,
+  PreferencesUpdateReqSchema,
   ProfileResSchema,
   ProfileUpdateReqSchema,
 } from './me.schemas'
@@ -51,6 +53,22 @@ function registerProfileRoutes(app: FastifyTypedInstance) {
     const userId = request.user!.id
     const updated = await meService.updateUserProfile(app, userId, request.body)
     return sendSuccess(reply, updated, 'Profile updated successfully')
+  })
+
+  app.patch('/users/me/preferences', {
+    schema: {
+      description: 'Update logged in user preferences',
+      tags: ['Me'],
+      security: [{ bearerAuth: [] }],
+      body: PreferencesUpdateReqSchema,
+      response: {
+        200: ApiResponseSchema(PreferencesResSchema),
+      },
+    },
+  }, async (request, reply) => {
+    const userId = request.user!.id
+    const updated = await meService.updateUserPreferences(app, userId, request.body)
+    return sendSuccess(reply, updated, 'Preferences updated successfully')
   })
 }
 
