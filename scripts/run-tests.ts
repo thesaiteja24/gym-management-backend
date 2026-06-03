@@ -4,6 +4,9 @@ import fs from 'node:fs'
 import net from 'node:net'
 import path from 'node:path'
 
+const TEST_COMPOSE_FILE = 'docker-compose.test.yml'
+const args = new Set(process.argv.slice(2))
+
 // Clean up dist/ if present to prevent bun test from running compiled tests
 const distPath = path.resolve(process.cwd(), 'dist')
 if (fs.existsSync(distPath)) {
@@ -29,6 +32,18 @@ try {
 
 console.log('🐳 Docker is available and running.')
 
+if (args.has('--reset')) {
+  console.log('🧹 Resetting Pump test Docker resources...')
+  try {
+    execSync(`docker compose -f ${TEST_COMPOSE_FILE} down -v --remove-orphans`, { stdio: 'inherit' })
+    console.log('✅ Pump test Docker resources removed.')
+    process.exit(0)
+  } catch (err) {
+    console.error('❌ Failed to reset Pump test Docker resources:', err)
+    process.exit(1)
+  }
+}
+
 // Load .env.test environment variables
 const envTestPath = path.resolve(process.cwd(), '.env.test')
 const envTestVars: Record<string, string> = {}
@@ -49,13 +64,13 @@ if (fs.existsSync(envTestPath)) {
   }
 }
 
-const pgPort = 5433
-const redisPort = 6380
+const pgPort = 9003
+const redisPort = 9004
 
 // 3. Spin up the containers using docker-compose.test.yml
 console.log('⏳ Spinning up test containers...')
 try {
-  execSync('docker compose -f docker-compose.test.yml up -d', { stdio: 'inherit' })
+  execSync(`docker compose -f ${TEST_COMPOSE_FILE} up -d`, { stdio: 'inherit' })
 } catch (err) {
   console.error('❌ Failed to start docker-compose containers:', err)
   process.exit(1)
@@ -81,7 +96,7 @@ function checkPort(port: number, host = '127.0.0.1', timeout = 1000): Promise<bo
 
 async function waitForServices() {
   const maxAttempts = 30
-  console.log('⏳ Waiting for Postgres (5433) and Redis (6380) to be ready...')
+  console.log('⏳ Waiting for Postgres (9003) and Redis (9004) to be ready...')
   for (let i = 1; i <= maxAttempts; i++) {
     const pgReady = await checkPort(pgPort)
     const redisReady = await checkPort(redisPort)
@@ -123,7 +138,7 @@ async function main() {
     if (isProductionOrCI) {
       console.log('🧹 Production/CI environment detected. Cleaning up and tearing down containers...')
       try {
-        execSync('docker compose -f docker-compose.test.yml down -v', { stdio: 'inherit' })
+        execSync(`docker compose -f ${TEST_COMPOSE_FILE} down -v`, { stdio: 'inherit' })
         console.log('✅ Containers destroyed.')
       } catch (err) {
         console.error('❌ Failed to teardown containers:', err)
@@ -139,4 +154,3 @@ main().catch((err) => {
   console.error('❌ Unexpected error in test runner:', err)
   process.exit(1)
 })
-

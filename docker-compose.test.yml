@@ -1,21 +1,21 @@
 services:
   test-postgres:
-    image: postgres:15-alpine
-    container_name: pump-fastify-test-db
+    image: postgres:17-alpine
+    container_name: pump-test-postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
-      POSTGRES_DB: pump_fastify_test
+      POSTGRES_DB: pump_test
     ports:
-      - '5433:5432'
+      - '9003:5432'
     volumes:
-      - postgres_test_data:/var/lib/postgresql/data
+      - pump_test_postgres_data:/var/lib/postgresql/data
 
   test-redis:
     image: redis:7-alpine
-    container_name: pump-fastify-test-redis
+    container_name: pump-test-redis
     ports:
-      - '6380:6379'
+      - '9004:6379'
 
 volumes:
-  postgres_test_data:
+  pump_test_postgres_data:

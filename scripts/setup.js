@@ -6,9 +6,6 @@
  */
 
 import { execSync } from 'node:child_process'
-import { copyFileSync, existsSync } from 'node:fs'
-import path from 'node:path'
-
 const ROOT = process.cwd()
 
 function run(cmd, label) {
@@ -44,19 +41,8 @@ run(installCmd, 'Installing dependencies')
 // 3. Initialize Husky hooks
 run(isBun ? 'bunx husky' : 'npx husky', 'Initializing Husky git hooks')
 
-// 4. Copy .env.example → .env if not present
-const envFile = path.join(ROOT, '.env')
-const envExample = path.join(ROOT, '.env.example')
-if (!existsSync(envFile) && existsSync(envExample)) {
-  copyFileSync(envExample, envFile)
-  console.log('✅  .env file created from .env.example.')
-}
-else if (!existsSync(envExample)) {
-  console.log('⚠️   No .env.example found — skipping .env creation.')
-}
-else {
-  console.log('✅  .env already exists — skipping.')
-}
+// 4. Create local environment files
+run(isBun ? 'bun run env:sync' : 'npm run env:sync', 'Syncing local environment files')
 
 // 5. Done
 console.log('\n🚀  Setup complete! Run `npm run dev` to start the server.\n')

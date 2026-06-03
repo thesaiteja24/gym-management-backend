@@ -1,3 +1,4 @@
+import path from 'node:path'
 import fp from 'fastify-plugin'
 
 export interface AppConfig {
@@ -62,9 +63,19 @@ function buildEnvSchema() {
   return envSchema
 }
 
+function getDotenvPath() {
+  if (process.env.NODE_ENV === 'production') {
+    return path.resolve(process.cwd(), '.env')
+  }
+
+  return path.resolve(process.cwd(), '.env.development')
+}
+
 export const envPlugin = fp(async (app) => {
   await app.register(import('@fastify/env'), {
     schema: buildEnvSchema(),
-    dotenv: process.env.NODE_ENV !== 'test',
+    dotenv: process.env.NODE_ENV === 'test'
+      ? false
+      : { path: getDotenvPath() },
   })
 })
