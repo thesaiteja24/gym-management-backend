@@ -1,7 +1,6 @@
 import { spawn } from 'node:child_process'
 import { execFileSync, execSync } from 'node:child_process'
 import fs from 'node:fs'
-import net from 'node:net'
 import path from 'node:path'
 
 const ROOT = process.cwd()
@@ -10,8 +9,7 @@ const DEV_COMPOSE_FILE = 'docker-compose.dev.yml'
 const DEV_POSTGRES_CONTAINER = 'pump-dev-postgres'
 const DEV_POSTGRES_DB = 'pump_dev'
 const DEV_SHADOW_DB = 'pump_shadow'
-const DEV_POSTGRES_PORT = 9001
-const DEV_REDIS_PORT = 9002
+const DEV_REDIS_CONTAINER = 'pump-dev-redis'
 
 const args = new Set(process.argv.slice(2))
 
@@ -99,40 +97,37 @@ function resetDevDocker() {
   })
 }
 
-function waitForPort(port: number, label: string, timeoutMs = 30000) {
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+async function waitForCommand(command: string, label: string, timeoutMs = 30000) {
   const startedAt = Date.now()
 
-  return new Promise<void>((resolve, reject) => {
-    const check = () => {
-      const socket = new net.Socket()
-
-      const retry = () => {
-        socket.destroy()
-        if (Date.now() - startedAt > timeoutMs) {
-          reject(new Error(`${label} did not become ready on port ${port}`))
-          return
-        }
-        setTimeout(check, 500)
-      }
-
-      socket.setTimeout(1000)
-      socket.once('error', retry)
-      socket.once('timeout', retry)
-      socket.connect(port, '127.0.0.1', () => {
-        socket.end()
-        resolve()
-      })
+  while (Date.now() - startedAt <= timeoutMs) {
+    try {
+      execSync(command, { cwd: ROOT, stdio: 'ignore' })
+      return
     }
+    catch {
+      await sleep(500)
+    }
+  }
 
-    check()
-  })
+  throw new Error(`${label} did not become ready within ${timeoutMs}ms`)
 }
 
 async function waitForDevServices() {
   console.log('⏳ Waiting for Pump dev Postgres and Redis...')
   await Promise.all([
-    waitForPort(DEV_POSTGRES_PORT, 'Pump dev Postgres'),
-    waitForPort(DEV_REDIS_PORT, 'Pump dev Redis'),
+    waitForCommand(
+      `docker exec ${DEV_POSTGRES_CONTAINER} pg_isready -U postgres -d ${DEV_POSTGRES_DB}`,
+      'Pump dev Postgres',
+    ),
+    waitForCommand(
+      `docker exec ${DEV_REDIS_CONTAINER} redis-cli ping`,
+      'Pump dev Redis',
+    ),
   ])
   console.log('✅ Pump dev services are ready.')
 }
@@ -185,6 +180,20 @@ function sanitizePostgresDumpUrl(databaseUrl: string) {
   return url.toString()
 }
 
+function removeUnsupportedLocalPostgresStatements(dumpPath: string) {
+  const unsupportedPatterns = [
+    'pg_session_jwt',
+  ]
+
+  const dump = fs.readFileSync(dumpPath, 'utf8')
+  const sanitizedDump = dump
+    .split('\n')
+    .filter(line => !unsupportedPatterns.some(pattern => line.includes(pattern)))
+    .join('\n')
+
+  fs.writeFileSync(dumpPath, sanitizedDump)
+}
+
 function cloneProductionDatabaseIfNeeded() {
   if (!isDevDatabaseEmpty()) {
     console.log('✅ Dev database already has tables; skipping prod clone.')
@@ -208,8 +217,9 @@ function cloneProductionDatabaseIfNeeded() {
       `docker run --rm postgres:17-alpine pg_dump --no-owner --no-privileges --clean --if-exists "${dumpDatabaseUrl}" > "${dumpPath}"`,
       'Dumping production database',
     )
+    removeUnsupportedLocalPostgresStatements(dumpPath)
     run(
-      `docker exec -i ${DEV_POSTGRES_CONTAINER} psql -U postgres -d ${DEV_POSTGRES_DB} < "${dumpPath}"`,
+      `docker exec -i ${DEV_POSTGRES_CONTAINER} psql -v ON_ERROR_STOP=1 -U postgres -d ${DEV_POSTGRES_DB} < "${dumpPath}"`,
       'Restoring production dump into dev database',
     )
   }
