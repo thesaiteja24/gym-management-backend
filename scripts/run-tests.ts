@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import net from 'node:net'
 import path from 'node:path'
 
+const TEST_COMPOSE_PROJECT = 'pump-test'
 const TEST_COMPOSE_FILE = 'docker-compose.test.yml'
 const args = new Set(process.argv.slice(2))
 
@@ -35,7 +36,7 @@ console.log('🐳 Docker is available and running.')
 if (args.has('--reset')) {
   console.log('🧹 Resetting Pump test Docker resources...')
   try {
-    execSync(`docker compose -f ${TEST_COMPOSE_FILE} down -v --remove-orphans`, { stdio: 'inherit' })
+    execSync(`docker compose -p ${TEST_COMPOSE_PROJECT} -f ${TEST_COMPOSE_FILE} down -v --remove-orphans`, { stdio: 'inherit' })
     console.log('✅ Pump test Docker resources removed.')
     process.exit(0)
   } catch (err) {
@@ -70,7 +71,7 @@ const redisPort = 9004
 // 3. Spin up the containers using docker-compose.test.yml
 console.log('⏳ Spinning up test containers...')
 try {
-  execSync(`docker compose -f ${TEST_COMPOSE_FILE} up -d`, { stdio: 'inherit' })
+  execSync(`docker compose -p ${TEST_COMPOSE_PROJECT} -f ${TEST_COMPOSE_FILE} up -d`, { stdio: 'inherit' })
 } catch (err) {
   console.error('❌ Failed to start docker-compose containers:', err)
   process.exit(1)
@@ -138,7 +139,7 @@ async function main() {
     if (isProductionOrCI) {
       console.log('🧹 Production/CI environment detected. Cleaning up and tearing down containers...')
       try {
-        execSync(`docker compose -f ${TEST_COMPOSE_FILE} down -v`, { stdio: 'inherit' })
+        execSync(`docker compose -p ${TEST_COMPOSE_PROJECT} -f ${TEST_COMPOSE_FILE} down -v`, { stdio: 'inherit' })
         console.log('✅ Containers destroyed.')
       } catch (err) {
         console.error('❌ Failed to teardown containers:', err)

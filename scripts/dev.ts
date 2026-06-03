@@ -5,6 +5,7 @@ import net from 'node:net'
 import path from 'node:path'
 
 const ROOT = process.cwd()
+const DEV_COMPOSE_PROJECT = 'pump-dev'
 const DEV_COMPOSE_FILE = 'docker-compose.dev.yml'
 const DEV_POSTGRES_CONTAINER = 'pump-dev-postgres'
 const DEV_POSTGRES_DB = 'pump_dev'
@@ -93,7 +94,7 @@ function assertDockerRunning() {
 }
 
 function resetDevDocker() {
-  run(`docker compose -f ${DEV_COMPOSE_FILE} down -v --remove-orphans`, 'Removing Pump dev Docker resources', {
+  run(`docker compose -p ${DEV_COMPOSE_PROJECT} -f ${DEV_COMPOSE_FILE} down -v --remove-orphans`, 'Removing Pump dev Docker resources', {
     allowFailure: true,
   })
 }
@@ -168,6 +169,22 @@ function isDevDatabaseEmpty() {
   return Number(tableCount) === 0
 }
 
+function sanitizePostgresDumpUrl(databaseUrl: string) {
+  const url = new URL(databaseUrl)
+  const unsupportedPgDumpParams = [
+    'channel_binding',
+    'connect_timeout',
+    'pgbouncer',
+    'pool_timeout',
+  ]
+
+  for (const param of unsupportedPgDumpParams) {
+    url.searchParams.delete(param)
+  }
+
+  return url.toString()
+}
+
 function cloneProductionDatabaseIfNeeded() {
   if (!isDevDatabaseEmpty()) {
     console.log('✅ Dev database already has tables; skipping prod clone.')
@@ -183,11 +200,12 @@ function cloneProductionDatabaseIfNeeded() {
   }
 
   console.log('⏳ Dev database is empty; cloning production database from Neon...')
+  const dumpDatabaseUrl = sanitizePostgresDumpUrl(productionDatabaseUrl)
   const dumpPath = path.join('/tmp', `pump-prod-clone-${Date.now()}.sql`)
 
   try {
     run(
-      `docker run --rm postgres:17-alpine pg_dump --no-owner --no-privileges --clean --if-exists "${productionDatabaseUrl}" > "${dumpPath}"`,
+      `docker run --rm postgres:17-alpine pg_dump --no-owner --no-privileges --clean --if-exists "${dumpDatabaseUrl}" > "${dumpPath}"`,
       'Dumping production database',
     )
     run(
@@ -222,7 +240,7 @@ function startDevServer() {
 async function startDev() {
   run('bun run scripts/env-sync.ts', 'Syncing local env files')
   assertDockerRunning()
-  run(`docker compose -f ${DEV_COMPOSE_FILE} up -d`, 'Starting Pump dev Docker services')
+  run(`docker compose -p ${DEV_COMPOSE_PROJECT} -f ${DEV_COMPOSE_FILE} up -d`, 'Starting Pump dev Docker services')
   await waitForDevServices()
   ensureDatabase(DEV_SHADOW_DB)
   cloneProductionDatabaseIfNeeded()
