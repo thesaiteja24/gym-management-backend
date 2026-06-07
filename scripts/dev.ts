@@ -255,6 +255,7 @@ async function startDev() {
   ensureDatabase(DEV_SHADOW_DB)
   cloneProductionDatabaseIfNeeded()
   run('bunx prisma migrate deploy', 'Applying dev database migrations')
+  run('bunx prisma generate', 'Generating Prisma client')
   startDevServer()
 }
 

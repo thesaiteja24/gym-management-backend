@@ -441,7 +441,7 @@ model Habit {
 
   @@index([userId, isActive])
   @@index([userId, category])
-  @@index([userId, source, internalMetric])
+  @@unique([userId, source, internalMetric])
 }
 
 model HabitLog {

@@ -17,6 +17,9 @@ export interface AppConfig {
   GOOGLE_IOS_CLIENT_ID?: string
   GOOGLE_ANDROID_CLIENT_ID?: string
 
+  ONESIGNAL_APP_ID?: string
+  ONESIGNAL_API_KEY?: string
+
   LOG_LEVEL: string
   CORS_ORIGINS?: string
   AUTH_LOGIN_RATE_LIMIT_MAX: number
@@ -38,6 +41,8 @@ const envProperties = {
   GOOGLE_WEB_CLIENT_ID: { type: 'string' },
   GOOGLE_IOS_CLIENT_ID: { type: 'string' },
   GOOGLE_ANDROID_CLIENT_ID: { type: 'string' },
+  ONESIGNAL_APP_ID: { type: 'string' },
+  ONESIGNAL_API_KEY: { type: 'string' },
   LOG_LEVEL: { type: 'string', default: 'info' },
   CORS_ORIGINS: { type: 'string' },
   AUTH_LOGIN_RATE_LIMIT_MAX: { type: 'number', minimum: 1, maximum: 100, default: 10 },

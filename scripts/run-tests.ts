@@ -125,6 +125,13 @@ function syncTestSchema() {
     stdio: 'inherit',
   })
   console.log('✅ Schema synced.')
+
+  console.log('⏳ Generating Prisma client...')
+  execSync('bunx prisma generate', {
+    env: { ...process.env, ...envTestVars },
+    stdio: 'inherit',
+  })
+  console.log('✅ Prisma client generated.')
 }
 
 function runTests() {

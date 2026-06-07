@@ -1,11 +1,14 @@
 import {
   HabitCategory,
   HabitLogSource,
+  HabitReminderDeliveryStatus,
   HabitSource,
   HabitTargetPeriod,
   HabitTrackingType,
+  InternalHabitMetric,
 } from '@prisma/client'
 import { z } from 'zod'
+import { isValidTimeZone } from '@/utils/timezone'
 
 const SHORT_TEXT_MAX = 128
 const MEDIUM_TEXT_MAX = 512
@@ -21,6 +24,23 @@ export const HabitIdParamsSchema = z.object({
 export const HabitLogParamsSchema = z.object({
   habitId: z.uuid(),
   date: z.iso.date(),
+})
+
+export const HabitLogListQuerySchema = z.object({
+  startDate: z.iso.date().optional(),
+  endDate: z.iso.date().optional(),
+}).refine(data => !data.startDate || !data.endDate || data.startDate <= data.endDate, {
+  path: ['endDate'],
+  message: 'endDate must be on or after startDate',
+})
+
+export const HabitReminderParamsSchema = z.object({
+  habitId: z.uuid(),
+  reminderId: z.uuid(),
+})
+
+export const HabitInternalMetricParamsSchema = z.object({
+  metric: z.enum(InternalHabitMetric),
 })
 
 export const HabitResSchema = z.object({
@@ -54,6 +74,46 @@ export const HabitLogResSchema = z.object({
   source: z.enum(HabitLogSource),
   note: z.string().nullable(),
   metadata: z.any().nullable(),
+  createdAt: z.date().or(z.iso.datetime()),
+  updatedAt: z.date().or(z.iso.datetime()),
+}).strict()
+
+export const HabitTodayItemResSchema = HabitResSchema.extend({
+  todayValue: DecimalNumberSchema.nullable(),
+  completed: z.boolean(),
+  currentStreak: z.number().int().nonnegative(),
+}).strict()
+
+export const HabitStatsResSchema = z.object({
+  currentStreak: z.number().int().nonnegative(),
+  bestStreak: z.number().int().nonnegative(),
+  streakPeriod: z.enum(HabitTargetPeriod),
+  weeklyCompletion: z.number().int().min(0).max(100),
+  monthlyCompletion: z.number().int().min(0).max(100),
+  totalCompletedPeriods: z.number().int().nonnegative(),
+}).strict()
+
+export const HabitReminderResSchema = z.object({
+  id: z.uuid(),
+  habitId: z.uuid(),
+  time: z.string(),
+  timezone: z.string(),
+  daysOfWeek: z.array(z.number().int().min(0).max(6)),
+  nextTriggerAt: z.date().or(z.iso.datetime()).nullable(),
+  isEnabled: z.boolean(),
+  createdAt: z.date().or(z.iso.datetime()),
+  updatedAt: z.date().or(z.iso.datetime()),
+}).strict()
+
+export const HabitReminderDeliveryResSchema = z.object({
+  id: z.uuid(),
+  reminderId: z.uuid(),
+  scheduledAt: z.date().or(z.iso.datetime()),
+  status: z.enum(HabitReminderDeliveryStatus),
+  attempts: z.number().int().nonnegative(),
+  sentAt: z.date().or(z.iso.datetime()).nullable(),
+  providerId: z.string().nullable(),
+  lastError: z.string().nullable(),
   createdAt: z.date().or(z.iso.datetime()),
   updatedAt: z.date().or(z.iso.datetime()),
 }).strict()
@@ -92,7 +152,7 @@ export const HabitCreateReqSchema = z.object({
   source: z.literal(HabitSource.manual).default(HabitSource.manual),
   startDate: z.iso.date(),
   endDate: z.iso.date().optional(),
-  sortOrder: z.number().int().optional(),
+  sortOrder: z.number().int().nonnegative().optional(),
 }).strict().refine(validateHabitTarget, {
   message: 'targetValue is required for quantity, duration, and count habits; unit is required for quantity and duration habits',
 }).refine(data => !data.endDate || data.startDate <= data.endDate, {
@@ -112,11 +172,15 @@ export const HabitUpdateReqSchema = z.object({
   unit: z.string().trim().min(1).max(SHORT_TEXT_MAX).nullable().optional(),
   startDate: z.iso.date().optional(),
   endDate: z.iso.date().nullable().optional(),
-  sortOrder: z.number().int().optional(),
+  sortOrder: z.number().int().nonnegative().optional(),
   isActive: z.boolean().optional(),
 }).strict().refine(data => Object.keys(data).length > 0, {
   message: 'At least one field must be provided',
 })
+
+export const HabitInternalToggleReqSchema = z.object({
+  isActive: z.boolean(),
+}).strict()
 
 export const HabitLogUpsertReqSchema = z.object({
   value: z.number().nonnegative().max(99999999.99).optional(),
@@ -127,6 +191,35 @@ export const HabitLogUpsertReqSchema = z.object({
   message: 'At least one field must be provided',
 })
 
+const ReminderTimeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Reminder time must match HH:mm')
+const ReminderDaysOfWeekSchema = z.array(z.number().int().min(0).max(6))
+  .min(1)
+  .max(7)
+  .refine(days => new Set(days).size === days.length, {
+    message: 'daysOfWeek values must be unique',
+  })
+const ReminderTimezoneSchema = z.string().trim().refine(isValidTimeZone, {
+  message: 'Timezone must be a valid IANA timezone identifier',
+})
+
+export const HabitReminderCreateReqSchema = z.object({
+  time: ReminderTimeSchema,
+  timezone: ReminderTimezoneSchema.optional(),
+  daysOfWeek: ReminderDaysOfWeekSchema,
+  isEnabled: z.boolean().default(true),
+}).strict()
+
+export const HabitReminderUpdateReqSchema = z.object({
+  time: ReminderTimeSchema.optional(),
+  timezone: ReminderTimezoneSchema.optional(),
+  daysOfWeek: ReminderDaysOfWeekSchema.optional(),
+  isEnabled: z.boolean().optional(),
+}).strict().refine(data => Object.keys(data).length > 0, {
+  message: 'At least one field must be provided',
+})
+
 export type HabitCreateInput = z.infer<typeof HabitCreateReqSchema>
 export type HabitUpdateInput = z.infer<typeof HabitUpdateReqSchema>
 export type HabitLogUpsertInput = z.infer<typeof HabitLogUpsertReqSchema>
+export type HabitReminderCreateInput = z.infer<typeof HabitReminderCreateReqSchema>
+export type HabitReminderUpdateInput = z.infer<typeof HabitReminderUpdateReqSchema>
