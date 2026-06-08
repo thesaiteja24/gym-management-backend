@@ -71,11 +71,17 @@ jobs:
           docker exec "$POSTGRES_CONTAINER_ID" psql -U postgres -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'pump_shadow'" | grep -q 1 \
             || docker exec "$POSTGRES_CONTAINER_ID" psql -U postgres -d postgres -c 'CREATE DATABASE pump_shadow;'
 
+      - name: Run isolated health test
+        run: bun test test/api/health.test.ts
+
       - name: Sync test schema
         run: bunx prisma db push --accept-data-loss
 
-      - name: Run tests
-        run: bun test test/
+      - name: Run integration tests
+        run: |
+          set -eu
+          TEST_FILES="$(rg --files test -g '*.test.ts' | grep -v '^test/api/health.test.ts$' | sort)"
+          printf '%s\n' "$TEST_FILES" | xargs bun test
 
   build-and-publish:
     name: Build and Publish
