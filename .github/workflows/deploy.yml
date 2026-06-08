@@ -1,18 +1,47 @@
-name: Publish Docker Image
+name: CI, Build, and Deploy
 
 on:
+  pull_request:
   push:
     branches:
       - main
   workflow_dispatch:
 
 jobs:
-  test-build-and-publish:
+  validate:
+    name: Validate
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: pump_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d pump_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NODE_ENV: test
+      MASTER_URL: postgresql://postgres:password@127.0.0.1:5432/pump_test?sslmode=disable
+      REPLICA_URL: postgresql://postgres:password@127.0.0.1:5432/pump_test?sslmode=disable
+      SHADOW_URL: postgresql://postgres:password@127.0.0.1:5432/pump_test?sslmode=disable
+      REDIS_URL: redis://127.0.0.1:6379
+      GOOGLE_WEB_CLIENT_ID: test-client-id
+      SESSION_SECRET: test-session-secret-that-is-at-least-32-characters
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -27,15 +56,27 @@ jobs:
 
       - name: Generate Prisma client
         run: bunx prisma generate
-        env:
-          MASTER_URL: postgresql://postgres:password@localhost:5432/pump_ci?sslmode=disable
-          SHADOW_URL: postgresql://postgres:password@localhost:5432/pump_ci_shadow?sslmode=disable
 
       - name: Run typecheck
         run: bun run typecheck
 
+      - name: Sync test schema
+        run: bunx prisma db push --accept-data-loss
+
       - name: Run tests
-        run: bun run test
+        run: bun test test/
+
+  build-and-publish:
+    name: Build and Publish
+    needs: validate
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -59,8 +100,10 @@ jobs:
           cache-to: type=gha,mode=max
 
   deploy:
+    name: Dispatch Deploy
+    needs: build-and-publish
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    needs: test-build-and-publish
     environment: production
     permissions:
       contents: read
