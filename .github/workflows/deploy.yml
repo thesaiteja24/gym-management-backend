@@ -27,6 +27,9 @@ jobs:
 
       - name: Generate Prisma client
         run: bunx prisma generate
+        env:
+          MASTER_URL: postgresql://postgres:password@localhost:5432/pump_ci?sslmode=disable
+          SHADOW_URL: postgresql://postgres:password@localhost:5432/pump_ci_shadow?sslmode=disable
 
       - name: Run typecheck
         run: bun run typecheck
