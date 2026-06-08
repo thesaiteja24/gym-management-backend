@@ -161,7 +161,8 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             set -eu
-            mkdir -p /opt/pump-api
+            sudo mkdir -p /opt/pump-api
+            sudo chown -R "${{ secrets.SERVER_USER }}:${{ secrets.SERVER_USER }}" /opt/pump-api
 
       - name: Upload runtime files
         uses: appleboy/scp-action@v0.1.7
