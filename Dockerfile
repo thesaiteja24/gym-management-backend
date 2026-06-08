@@ -35,7 +35,7 @@ COPY --from=builder --chown=bun:bun /app/tsconfig.json ./tsconfig.json
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-  CMD-SHELL wget -q --spider "http://127.0.0.1:${PORT:-3000}/api/v1/health" || exit 1
+  CMD sh -c 'wget -q --spider "http://127.0.0.1:${PORT:-3000}/api/v1/health" || exit 1'
 
 USER bun
 
