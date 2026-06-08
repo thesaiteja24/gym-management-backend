@@ -42,10 +42,30 @@ docker compose --env-file ./.env pull pump-api pump-reminder-worker pump-api-mig
 docker compose --env-file ./.env run --rm pump-api-migrate
 docker compose --env-file ./.env up -d pump-api pump-reminder-worker caddy
 
-docker compose --env-file ./.env exec -T pump-api \
-  wget -qO- "http://127.0.0.1:${PORT}/api/v1/health" >/dev/null
+wait_for_url() {
+  url="$1"
+  attempts="${2:-20}"
+  delay_seconds="${3:-3}"
+  i=1
 
-docker compose --env-file ./.env exec -T pump-api \
-  wget -qO- "http://127.0.0.1:${PORT}/docs/json" >/dev/null
+  while [ "$i" -le "$attempts" ]; do
+    if docker compose --env-file ./.env exec -T pump-api \
+      wget -qO- "$url" >/dev/null; then
+      return 0
+    fi
+
+    if [ "$i" -lt "$attempts" ]; then
+      sleep "$delay_seconds"
+    fi
+
+    i=$((i + 1))
+  done
+
+  echo "timed out waiting for $url"
+  return 1
+}
+
+wait_for_url "http://127.0.0.1:${PORT}/api/v1/health"
+wait_for_url "http://127.0.0.1:${PORT}/docs/json"
 
 echo "Pump deploy succeeded with image tag: $TAG"
