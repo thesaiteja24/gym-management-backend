@@ -26,6 +26,7 @@ RUN bun install --frozen-lockfile --production --ignore-scripts
 
 # Copy generated client and build artifacts
 COPY --from=builder --chown=bun:bun /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder --chown=bun:bun /app/node_modules/@prisma/engines ./node_modules/@prisma/engines
 COPY --from=builder --chown=bun:bun /app/node_modules/@prisma/client ./node_modules/@prisma/client
 COPY --from=builder --chown=bun:bun /app/dist ./dist
 COPY --from=builder --chown=bun:bun /app/prisma ./prisma
