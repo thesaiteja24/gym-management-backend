@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { defineConfig, env } from 'prisma/config'
+import { defineConfig } from 'prisma/config'
 
 function getEnvFileCandidates() {
   if (process.env.NODE_ENV === 'production') {
@@ -61,7 +61,9 @@ if (!process.env.MASTER_URL) {
 export default defineConfig({
   schema: 'prisma/schema.prisma',
   datasource: {
-    url: env('MASTER_URL'),
-    shadowDatabaseUrl: env('SHADOW_URL'),
+    // Prisma CLI commands such as `generate` should not depend on live runtime env.
+    // Real DB-backed commands in CI and deploy still pass explicit datasource URLs.
+    url: process.env.MASTER_URL || 'postgresql://postgres:password@127.0.0.1:5432/prisma_generate?sslmode=disable',
+    shadowDatabaseUrl: process.env.SHADOW_URL || 'postgresql://postgres:password@127.0.0.1:5432/prisma_generate_shadow?sslmode=disable',
   },
 })
