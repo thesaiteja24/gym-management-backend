@@ -15,6 +15,7 @@ describe('OneSignalService', () => {
     const service = new OneSignalService({
       ONESIGNAL_APP_ID: undefined,
       ONESIGNAL_API_KEY: undefined,
+      ONESIGNAL_ANDROID_CHANNEL_ID: undefined,
     })
 
     await expect(service.sendHabitReminder({
@@ -40,6 +41,7 @@ describe('OneSignalService', () => {
     const service = new OneSignalService({
       ONESIGNAL_APP_ID: 'app-id',
       ONESIGNAL_API_KEY: 'api-key',
+      ONESIGNAL_ANDROID_CHANNEL_ID: 'urgent-channel',
     })
 
     const result = await service.sendHabitReminder({
@@ -56,6 +58,7 @@ describe('OneSignalService', () => {
     })
     expect(JSON.parse(String(request?.body))).toEqual({
       app_id: 'app-id',
+      android_channel_id: 'urgent-channel',
       target_channel: 'push',
       include_aliases: {
         external_id: ['user-1'],
@@ -78,6 +81,7 @@ describe('OneSignalService', () => {
     const service = new OneSignalService({
       ONESIGNAL_APP_ID: 'app-id',
       ONESIGNAL_API_KEY: 'api-key',
+      ONESIGNAL_ANDROID_CHANNEL_ID: 'urgent-channel',
     })
 
     await expect(service.sendHabitReminder({

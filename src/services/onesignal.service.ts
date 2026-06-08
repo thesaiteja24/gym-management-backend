@@ -25,10 +25,10 @@ export interface HabitReminderPushClient {
 }
 
 export class OneSignalService implements HabitReminderPushClient {
-  constructor(private readonly config: Pick<AppConfig, 'ONESIGNAL_APP_ID' | 'ONESIGNAL_API_KEY'>) {}
+  constructor(private readonly config: Pick<AppConfig, 'ONESIGNAL_APP_ID' | 'ONESIGNAL_API_KEY' | 'ONESIGNAL_ANDROID_CHANNEL_ID'>) {}
 
   async sendHabitReminder(input: SendHabitReminderInput) {
-    if (!this.config.ONESIGNAL_APP_ID || !this.config.ONESIGNAL_API_KEY) {
+    if (!this.config.ONESIGNAL_APP_ID || !this.config.ONESIGNAL_API_KEY || !this.config.ONESIGNAL_ANDROID_CHANNEL_ID) {
       throw new OneSignalError('OneSignal credentials are not configured', false)
     }
 
@@ -40,6 +40,7 @@ export class OneSignalService implements HabitReminderPushClient {
       },
       body: JSON.stringify({
         app_id: this.config.ONESIGNAL_APP_ID,
+        android_channel_id: this.config.ONESIGNAL_ANDROID_CHANNEL_ID,
         target_channel: 'push',
         include_aliases: {
           external_id: [input.userId],

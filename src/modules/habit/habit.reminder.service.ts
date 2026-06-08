@@ -135,6 +135,33 @@ function normalizeDaysOfWeek(daysOfWeek: number[]) {
   return [...daysOfWeek].sort((a, b) => a - b)
 }
 
+async function assertReminderConfigIsUnique(app: FastifyInstance, input: {
+  habitId: string
+  time: string
+  timezone: string
+  daysOfWeek: number[]
+  excludeReminderId?: string
+}) {
+  const existing = await app.prisma.habitReminder.findFirst({
+    where: {
+      habitId: input.habitId,
+      time: input.time,
+      timezone: input.timezone,
+      daysOfWeek: { equals: input.daysOfWeek },
+      ...(input.excludeReminderId
+        ? {
+            id: { not: input.excludeReminderId },
+          }
+        : {}),
+    },
+    select: { id: true },
+  })
+
+  if (existing) {
+    throw new HttpError(409, 'DUPLICATE_REMINDER', 'An identical reminder already exists for this habit')
+  }
+}
+
 async function getUserTimezone(app: FastifyInstance, userId: string) {
   const user = await app.prisma.user.findUnique({
     where: { id: userId },
@@ -209,6 +236,12 @@ export async function createHabitReminder(app: FastifyInstance, input: {
 
   const timezone = input.data.timezone ?? await getUserTimezone(app, input.userId)
   const daysOfWeek = normalizeDaysOfWeek(input.data.daysOfWeek)
+  await assertReminderConfigIsUnique(app, {
+    habitId: input.habitId,
+    time: input.data.time,
+    timezone,
+    daysOfWeek,
+  })
   const nextTriggerAt = input.data.isEnabled
     ? calculateNextReminderTrigger({ time: input.data.time, timezone, daysOfWeek })
     : null
@@ -237,6 +270,13 @@ export async function updateHabitReminder(app: FastifyInstance, input: {
   const timezone = input.data.timezone ?? current.timezone
   const daysOfWeek = input.data.daysOfWeek ? normalizeDaysOfWeek(input.data.daysOfWeek) : current.daysOfWeek
   const isEnabled = input.data.isEnabled ?? current.isEnabled
+  await assertReminderConfigIsUnique(app, {
+    habitId: input.habitId,
+    time,
+    timezone,
+    daysOfWeek,
+    excludeReminderId: input.reminderId,
+  })
   const nextTriggerAt = isEnabled
     ? calculateNextReminderTrigger({ time, timezone, daysOfWeek })
     : null

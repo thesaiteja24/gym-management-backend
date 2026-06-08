@@ -1554,6 +1554,40 @@ describe('Habit Module: Manual habits and daily logs', () => {
     })
     expect(duplicateDaysRes.statusCode).toBe(400)
 
+    const duplicateConfigCreateRes = await app.inject({
+      method: 'POST',
+      url: `/api/v1/habits/${habit.id}/reminders`,
+      headers: { authorization: `Bearer ${sessionId}` },
+      payload: {
+        time: '08:00',
+        timezone: 'UTC',
+        daysOfWeek: [1],
+      },
+    })
+    expect(duplicateConfigCreateRes.statusCode).toBe(409)
+
+    const secondReminder = await app.prisma.habitReminder.create({
+      data: {
+        habitId: habit.id,
+        time: '09:00',
+        timezone: 'UTC',
+        daysOfWeek: [2],
+        nextTriggerAt: new Date('2026-07-02T09:00:00.000Z'),
+      },
+    })
+
+    const duplicateConfigUpdateRes = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/habits/${habit.id}/reminders/${secondReminder.id}`,
+      headers: { authorization: `Bearer ${sessionId}` },
+      payload: {
+        time: '08:00',
+        timezone: 'UTC',
+        daysOfWeek: [1],
+      },
+    })
+    expect(duplicateConfigUpdateRes.statusCode).toBe(409)
+
     const crossUserUpdateRes = await app.inject({
       method: 'PATCH',
       url: `/api/v1/habits/${habit.id}/reminders/${reminder.id}`,
