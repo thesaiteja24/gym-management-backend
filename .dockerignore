@@ -10,4 +10,6 @@ scripts
 !.env.example
 Dockerfile
 docker-compose.yml
+Caddyfile
+deploy.sh
 README.md

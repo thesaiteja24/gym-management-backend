@@ -78,7 +78,6 @@ jobs:
       NODE_ENV: test
       MASTER_URL: postgresql://postgres:password@127.0.0.1:5432/pump_test?sslmode=disable
       REPLICA_URL: postgresql://postgres:password@127.0.0.1:5432/pump_test?sslmode=disable
-      SHADOW_URL: postgresql://postgres:password@127.0.0.1:5432/pump_shadow?sslmode=disable
       REDIS_URL: redis://127.0.0.1:6379
       GOOGLE_WEB_CLIENT_ID: test-client-id
       SESSION_SECRET: test-session-secret-that-is-at-least-32-characters
@@ -97,19 +96,8 @@ jobs:
       - name: Generate Prisma client
         run: bunx prisma generate
 
-      - name: Create shadow database
-        run: |
-          set -eu
-          POSTGRES_CONTAINER_ID="$(docker ps --filter 'ancestor=postgres:17-alpine' --format '{{.ID}}' | head -n 1)"
-          if [ -z "$POSTGRES_CONTAINER_ID" ]; then
-            echo "Postgres service container not found"
-            exit 1
-          fi
-          docker exec "$POSTGRES_CONTAINER_ID" psql -U postgres -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'pump_shadow'" | grep -q 1 \
-            || docker exec "$POSTGRES_CONTAINER_ID" psql -U postgres -d postgres -c 'CREATE DATABASE pump_shadow;'
-
-      - name: Sync test schema
-        run: bunx prisma db push --accept-data-loss
+      - name: Apply migrations on disposable test database
+        run: bunx prisma migrate deploy
 
       - name: Run integration tests
         run: |
@@ -152,8 +140,8 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  deploy:
-    name: Dispatch Deploy
+  deploy-production:
+    name: Deploy Production
     needs: build-and-publish
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
@@ -161,22 +149,41 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Dispatch deployment to infra repository
-        env:
-          INFRA_REPO: ${{ vars.INFRA_REPO }}
-          INFRA_REPO_DISPATCH_TOKEN: ${{ secrets.INFRA_REPO_DISPATCH_TOKEN }}
-        run: |
-          set -eu
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-          if [ -z "${INFRA_REPO:-}" ]; then
-            echo "INFRA_REPO variable is not set"
-            exit 1
-          fi
+      - name: Ensure server directory exists
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          port: 22
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -eu
+            mkdir -p /opt/pump-api
 
-          curl --fail-with-body -L \
-            -X POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${INFRA_REPO_DISPATCH_TOKEN}" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/${INFRA_REPO}/dispatches" \
-            -d '{"event_type":"deploy-pump-api","client_payload":{"image":"ghcr.io/'"${GITHUB_REPOSITORY}"'","tag":"'"${GITHUB_SHA}"'","source_repo":"'"${GITHUB_REPOSITORY}"'"}}'
+      - name: Upload runtime files
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          port: 22
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "docker-compose.yml,Caddyfile,deploy.sh"
+          target: "/opt/pump-api"
+
+      - name: Deploy on server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          port: 22
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -eu
+
+            cd /opt/pump-api
+            chmod +x ./deploy.sh
+            echo "${{ secrets.GHCR_READ_TOKEN }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
+            ./deploy.sh "${{ github.sha }}"
