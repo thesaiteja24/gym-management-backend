@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import type {
   FitnessUpsertInput,
   NutritionUpsertInput,
+  PreferencesUpdateInput,
   ProfileUpdateInput,
 } from './me.schemas'
 import { CACHE_KEYS, CACHE_TTL } from '@/config/cache'
@@ -26,10 +27,17 @@ const userProfileSelect = {
   dateOfBirth: true,
   gender: true,
   role: true,
+  timezone: true,
+  weekStartsOn: true,
   privacyPolicyAcceptedAt: true,
   privacyPolicyVersion: true,
   createdAt: true,
   updatedAt: true,
+} as const
+
+const userPreferencesSelect = {
+  timezone: true,
+  weekStartsOn: true,
 } as const
 
 /**
@@ -77,6 +85,25 @@ export async function updateUserProfile(app: FastifyInstance, userId: string, da
   await evictCache(app, CACHE_KEYS.profile(userId))
 
   return profile
+}
+
+/**
+ * Updates user-level app preferences.
+ * @param app Fastify instance.
+ * @param userId The ID of the user.
+ * @param data Preference fields to update.
+ * @returns The updated preferences.
+ */
+export async function updateUserPreferences(app: FastifyInstance, userId: string, data: PreferencesUpdateInput) {
+  const preferences = await app.prisma.user.update({
+    where: { id: userId },
+    data,
+    select: userPreferencesSelect,
+  })
+
+  await evictCache(app, CACHE_KEYS.profile(userId))
+
+  return preferences
 }
 
 /**

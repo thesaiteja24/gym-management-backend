@@ -1,6 +1,10 @@
 node_modules
 dist
 test
+.github
+deploy
+docs
+scripts
 .git
 .env*
 !.env.example

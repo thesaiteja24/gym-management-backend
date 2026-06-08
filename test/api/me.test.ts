@@ -155,6 +155,54 @@ describe('Me Module: Profile, Fitness, Nutrition, and Measurements', () => {
     expect(body.error.details[0].message).toBe('Weight must be greater than 0')
   })
 
+  it('2e. should update own preferences successfully', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/v1/users/me/preferences',
+      headers: { authorization: `Bearer ${sessionId}` },
+      payload: {
+        timezone: 'Asia/Kolkata',
+        weekStartsOn: 1,
+      },
+    })
+
+    expect(res.statusCode).toBe(200)
+    const { data: preferences } = JSON.parse(res.body)
+    expect(preferences.timezone).toBe('Asia/Kolkata')
+    expect(preferences.weekStartsOn).toBe(1)
+
+    const profileRes = await app.inject({
+      method: 'GET',
+      url: '/api/v1/users/me',
+      headers: { authorization: `Bearer ${sessionId}` },
+    })
+    const { data: profile } = JSON.parse(profileRes.body)
+    expect(profile.timezone).toBe('Asia/Kolkata')
+    expect(profile.weekStartsOn).toBe(1)
+  })
+
+  it('2f. should reject invalid preference updates', async () => {
+    const invalidTimezoneRes = await app.inject({
+      method: 'PATCH',
+      url: '/api/v1/users/me/preferences',
+      headers: { authorization: `Bearer ${sessionId}` },
+      payload: {
+        timezone: 'UTC+05:30',
+      },
+    })
+    expect(invalidTimezoneRes.statusCode).toBe(400)
+
+    const invalidWeekStartRes = await app.inject({
+      method: 'PATCH',
+      url: '/api/v1/users/me/preferences',
+      headers: { authorization: `Bearer ${sessionId}` },
+      payload: {
+        weekStartsOn: 7,
+      },
+    })
+    expect(invalidWeekStartRes.statusCode).toBe(400)
+  })
+
   it('3. should return null if fitness profile is not set', async () => {
     const res = await app.inject({
       method: 'GET',

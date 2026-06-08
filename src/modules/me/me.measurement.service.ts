@@ -1,10 +1,11 @@
 import type { UserMeasurement } from '@prisma/client'
 import type { FastifyInstance } from 'fastify'
 import type { MeasurementInput } from './me.schemas'
-import { Prisma } from '@prisma/client'
+import { InternalHabitMetric, Prisma } from '@prisma/client'
 import { CACHE_KEYS, CACHE_TTL } from '@/config/cache'
 import { evictCache, getOrSetCache } from '@/services/cache.service'
 import { HttpError } from '@/utils/response'
+import { getLocalDateKeyForInstant, reconcileInternalHabitLogs } from '../habit/habit.internal.service'
 
 /**
  * Normalizes values by converting decimal objects to numbers if needed.
@@ -53,6 +54,27 @@ interface MeasurementsPayload {
 
 function isUniqueConstraintError(error: unknown) {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002'
+}
+
+async function reconcileWeightLoggedHabit(app: FastifyInstance, userId: string, dates: Date[]) {
+  if (dates.length === 0) {
+    return
+  }
+
+  const user = await app.prisma.user.findUnique({
+    where: { id: userId },
+    select: { timezone: true },
+  })
+
+  if (!user) {
+    return
+  }
+
+  await reconcileInternalHabitLogs(app, {
+    userId,
+    metric: InternalHabitMetric.weightLogged,
+    localDates: dates.map(date => getLocalDateKeyForInstant(user.timezone, date)),
+  })
 }
 
 /**
@@ -192,6 +214,9 @@ export async function createMeasurement(app: FastifyInstance, userId: string, da
 
   // Evict cache on write
   await evictCache(app, CACHE_KEYS.measurements(userId))
+  if (measurement.weight !== null) {
+    await reconcileWeightLoggedHabit(app, userId, [measurement.date])
+  }
 
   return measurement
 }
@@ -247,6 +272,14 @@ export async function updateMeasurement(
 
   // Evict cache on update
   await evictCache(app, CACHE_KEYS.measurements(userId))
+  const datesToReconcile: Date[] = []
+  if (measurement.weight !== null) {
+    datesToReconcile.push(measurement.date)
+  }
+  if (updated.weight !== null) {
+    datesToReconcile.push(updated.date)
+  }
+  await reconcileWeightLoggedHabit(app, userId, datesToReconcile)
 
   return updated
 }
@@ -282,4 +315,7 @@ export async function deleteMeasurement(
 
   // Evict cache on delete
   await evictCache(app, CACHE_KEYS.measurements(userId))
+  if (measurement.weight !== null) {
+    await reconcileWeightLoggedHabit(app, userId, [measurement.date])
+  }
 }

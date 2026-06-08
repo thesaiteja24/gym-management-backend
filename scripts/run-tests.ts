@@ -1,8 +1,14 @@
 import { spawn } from 'node:child_process'
 import { execSync } from 'node:child_process'
 import fs from 'node:fs'
-import net from 'node:net'
 import path from 'node:path'
+
+const TEST_COMPOSE_PROJECT = 'pump-test'
+const TEST_COMPOSE_FILE = 'docker-compose.test.yml'
+const TEST_POSTGRES_CONTAINER = 'pump-test-postgres'
+const TEST_POSTGRES_DB = 'pump_test'
+const TEST_REDIS_CONTAINER = 'pump-test-redis'
+const args = new Set(process.argv.slice(2))
 
 // Clean up dist/ if present to prevent bun test from running compiled tests
 const distPath = path.resolve(process.cwd(), 'dist')
@@ -29,6 +35,24 @@ try {
 
 console.log('🐳 Docker is available and running.')
 
+function teardownTestDocker() {
+  console.log('🧹 Cleaning up Pump test Docker resources...')
+  try {
+    execSync(`docker compose -p ${TEST_COMPOSE_PROJECT} -f ${TEST_COMPOSE_FILE} down -v --remove-orphans`, { stdio: 'inherit' })
+    console.log('✅ Pump test Docker resources removed.')
+  } catch (err) {
+    console.error('❌ Failed to clean up Pump test Docker resources:', err)
+    return false
+  }
+
+  return true
+}
+
+if (args.has('--reset')) {
+  console.log('🧹 Resetting Pump test Docker resources...')
+  process.exit(teardownTestDocker() ? 0 : 1)
+}
+
 // Load .env.test environment variables
 const envTestPath = path.resolve(process.cwd(), '.env.test')
 const envTestVars: Record<string, string> = {}
@@ -49,94 +73,101 @@ if (fs.existsSync(envTestPath)) {
   }
 }
 
-const pgPort = 5433
-const redisPort = 6380
-
 // 3. Spin up the containers using docker-compose.test.yml
 console.log('⏳ Spinning up test containers...')
 try {
-  execSync('docker compose -f docker-compose.test.yml up -d', { stdio: 'inherit' })
+  execSync(`docker compose -p ${TEST_COMPOSE_PROJECT} -f ${TEST_COMPOSE_FILE} up -d`, { stdio: 'inherit' })
 } catch (err) {
   console.error('❌ Failed to start docker-compose containers:', err)
   process.exit(1)
 }
 
 // 4. Wait for services to be ready
-function checkPort(port: number, host = '127.0.0.1', timeout = 1000): Promise<boolean> {
-  return new Promise((resolve) => {
-    const socket = new net.Socket()
-    const onError = () => {
-      socket.destroy()
-      resolve(false)
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+async function waitForCommand(command: string, label: string, timeoutMs = 30000) {
+  const startedAt = Date.now()
+
+  while (Date.now() - startedAt <= timeoutMs) {
+    try {
+      execSync(command, { stdio: 'ignore' })
+      return
     }
-    socket.setTimeout(timeout)
-    socket.once('error', onError)
-    socket.once('timeout', onError)
-    socket.connect(port, host, () => {
-      socket.end()
-      resolve(true)
-    })
-  })
+    catch {
+      await sleep(500)
+    }
+  }
+
+  throw new Error(`${label} did not become ready within ${timeoutMs}ms`)
 }
 
 async function waitForServices() {
-  const maxAttempts = 30
-  console.log('⏳ Waiting for Postgres (5433) and Redis (6380) to be ready...')
-  for (let i = 1; i <= maxAttempts; i++) {
-    const pgReady = await checkPort(pgPort)
-    const redisReady = await checkPort(redisPort)
-    if (pgReady && redisReady) {
-      console.log('✅ Postgres and Redis are ready to accept connections.')
-      return
-    }
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-  }
-  console.error('❌ Timeout waiting for database or redis services to be ready.')
-  process.exit(1)
+  console.log('⏳ Waiting for Pump test Postgres and Redis...')
+  await Promise.all([
+    waitForCommand(
+      `docker exec ${TEST_POSTGRES_CONTAINER} pg_isready -U postgres -d ${TEST_POSTGRES_DB}`,
+      'Pump test Postgres',
+    ),
+    waitForCommand(
+      `docker exec ${TEST_REDIS_CONTAINER} redis-cli ping`,
+      'Pump test Redis',
+    ),
+  ])
+  console.log('✅ Pump test services are ready.')
+}
+
+function syncTestSchema() {
+  console.log('⏳ Syncing database schema with Prisma...')
+  execSync('bunx prisma db push --accept-data-loss', {
+    env: { ...process.env, ...envTestVars },
+    stdio: 'inherit',
+  })
+  console.log('✅ Schema synced.')
+
+  console.log('⏳ Generating Prisma client...')
+  execSync('bunx prisma generate', {
+    env: { ...process.env, ...envTestVars },
+    stdio: 'inherit',
+  })
+  console.log('✅ Prisma client generated.')
+}
+
+function runTests() {
+  console.log('🚀 Running tests...')
+
+  return new Promise<number>((resolve) => {
+    const testProcess = spawn('bun', ['test', 'test/'], {
+      env: { ...process.env, ...envTestVars, NODE_ENV: 'test' },
+      stdio: 'inherit',
+    })
+
+    testProcess.on('close', code => resolve(code ?? 0))
+  })
 }
 
 async function main() {
-  await waitForServices()
+  let exitCode = 0
 
-  // 5. Run prisma db push to ensure schema is synced in the test db
-  console.log('⏳ Syncing database schema with Prisma...')
   try {
-    execSync('bunx prisma db push --accept-data-loss', {
-      env: { ...process.env, ...envTestVars },
-      stdio: 'inherit',
-    })
-    console.log('✅ Schema synced.')
+    await waitForServices()
+    syncTestSchema()
+    exitCode = await runTests()
   } catch (err) {
-    console.error('❌ Failed to push prisma schema:', err)
-    process.exit(1)
+    console.error('❌ Test runner failed:', err)
+    exitCode = 1
+  } finally {
+    const cleanedUp = teardownTestDocker()
+    if (!cleanedUp && exitCode === 0) {
+      exitCode = 1
+    }
   }
 
-  // 6. Run the tests
-  console.log('🚀 Running tests...')
-  const testProcess = spawn('bun', ['test', 'test/'], {
-    env: { ...process.env, ...envTestVars, NODE_ENV: 'test' },
-    stdio: 'inherit',
-  })
-
-  testProcess.on('close', (code) => {
-    const isProductionOrCI = process.env.NODE_ENV === 'production' || process.env.CI === 'true'
-    if (isProductionOrCI) {
-      console.log('🧹 Production/CI environment detected. Cleaning up and tearing down containers...')
-      try {
-        execSync('docker compose -f docker-compose.test.yml down -v', { stdio: 'inherit' })
-        console.log('✅ Containers destroyed.')
-      } catch (err) {
-        console.error('❌ Failed to teardown containers:', err)
-      }
-    } else {
-      console.log('💡 Development mode: Keeping containers running for the next test run.')
-    }
-    process.exit(code ?? 0)
-  })
+  process.exit(exitCode)
 }
 
 main().catch((err) => {
   console.error('❌ Unexpected error in test runner:', err)
   process.exit(1)
 })
-

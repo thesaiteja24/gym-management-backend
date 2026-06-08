@@ -1,3 +1,4 @@
+import path from 'node:path'
 import fp from 'fastify-plugin'
 
 export interface AppConfig {
@@ -15,6 +16,10 @@ export interface AppConfig {
   GOOGLE_WEB_CLIENT_ID: string
   GOOGLE_IOS_CLIENT_ID?: string
   GOOGLE_ANDROID_CLIENT_ID?: string
+
+  ONESIGNAL_APP_ID?: string
+  ONESIGNAL_API_KEY?: string
+  ONESIGNAL_ANDROID_CHANNEL_ID?: string
 
   LOG_LEVEL: string
   CORS_ORIGINS?: string
@@ -37,6 +42,9 @@ const envProperties = {
   GOOGLE_WEB_CLIENT_ID: { type: 'string' },
   GOOGLE_IOS_CLIENT_ID: { type: 'string' },
   GOOGLE_ANDROID_CLIENT_ID: { type: 'string' },
+  ONESIGNAL_APP_ID: { type: 'string' },
+  ONESIGNAL_API_KEY: { type: 'string' },
+  ONESIGNAL_ANDROID_CHANNEL_ID: { type: 'string' },
   LOG_LEVEL: { type: 'string', default: 'info' },
   CORS_ORIGINS: { type: 'string' },
   AUTH_LOGIN_RATE_LIMIT_MAX: { type: 'number', minimum: 1, maximum: 100, default: 10 },
@@ -62,9 +70,19 @@ function buildEnvSchema() {
   return envSchema
 }
 
+function getDotenvPath() {
+  if (process.env.NODE_ENV === 'production') {
+    return path.resolve(process.cwd(), '.env')
+  }
+
+  return path.resolve(process.cwd(), '.env.development')
+}
+
 export const envPlugin = fp(async (app) => {
   await app.register(import('@fastify/env'), {
     schema: buildEnvSchema(),
-    dotenv: process.env.NODE_ENV !== 'test',
+    dotenv: process.env.NODE_ENV === 'test'
+      ? false
+      : { path: getDotenvPath() },
   })
 })

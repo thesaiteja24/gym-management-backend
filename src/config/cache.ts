@@ -1,5 +1,9 @@
+export const CACHE_VERSIONS = {
+  profile: 2,
+}
+
 export const CACHE_KEYS = {
-  profile: (userId: string) => `user:profile:${userId}`,
+  profile: (userId: string) => `user:profile:v${CACHE_VERSIONS.profile}:${userId}`,
   fitness: (userId: string) => `user:fitness:${userId}`,
   nutrition: (userId: string) => `user:nutrition:${userId}`,
   measurements: (userId: string) => `user:measurements:${userId}`,

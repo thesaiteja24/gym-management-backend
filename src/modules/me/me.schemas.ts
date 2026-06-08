@@ -11,6 +11,7 @@ import {
 } from '@prisma/client'
 import { z } from 'zod'
 
+import { isValidTimeZone } from '@/utils/timezone'
 import * as self from './me.schemas'
 
 const SHORT_TEXT_MAX = 128
@@ -48,6 +49,8 @@ export const ProfileResSchema = z.object({
   dateOfBirth: z.date().or(z.iso.datetime()).or(z.iso.date()).nullable(),
   gender: z.enum(Gender).nullable(),
   role: z.enum(UserRole),
+  timezone: z.string(),
+  weekStartsOn: z.number(),
   privacyPolicyAcceptedAt: z.date().or(z.iso.datetime()),
   privacyPolicyVersion: z.string(),
   createdAt: z.date().or(z.iso.datetime()),
@@ -74,6 +77,31 @@ export const ProfileUpdateReqSchema = z.object({
  * Inferred TypeScript type for user profile updates.
  */
 export type ProfileUpdateInput = z.infer<typeof ProfileUpdateReqSchema>
+
+/**
+ * Zod schema for validating user preference query and mutation responses.
+ */
+export const PreferencesResSchema = z.object({
+  timezone: z.string(),
+  weekStartsOn: z.number().int().min(0).max(6),
+}).strict()
+
+/**
+ * Zod schema for validating request bodies for updating user preferences.
+ */
+export const PreferencesUpdateReqSchema = z.object({
+  timezone: z.string().trim().refine(isValidTimeZone, {
+    message: 'Timezone must be a valid IANA timezone identifier',
+  }).optional(),
+  weekStartsOn: z.number().int().min(0).max(6).optional(),
+}).strict().refine(data => Object.keys(data).length > 0, {
+  message: 'At least one field must be provided',
+})
+
+/**
+ * Inferred TypeScript type for user preference updates.
+ */
+export type PreferencesUpdateInput = z.infer<typeof PreferencesUpdateReqSchema>
 
 /**
  * Zod schema for validating the query response containing a user fitness profile.

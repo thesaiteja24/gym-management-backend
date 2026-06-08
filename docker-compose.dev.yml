@@ -1,0 +1,24 @@
+services:
+  dev-postgres:
+    image: postgres:17-alpine
+    container_name: pump-dev-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: pump_dev
+    ports:
+      - '9001:5432'
+    volumes:
+      - pump_dev_postgres_data:/var/lib/postgresql/data
+
+  dev-redis:
+    image: redis:7-alpine
+    container_name: pump-dev-redis
+    ports:
+      - '9002:6379'
+    volumes:
+      - pump_dev_redis_data:/data
+
+volumes:
+  pump_dev_postgres_data:
+  pump_dev_redis_data:
