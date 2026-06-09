@@ -3,6 +3,6 @@ services:
   - type: web
     name: pump-api
     runtime: node
-    buildCommand: bun install && bun run build
+    buildCommand: bun install && bunx prisma generate && bun run build
     startCommand: bun run migrate:deploy && bun run start
 
