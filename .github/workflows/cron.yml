@@ -13,5 +13,4 @@ jobs:
       - name: Ping API
         run: |
           curl -X POST https://pump.thesaiteja.dev/api/v1/cron/reminders-dispatch \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            -H "Content-Type: application/json"
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
