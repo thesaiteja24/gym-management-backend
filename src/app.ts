@@ -50,8 +50,8 @@ function formatValidationError(v: ValidationError) {
   return { path, message }
 }
 
-function errorHandler(this: FastifyInstance, error: FastifyError, _request: FastifyRequest, reply: FastifyReply) {
-  this.log.error(error)
+function errorHandler(this: FastifyInstance, error: FastifyError, request: FastifyRequest, reply: FastifyReply) {
+  request.log.error(error)
 
   const timestamp = new Date().toISOString()
 
@@ -167,6 +167,7 @@ export async function buildApp() {
       url: request.url,
       statusCode: reply.statusCode,
       responseTime: `${reply.elapsedTime.toFixed(2)}ms`,
+      userAgent: request.headers['user-agent'],
     })
     done()
   })
