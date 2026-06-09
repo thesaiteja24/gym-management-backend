@@ -21,6 +21,8 @@ export interface AppConfig {
   ONESIGNAL_API_KEY?: string
   ONESIGNAL_ANDROID_CHANNEL_ID?: string
 
+  CRON_SECRET: string
+
   LOG_LEVEL: string
   CORS_ORIGINS?: string
   AUTH_LOGIN_RATE_LIMIT_MAX: number
@@ -45,6 +47,7 @@ const envProperties = {
   ONESIGNAL_APP_ID: { type: 'string' },
   ONESIGNAL_API_KEY: { type: 'string' },
   ONESIGNAL_ANDROID_CHANNEL_ID: { type: 'string' },
+  CRON_SECRET: { type: 'string', minLength: 32 },
   LOG_LEVEL: { type: 'string', default: 'info' },
   CORS_ORIGINS: { type: 'string' },
   AUTH_LOGIN_RATE_LIMIT_MAX: { type: 'number', minimum: 1, maximum: 100, default: 10 },
@@ -62,6 +65,7 @@ const envSchema = {
     'REDIS_URL',
     'GOOGLE_WEB_CLIENT_ID',
     'SESSION_SECRET',
+    'CRON_SECRET',
   ],
   properties: envProperties,
 }

@@ -8,6 +8,7 @@ import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod
 
 import { envPlugin } from './config/env'
 import { authRoutes } from './modules/auth'
+import { cronRoutes } from './modules/cron'
 import { habitRoutes } from './modules/habit'
 import { healthRoutes } from './modules/health'
 import { meRoutes } from './modules/me'
@@ -189,6 +190,7 @@ export async function buildApp() {
     await v1.register(authRoutes)
     await v1.register(meRoutes)
     await v1.register(habitRoutes)
+    await v1.register(cronRoutes, { prefix: '/cron' })
   }, { prefix: '/api/v1' })
 
   return app

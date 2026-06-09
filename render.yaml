@@ -6,10 +6,3 @@ services:
     buildCommand: bun install && bun run build
     startCommand: bun run migrate:deploy && bun run start
 
-  # 2. The Notification Dispatcher Cron Job
-  - type: cron
-    name: pump-reminders-dispatcher
-    runtime: node
-    buildCommand: bun install && bun run build
-    startCommand: bun run reminders:dispatch
-    schedule: '* * * * *'
