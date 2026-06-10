@@ -1644,7 +1644,10 @@ describe('Habit Module: Manual habits and daily logs', () => {
       },
     })
 
-    expect(result).toEqual({ claimed: 1, sent: 1, failed: 0, skipped: 0 })
+    expect(result.claimed).toBe(1)
+    expect(result.sent).toBe(1)
+    expect(result.failed).toBe(0)
+    expect(result.skipped).toBe(0)
     const delivery = await app.prisma.habitReminderDelivery.findUnique({
       where: {
         reminderId_scheduledAt: {
@@ -1672,7 +1675,10 @@ describe('Habit Module: Manual habits and daily logs', () => {
         },
       },
     })
-    expect(secondResult).toEqual({ claimed: 0, sent: 0, failed: 0, skipped: 0 })
+    expect(secondResult.claimed).toBe(0)
+    expect(secondResult.sent).toBe(0)
+    expect(secondResult.failed).toBe(0)
+    expect(secondResult.skipped).toBe(0)
     expect(await app.prisma.habitReminderDelivery.count({
       where: { reminderId: reminder.id },
     })).toBe(1)
@@ -1711,7 +1717,10 @@ describe('Habit Module: Manual habits and daily logs', () => {
       },
     })
 
-    expect(result).toEqual({ claimed: 1, sent: 0, failed: 0, skipped: 1 })
+    expect(result.claimed).toBe(1)
+    expect(result.sent).toBe(0)
+    expect(result.failed).toBe(0)
+    expect(result.skipped).toBe(1)
     expect(sendCount).toBe(0)
 
     const delivery = await app.prisma.habitReminderDelivery.findUnique({
@@ -1760,7 +1769,10 @@ describe('Habit Module: Manual habits and daily logs', () => {
         },
       },
     })
-    expect(firstResult).toEqual({ claimed: 1, sent: 0, failed: 1, skipped: 0 })
+    expect(firstResult.claimed).toBe(1)
+    expect(firstResult.sent).toBe(0)
+    expect(firstResult.failed).toBe(1)
+    expect(firstResult.skipped).toBe(0)
 
     const failedDelivery = await app.prisma.habitReminderDelivery.findUnique({
       where: {
@@ -1785,7 +1797,10 @@ describe('Habit Module: Manual habits and daily logs', () => {
       },
     })
 
-    expect(secondResult).toEqual({ claimed: 0, sent: 1, failed: 0, skipped: 0 })
+    expect(secondResult.claimed).toBe(0)
+    expect(secondResult.sent).toBe(1)
+    expect(secondResult.failed).toBe(0)
+    expect(secondResult.skipped).toBe(0)
     expect(retriedDeliveryIds).toEqual([failedDelivery!.id])
     expect(await app.prisma.habitReminderDelivery.count({
       where: { reminderId: reminder.id },

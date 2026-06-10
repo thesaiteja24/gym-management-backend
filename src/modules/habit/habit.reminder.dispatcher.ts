@@ -220,6 +220,23 @@ async function sendDelivery(app: FastifyInstance, delivery: DeliveryToSend, push
   }
 }
 
+export async function getGlobalNextReminderTrigger(app: FastifyInstance, now: Date = new Date()): Promise<Date | null> {
+  const result = await app.prisma.$queryRaw<{ nextTriggerAt: Date }[]>(Prisma.sql`
+    SELECT r."nextTriggerAt"
+    FROM "HabitReminder" r
+    INNER JOIN "Habit" h ON h.id = r."habitId"
+    WHERE r."isEnabled" = true
+      AND r."nextTriggerAt" IS NOT NULL
+      AND h."isActive" = true
+      AND h."startDate" <= ${toDateOnly(now)}
+      AND (h."endDate" IS NULL OR h."endDate" >= ${toDateOnly(now)})
+    ORDER BY r."nextTriggerAt" ASC
+    LIMIT 1
+  `)
+
+  return result[0]?.nextTriggerAt ? new Date(result[0].nextTriggerAt) : null
+}
+
 export async function dispatchHabitReminders(app: FastifyInstance, input: DispatchHabitRemindersInput = {}) {
   const now = input.now ?? new Date()
   const batchSize = input.batchSize ?? 100
@@ -238,7 +255,12 @@ export async function dispatchHabitReminders(app: FastifyInstance, input: Dispat
     result[status] += 1
   }
 
-  return result
+  const nextTriggerAt = await getGlobalNextReminderTrigger(app, now)
+
+  return {
+    ...result,
+    nextTriggerAt,
+  }
 }
 
 export async function replayFailedHabitReminderDeliveries(app: FastifyInstance, input: ReplayFailedHabitRemindersInput = {}) {

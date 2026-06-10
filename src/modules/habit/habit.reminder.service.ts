@@ -224,6 +224,15 @@ export async function getHabitReminder(app: FastifyInstance, input: {
   return getReminderForUser(app, input)
 }
 
+async function invalidateReminderCache(app: FastifyInstance) {
+  try {
+    await app.redis.del('habit-reminders:next-trigger-timestamp')
+  }
+  catch (error) {
+    app.log.warn(error, 'Failed to invalidate next-trigger-timestamp cache key in Redis')
+  }
+}
+
 export async function createHabitReminder(app: FastifyInstance, input: {
   userId: string
   habitId: string
@@ -246,7 +255,7 @@ export async function createHabitReminder(app: FastifyInstance, input: {
     ? calculateNextReminderTrigger({ time: input.data.time, timezone, daysOfWeek })
     : null
 
-  return app.prisma.habitReminder.create({
+  const reminder = await app.prisma.habitReminder.create({
     data: {
       habitId: input.habitId,
       time: input.data.time,
@@ -257,6 +266,9 @@ export async function createHabitReminder(app: FastifyInstance, input: {
     },
     select: reminderSelect,
   })
+
+  await invalidateReminderCache(app)
+  return reminder
 }
 
 export async function updateHabitReminder(app: FastifyInstance, input: {
@@ -281,7 +293,7 @@ export async function updateHabitReminder(app: FastifyInstance, input: {
     ? calculateNextReminderTrigger({ time, timezone, daysOfWeek })
     : null
 
-  return app.prisma.habitReminder.update({
+  const reminder = await app.prisma.habitReminder.update({
     where: { id: input.reminderId },
     data: {
       time: input.data.time,
@@ -292,6 +304,9 @@ export async function updateHabitReminder(app: FastifyInstance, input: {
     },
     select: reminderSelect,
   })
+
+  await invalidateReminderCache(app)
+  return reminder
 }
 
 export async function deleteHabitReminder(app: FastifyInstance, input: {
@@ -305,5 +320,6 @@ export async function deleteHabitReminder(app: FastifyInstance, input: {
     where: { id: input.reminderId },
   })
 
+  await invalidateReminderCache(app)
   return reminder
 }

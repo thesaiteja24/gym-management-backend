@@ -248,7 +248,6 @@ function startDevServer() {
 }
 
 async function startDev() {
-  run('bun run scripts/env-sync.ts', 'Syncing local env files')
   assertDockerRunning()
   run(`docker compose -p ${DEV_COMPOSE_PROJECT} -f ${DEV_COMPOSE_FILE} up -d`, 'Starting Pump dev Docker services')
   await waitForDevServices()

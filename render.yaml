@@ -5,4 +5,3 @@ services:
     runtime: node
     buildCommand: bun install && bunx prisma generate && bun run build
     startCommand: bun run migrate:deploy && bun run start
-

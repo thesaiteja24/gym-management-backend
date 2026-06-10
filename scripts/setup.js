@@ -41,8 +41,5 @@ run(installCmd, 'Installing dependencies')
 // 3. Initialize Husky hooks
 run(isBun ? 'bunx husky' : 'npx husky', 'Initializing Husky git hooks')
 
-// 4. Create local environment files
-run(isBun ? 'bun run env:sync' : 'npm run env:sync', 'Syncing local environment files')
-
-// 5. Done
+// 4. Done
 console.log('\n🚀  Setup complete! Run `npm run dev` to start the server.\n')
