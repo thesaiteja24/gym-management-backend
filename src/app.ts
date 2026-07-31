@@ -9,9 +9,11 @@ import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod
 import { envPlugin } from './config/env'
 import { authRoutes } from './modules/auth'
 import { cronRoutes } from './modules/cron'
+import { dashboardRoutes } from './modules/dashboard'
 import { habitRoutes } from './modules/habit'
 import { healthRoutes } from './modules/health'
 import { meRoutes } from './modules/me'
+import { workoutRoutes } from './modules/workout'
 import { authPlugin } from './plugins/auth'
 import { pagesPlugin } from './plugins/pages'
 import { prismaPlugin } from './plugins/prisma'
@@ -106,6 +108,32 @@ function parseCorsOrigins(value?: string) {
     .filter(Boolean)
 }
 
+function parseJsonResponse(payload: unknown) {
+  if (typeof payload !== 'string') {
+    return undefined
+  }
+
+  try {
+    return JSON.parse(payload)
+  }
+  catch {
+    return undefined
+  }
+}
+
+function registerDevResponseLogging(app: FastifyInstance, isDev: boolean) {
+  if (!isDev) {
+    return
+  }
+
+  app.addHook('onSend', (request, reply, payload, done) => {
+    if (!request.url.startsWith('/api/v1/auth/') && String(reply.getHeader('content-type')).includes('application/json')) {
+      reply.responseData = parseJsonResponse(payload)
+    }
+    done()
+  })
+}
+
 async function registerSecurityPlugins(app: FastifyInstance) {
   const allowedCorsOrigins = parseCorsOrigins(app.config.CORS_ORIGINS)
 
@@ -136,7 +164,7 @@ async function registerSecurityPlugins(app: FastifyInstance) {
 }
 
 export async function buildApp() {
-  const isDev = process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test'
+  const isDev = process.env.NODE_ENV === 'development'
 
   const app = fastify({
     logger: isDev
@@ -159,6 +187,8 @@ export async function buildApp() {
   app.setValidatorCompiler(validatorCompiler)
   app.setSerializerCompiler(serializerCompiler)
 
+  registerDevResponseLogging(app, isDev)
+
   app.addHook('onResponse', (request, reply, done) => {
     request.log.info({
       ip: request.ip,
@@ -168,6 +198,7 @@ export async function buildApp() {
       statusCode: reply.statusCode,
       responseTime: `${reply.elapsedTime.toFixed(2)}ms`,
       userAgent: request.headers['user-agent'],
+      ...(isDev && reply.responseData !== undefined && { responseData: reply.responseData }),
     })
     done()
   })
@@ -191,6 +222,8 @@ export async function buildApp() {
     await v1.register(authRoutes)
     await v1.register(meRoutes)
     await v1.register(habitRoutes)
+    await v1.register(dashboardRoutes)
+    await v1.register(workoutRoutes)
     await v1.register(cronRoutes, { prefix: '/cron' })
   }, { prefix: '/api/v1' })
 

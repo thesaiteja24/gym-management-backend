@@ -1,5 +1,6 @@
 export const CACHE_VERSIONS = {
   profile: 2,
+  workoutCatalog: 1,
 }
 
 export const CACHE_KEYS = {
@@ -8,6 +9,7 @@ export const CACHE_KEYS = {
   nutrition: (userId: string) => `user:nutrition:${userId}`,
   measurements: (userId: string) => `user:measurements:${userId}`,
   analytics: (userId: string) => `user:analytics:${userId}`,
+  workoutCatalog: () => `workout:catalog:v${CACHE_VERSIONS.workoutCatalog}`,
 }
 
 export const CACHE_TTL = {

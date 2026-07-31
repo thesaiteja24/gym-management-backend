@@ -251,6 +251,7 @@ async function startDev() {
   assertDockerRunning()
   run(`docker compose -p ${DEV_COMPOSE_PROJECT} -f ${DEV_COMPOSE_FILE} up -d`, 'Starting Pump dev Docker services')
   await waitForDevServices()
+  ensureDatabase(DEV_POSTGRES_DB)
   ensureDatabase(DEV_SHADOW_DB)
   cloneProductionDatabaseIfNeeded()
   run('bunx prisma migrate deploy', 'Applying dev database migrations')

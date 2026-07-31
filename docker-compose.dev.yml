@@ -19,6 +19,17 @@ services:
     volumes:
       - pump_dev_redis_data:/data
 
+  dev-pgadmin:
+    image: dpage/pgadmin4
+    container_name: pump-dev-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - '5050:80'
+    depends_on:
+      - dev-postgres
+
 volumes:
   pump_dev_postgres_data:
   pump_dev_redis_data:

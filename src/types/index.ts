@@ -26,6 +26,10 @@ declare module 'fastify' {
     }
     sessionId: string
   }
+
+  interface FastifyReply {
+    responseData?: unknown
+  }
 }
 
 /**
