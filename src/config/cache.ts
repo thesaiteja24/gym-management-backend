@@ -1,6 +1,6 @@
 export const CACHE_VERSIONS = {
   profile: 2,
-  workoutCatalog: 1,
+  workoutCatalog: 2,
 }
 
 export const CACHE_KEYS = {

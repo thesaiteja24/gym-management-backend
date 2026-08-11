@@ -18,6 +18,8 @@ const ExerciseSchema = z.object({
   id: z.uuid(),
   title: z.string(),
   thumbnailUrl: z.string().nullable(),
+  videoUrl: z.string().nullable(),
+  instructions: z.string().nullable(),
   exerciseType: z.enum(['repsOnly', 'assisted', 'weighted', 'durationOnly']),
   equipment: EquipmentSchema.nullable(),
   primaryMuscleGroup: MuscleGroupSchema.nullable(),

@@ -19,6 +19,8 @@ export function getWorkoutCatalog(app: FastifyInstance) {
           id: true,
           title: true,
           thumbnailUrl: true,
+          videoUrl: true,
+          instructions: true,
           exerciseType: true,
           primaryMuscleGroupId: true,
           equipment: { select: { id: true, title: true, thumbnailUrl: true, type: true } },
